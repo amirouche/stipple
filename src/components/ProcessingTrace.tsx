@@ -39,8 +39,8 @@ export function ProcessingTrace({
       {showContext && (
         <p className="text-[12.5px] text-ink-soft/90 leading-relaxed pl-4 fade-in">
           {packName
-            ? `Pulling in what I remember about your ${packName.toLowerCase()} preferences.`
-            : "I'll keep it tight and flag anything I'm unsure about."}
+            ? "일단 안에 있는 걸 먼저 봤는데, 더 찾아보면 정확해질 것 같아."
+            : "지금 가진 걸로는 애매해서 조금 더 확인해볼게."}
         </p>
       )}
     </div>
