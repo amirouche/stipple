@@ -129,18 +129,18 @@ export function routeQuery(
       return {
         route: "local",
         pack: hit,
-        reason: "One sec.",
+        reason: "잠깐만, 먼저 확인해볼게.",
       };
     }
     return {
       route: "deep",
       pack: hit,
-      reason: "Looking at a couple of things you've mentioned before.",
+      reason: "전에 이야기한 게 있었는지 먼저 볼게.",
     };
   }
   return {
     route: "deep",
-    reason: "Give me a moment with this one.",
+    reason: "이건 바로 답할 수도 있는데, 먼저 안에 있는 걸 확인해볼게.",
   };
 }
 

@@ -74,7 +74,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       step: {
         kind: "status",
         tone: "local",
-        text: "One sec.",
+        text: "잠깐만, 먼저 확인해볼게.",
       },
     },
     { delay: 900, step: { kind: "answer-recipe" } },
@@ -82,7 +82,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       delay: 1100,
       step: {
         kind: "footer",
-        text: "Set up the way you usually like it.",
+        text: "평소 좋아하던 방식으로 정리했어.",
       },
     },
   ],
@@ -92,29 +92,29 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       delay: 400,
       step: {
         kind: "status",
-        tone: "deep",
-        text: "Give me a moment with this one.",
+        tone: "local",
+        text: "이건 바로 답할 수도 있는데, 먼저 안에 있는 걸 확인해볼게.",
       },
     },
     {
       delay: 1300,
       step: {
         kind: "context",
-        text: "I don't have anything personal on this yet — keeping it general.",
+        text: "지금 가진 걸로는 애매해서 조금 더 확인해볼게.",
       },
     },
     {
       delay: 2400,
       step: {
         kind: "answer-prose",
-        text: "Kimchi stew is a Korean dish. You'd typically use aged kimchi, pork or tuna, tofu, onion, and stock. Sear the protein, add kimchi, pour in stock, simmer for around twenty minutes, then add tofu near the end. Adjust spice and salt to taste.",
+        text: "김치찌개는 보통 묵은지에 돼지고기나 참치, 두부, 양파, 육수를 넣고 끓여. 고기를 먼저 살짝 볶다가 김치를 넣고, 육수를 부어서 한 20분 정도 끓인 다음 마지막에 두부를 올려. 매운 정도랑 간은 입맛에 맞춰 조절하면 돼.",
       },
     },
     {
       delay: 2600,
       step: {
         kind: "footer",
-        text: "Want this laid out as a recipe? Add the cooking pack.",
+        text: "쿠킹 팩을 켜두면 다음엔 네 방식으로 정리해줄게.",
       },
     },
   ],
@@ -125,7 +125,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       step: {
         kind: "status",
         tone: "memory",
-        text: "Hold on, I remember this.",
+        text: "전에 이야기한 게 있었는지 먼저 볼게.",
       },
     },
     {
@@ -133,7 +133,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       step: {
         kind: "status",
         tone: "memory",
-        text: "There are two you've mentioned. Which one?",
+        text: "두 개 있네. 어떤 거였어?",
       },
     },
     { delay: 1300, step: { kind: "memory-results", items: SAVED_RECIPES } },
@@ -141,7 +141,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       delay: 1500,
       step: {
         kind: "footer",
-        text: "Pulled straight from what you've saved.",
+        text: "네가 저장해둔 것 그대로야.",
       },
     },
   ],
@@ -399,7 +399,7 @@ function StepView({
         })}
         {!selectedSaved && (
           <p className="text-[11.5px] text-ink-soft pl-1">
-            Pick one and I'll open it.
+            하나 골라줘, 바로 열어볼게.
           </p>
         )}
       </div>
