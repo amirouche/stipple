@@ -190,9 +190,9 @@ function ChatPage() {
                           }`}
                         />
                         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                          {m.route === "local"
-                            ? "answered locally"
-                            : "deeper inference"}
+                          {m.packName
+                            ? `shaped by ${m.packName}`
+                            : "from your personal layer"}
                         </span>
                       </div>
                     </div>

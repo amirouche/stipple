@@ -76,7 +76,8 @@ export const PACKS: Pack[] = [
 
 export type Route = "local" | "deep";
 
-// Decide whether DOTS can answer locally (pack + memory) or must escalate.
+// Decide whether DOTS can answer from what it already knows, or take a longer
+// look. The user never sees a handoff — it's all the same conversation.
 export function routeQuery(
   query: string,
   installedPacks: Pack[]
@@ -86,22 +87,25 @@ export function routeQuery(
     p.triggers.some((t) => q.includes(t))
   );
   if (hit) {
-    // Short, factual prompts → local. Longer/novel → escalate.
+    // Short, factual prompts → quick. Longer/novel → take a closer look.
     const wordy = query.split(/\s+/).length > 14;
     if (!wordy) {
       return {
         route: "local",
         pack: hit,
-        reason: `${hit.name} matched · resolved on-device`,
+        reason: "Let me check that.",
       };
     }
     return {
       route: "deep",
       pack: hit,
-      reason: `${hit.name} matched · expanding with deeper inference`,
+      reason: "I found a few related matches — taking a closer look.",
     };
   }
-  return { route: "deep", reason: "no local match · routing to base model" };
+  return {
+    route: "deep",
+    reason: "This one may need a deeper lookup. One moment.",
+  };
 }
 
 // Mock answers — the same prompt produces a different shape depending on packs.
@@ -115,10 +119,10 @@ export function answerFor(query: string, pack?: Pack): string {
     return JSON.stringify({ kind: "generic-recipe", id: "kimchi-stew" });
   }
   if (q.includes("weather") || q.includes("today")) {
-    return "Clear morning, 14°C. Your 10:30 with Mira is the only fixed item. Nothing else needs you before lunch.";
+    return "Clear morning, 14°C. Your 10:30 with Mira is the only fixed thing today — nothing else needs you before lunch.";
   }
   if (q.includes("explain") || q.includes("what is")) {
-    return "Quick frame first — then a sharper layer if you want to go deeper. Tell me what's already familiar and I'll start one notch above that.";
+    return "Happy to. Tell me what's already familiar and I'll start one notch above that, so we don't waste a layer.";
   }
-  return "Here's a measured take. Ask a follow-up and I'll pull more specific context from what we've discussed.";
+  return "Here's where I'd start. Ask a follow-up and I'll pull in more of what we've talked about before.";
 }
