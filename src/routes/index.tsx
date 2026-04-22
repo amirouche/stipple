@@ -31,6 +31,8 @@ type Msg =
       pending?: boolean;
     };
 
+// Soft, low-pressure openers — kept around for when the user wants a nudge,
+// but the empty state no longer pushes them to the front.
 const STARTERS = [
   "김치찌개 어떻게 끓여?",
   "오늘 일정 뭐 있어?",

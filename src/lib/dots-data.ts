@@ -150,14 +150,14 @@ export function recallFromMemory(query: string): SavedRecipe[] {
   return SAVED_RECIPES.filter((r) => r.matches.some((m) => q.includes(m)));
 }
 
-// Greetings stay short and human. DOTS doesn't lead — it just opens the door.
-// No memory hooks, no pack mentions, no system explanations.
+// Greetings are intentionally low-effort — no questions, no offers, no
+// "뭐 보고 싶어?" prompting. DOTS is just present. The user leads.
 const KO_GREETINGS = [
-  "안녕. 편하게 얘기해도 돼.",
-  "안녕. 지금 뭐 보고 싶어?",
-  "안녕. 필요하면 바로 같이 볼게.",
   "안녕.",
   "응, 왔어.",
+  "안녕. 편하게 있어.",
+  "어, 안녕.",
+  "왔구나.",
 ];
 
 function pickGreeting(): string {
@@ -183,5 +183,5 @@ export function answerFor(query: string, pack?: Pack): string {
   if (q.includes("explain") || q.includes("what is") || q.includes("설명")) {
     return "어느 정도 알고 있는지 알려주면, 거기서 한 칸 위부터 시작할게.";
   }
-  return "조금만 더 말해줄래? 어떤 결로 풀어가고 싶은지 같이 잡아볼게.";
+  return "응, 듣고 있어.";
 }
