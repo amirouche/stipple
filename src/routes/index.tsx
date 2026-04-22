@@ -138,12 +138,11 @@ function ChatPage() {
                   Start
                 </p>
                 <h2 className="text-[28px] md:text-[32px] font-semibold tracking-tight leading-[1.15] text-ink max-w-xl">
-                  Ask anything. DOTS checks what it already knows about you first.
+                  Ask anything. DOTS already knows a little about how you like answers.
                 </h2>
                 <p className="mt-3 text-[14px] text-ink-soft max-w-lg">
-                  If a pack or your local memory can answer, you'll get a reply
-                  almost immediately. Otherwise it transitions into deeper
-                  inference — no question asked.
+                  Quick things come back fast. If something needs a closer look,
+                  it just takes a moment longer — same conversation, no handoff.
                 </p>
                 <div className="mt-8 grid sm:grid-cols-3 gap-2">
                   {STARTERS.map((s) => (
