@@ -5,8 +5,9 @@ const NAV = [
   { to: "/", label: "Chat", glyph: "01" },
   { to: "/packs", label: "Packs", glyph: "02" },
   { to: "/cooking", label: "Cooking demo", glyph: "03" },
-  { to: "/memory", label: "Memory", glyph: "04" },
-  { to: "/settings", label: "Settings", glyph: "05" },
+  { to: "/demo", label: "Local-first demo", glyph: "04" },
+  { to: "/memory", label: "Memory", glyph: "05" },
+  { to: "/settings", label: "Settings", glyph: "06" },
 ] as const;
 
 export function Shell({ children }: { children?: ReactNode }) {

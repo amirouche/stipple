@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PacksRouteImport } from './routes/packs'
 import { Route as MemoryRouteImport } from './routes/memory'
+import { Route as DemoRouteImport } from './routes/demo'
 import { Route as CookingRouteImport } from './routes/cooking'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -30,6 +31,11 @@ const MemoryRoute = MemoryRouteImport.update({
   path: '/memory',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemoRoute = DemoRouteImport.update({
+  id: '/demo',
+  path: '/demo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CookingRoute = CookingRouteImport.update({
   id: '/cooking',
   path: '/cooking',
@@ -44,6 +50,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cooking': typeof CookingRoute
+  '/demo': typeof DemoRoute
   '/memory': typeof MemoryRoute
   '/packs': typeof PacksRoute
   '/settings': typeof SettingsRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cooking': typeof CookingRoute
+  '/demo': typeof DemoRoute
   '/memory': typeof MemoryRoute
   '/packs': typeof PacksRoute
   '/settings': typeof SettingsRoute
@@ -59,21 +67,30 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cooking': typeof CookingRoute
+  '/demo': typeof DemoRoute
   '/memory': typeof MemoryRoute
   '/packs': typeof PacksRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/cooking' | '/memory' | '/packs' | '/settings'
+  fullPaths: '/' | '/cooking' | '/demo' | '/memory' | '/packs' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/cooking' | '/memory' | '/packs' | '/settings'
-  id: '__root__' | '/' | '/cooking' | '/memory' | '/packs' | '/settings'
+  to: '/' | '/cooking' | '/demo' | '/memory' | '/packs' | '/settings'
+  id:
+    | '__root__'
+    | '/'
+    | '/cooking'
+    | '/demo'
+    | '/memory'
+    | '/packs'
+    | '/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CookingRoute: typeof CookingRoute
+  DemoRoute: typeof DemoRoute
   MemoryRoute: typeof MemoryRoute
   PacksRoute: typeof PacksRoute
   SettingsRoute: typeof SettingsRoute
@@ -102,6 +119,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo': {
+      id: '/demo'
+      path: '/demo'
+      fullPath: '/demo'
+      preLoaderRoute: typeof DemoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cooking': {
       id: '/cooking'
       path: '/cooking'
@@ -122,6 +146,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CookingRoute: CookingRoute,
+  DemoRoute: DemoRoute,
   MemoryRoute: MemoryRoute,
   PacksRoute: PacksRoute,
   SettingsRoute: SettingsRoute,
