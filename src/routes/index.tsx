@@ -5,13 +5,12 @@ import { ProcessingTrace } from "@/components/ProcessingTrace";
 import { RecipeCard } from "@/components/RecipeCard";
 import {
   PACKS,
-  routeQuery,
-  answerFor,
   getCookingRecipe,
   type Pack,
   type PackRecipe,
   type Route as RouteType,
 } from "@/lib/dots-data";
+import { step, type ConversationState } from "@/lib/conversation-engine";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -34,6 +33,7 @@ type Msg =
       text?: string;
       recipes?: PackRecipe[];
       route: RouteType;
+      state: ConversationState;
       reason: string;
       packName?: string;
       pending?: boolean;
@@ -58,7 +58,13 @@ function ChatPage() {
     if (!text.trim() || busy) return;
     const userId = crypto.randomUUID();
     const asstId = crypto.randomUUID();
-    const decision = routeQuery(text, installed);
+    const result = step(text, installed);
+    const route: RouteType =
+      result.state === "checking_external"
+        ? "deep"
+        : result.intent === "memory_lookup"
+          ? "memory"
+          : "local";
 
     setMessages((m) => [
       ...m,
@@ -66,9 +72,10 @@ function ChatPage() {
       {
         id: asstId,
         role: "assistant",
-        route: decision.route,
-        reason: decision.reason,
-        packName: decision.pack?.name,
+        route,
+        state: result.state,
+        reason: result.reason,
+        packName: result.pack?.name,
         pending: true,
       },
     ]);
@@ -76,9 +83,15 @@ function ChatPage() {
     setBusy(true);
 
     const delay =
-      decision.route === "local" ? 700 : decision.route === "memory" ? 1100 : 2400;
+      result.state === "greeting"
+        ? 500
+        : result.state === "found_local"
+          ? 700
+          : result.state === "checking_external"
+            ? 2400
+            : 1100;
     setTimeout(() => {
-      const payload = answerFor(text, decision.pack, decision.route);
+      const payload = result.payload;
       let body = "";
       let recipes: PackRecipe[] | undefined;
       if (payload.kind === "text") {
