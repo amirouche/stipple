@@ -160,11 +160,11 @@ export function answerFor(query: string, pack?: Pack): string {
   if (q.includes("kimchi")) {
     return JSON.stringify({ kind: "generic-recipe", id: "kimchi-stew" });
   }
-  if (/^(안녕|하이|반가워|헬로)/i.test(q)) {
-    return "안녕. 오늘은 뭐가 궁금해?";
+  if (/^(안녕|하이|반가워|헬로|오랜만)/i.test(q)) {
+    return pickGreeting("ko");
   }
   if (/^(hi|hello|hey|yo)\b/i.test(q)) {
-    return "Hey. What's on your mind?";
+    return pickGreeting("en");
   }
   if (q.includes("weather") || q.includes("today")) {
     return "Clear morning, 14°C. Your 10:30 with Mira is the only fixed thing — nothing else needs you before lunch.";
