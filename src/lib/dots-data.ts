@@ -110,7 +110,16 @@ export function routeQuery(
   query: string,
   installedPacks: Pack[]
 ): { route: Route; pack?: Pack; reason: string } {
-  const q = query.toLowerCase();
+  const q = query.toLowerCase().trim();
+
+  // Light greetings and very short inputs — answer naturally, no status.
+  const isGreeting =
+    /^(안녕|하이|반가워|헬로|hi|hello|hey|yo|오랜만)/i.test(q) ||
+    q.split(/\s+/).length <= 2;
+  if (isGreeting) {
+    return { route: "local", reason: "" };
+  }
+
   const hit = installedPacks.find((p) =>
     p.triggers.some((t) => q.includes(t))
   );
@@ -120,18 +129,18 @@ export function routeQuery(
       return {
         route: "local",
         pack: hit,
-        reason: "Let me check that.",
+        reason: "One sec.",
       };
     }
     return {
       route: "deep",
       pack: hit,
-      reason: "I found a few related matches — taking a closer look.",
+      reason: "Looking at a couple of things you've mentioned before.",
     };
   }
   return {
     route: "deep",
-    reason: "This one may need a deeper lookup. One moment.",
+    reason: "Give me a moment with this one.",
   };
 }
 
@@ -151,11 +160,17 @@ export function answerFor(query: string, pack?: Pack): string {
   if (q.includes("kimchi")) {
     return JSON.stringify({ kind: "generic-recipe", id: "kimchi-stew" });
   }
+  if (/^(안녕|하이|반가워|헬로)/i.test(q)) {
+    return "안녕. 오늘은 뭐가 궁금해?";
+  }
+  if (/^(hi|hello|hey|yo)\b/i.test(q)) {
+    return "Hey. What's on your mind?";
+  }
   if (q.includes("weather") || q.includes("today")) {
-    return "Clear morning, 14°C. Your 10:30 with Mira is the only fixed thing today — nothing else needs you before lunch.";
+    return "Clear morning, 14°C. Your 10:30 with Mira is the only fixed thing — nothing else needs you before lunch.";
   }
   if (q.includes("explain") || q.includes("what is")) {
-    return "Happy to. Tell me what's already familiar and I'll start one notch above that, so we don't waste a layer.";
+    return "Tell me what's already familiar and I'll start a notch above that.";
   }
-  return "Here's where I'd start. Ask a follow-up and I'll pull in more of what we've talked about before.";
+  return "Here's a starting point. Tell me which way to take it.";
 }

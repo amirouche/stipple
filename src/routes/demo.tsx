@@ -34,19 +34,19 @@ const CASES: {
     id: "pack",
     label: "Cooking pack installed",
     kicker: "Case 01",
-    setup: "Pack matches the question — answered from your personal layer.",
+    setup: "The pack fits the question, so the answer comes back ready to use.",
   },
   {
     id: "nopack",
     label: "No cooking pack",
     kicker: "Case 02",
-    setup: "Nothing local fits — DOTS takes a closer look before answering.",
+    setup: "Nothing personal to lean on — DOTS keeps it general.",
   },
   {
     id: "memory",
     label: "Recipe you mentioned before",
     kicker: "Case 03",
-    setup: "Local memory recalled first, before any inference runs.",
+    setup: "DOTS remembers it, so it just brings it back.",
   },
 ];
 
@@ -74,7 +74,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       step: {
         kind: "status",
         tone: "local",
-        text: "Let me check that.",
+        text: "One sec.",
       },
     },
     { delay: 900, step: { kind: "answer-recipe" } },
@@ -82,7 +82,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       delay: 1100,
       step: {
         kind: "footer",
-        text: "shaped by Cooking Essentials · from your personal layer",
+        text: "Set up the way you usually like it.",
       },
     },
   ],
@@ -93,14 +93,14 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       step: {
         kind: "status",
         tone: "deep",
-        text: "This one may need a deeper lookup. One moment.",
+        text: "Give me a moment with this one.",
       },
     },
     {
       delay: 1300,
       step: {
         kind: "context",
-        text: "Nothing in your local layer matches yet. I'll keep it general.",
+        text: "I don't have anything personal on this yet — keeping it general.",
       },
     },
     {
@@ -114,7 +114,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       delay: 2600,
       step: {
         kind: "footer",
-        text: "general answer · install Cooking Essentials to get this as a recipe",
+        text: "Want this laid out as a recipe? Add the cooking pack.",
       },
     },
   ],
@@ -125,7 +125,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       step: {
         kind: "status",
         tone: "memory",
-        text: "Checking what you've saved…",
+        text: "Hold on, I remember this.",
       },
     },
     {
@@ -133,7 +133,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       step: {
         kind: "status",
         tone: "memory",
-        text: "There are two related recipes in your saved memory.",
+        text: "There are two you've mentioned. Which one?",
       },
     },
     { delay: 1300, step: { kind: "memory-results", items: SAVED_RECIPES } },
@@ -141,7 +141,7 @@ const SCRIPTS: Record<CaseId, { delay: number; step: Step }[]> = {
       delay: 1500,
       step: {
         kind: "footer",
-        text: "recalled from memory · no inference needed",
+        text: "Pulled straight from what you've saved.",
       },
     },
   ],
@@ -195,16 +195,12 @@ function DemoFlow() {
       <div className="flex flex-col">
         {/* Header */}
         <header className="px-8 md:px-12 pt-10 pb-8 border-b border-border">
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft">
-            Demo · Local-first handling
-          </p>
-          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-ink">
-            One question. Three paths.
+          <h1 className="text-[32px] font-semibold tracking-tight text-ink">
+            One question, three ways.
           </h1>
           <p className="mt-2 text-[14px] text-ink-soft max-w-2xl">
-            DOTS always looks at your personal layer first — packs, memory,
-            saved context — before reaching for the model. Pick a case and
-            watch the same question take a different path.
+            Same wording each time. What changes is what DOTS already knows
+            about you. Pick a case to watch.
           </p>
         </header>
 
@@ -251,13 +247,7 @@ function DemoFlow() {
         <div className="px-8 md:px-12 py-8 grid lg:grid-cols-[1fr_280px] gap-6 max-w-6xl">
           {/* Conversation */}
           <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col min-h-[480px]">
-            <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft">
-                  DOTS · same conversation surface
-                </span>
-              </div>
+            <div className="px-5 py-3 border-b border-border flex items-center justify-end">
               <button
                 onClick={() => play(activeCase)}
                 disabled={running}
@@ -281,8 +271,8 @@ function DemoFlow() {
               ))}
               {selectedSaved && (
                 <div className="fade-in pt-2">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft mb-2">
-                    From memory · {selectedSaved.title}
+                  <p className="text-[12px] text-ink-soft mb-2">
+                    {selectedSaved.title}
                   </p>
                   <RecipeCard recipe={KIMCHI_STEW} />
                   <p className="mt-2 text-[11.5px] text-ink-soft">
@@ -320,16 +310,13 @@ function DemoFlow() {
               ]}
             />
             <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft mb-1.5">
-                What's happening
-              </p>
               <p className="text-[12.5px] text-ink leading-relaxed">
                 {activeCase === "pack" &&
-                  `${cookingPack.name} matches the question, so DOTS answers from your personal layer — no model round-trip.`}
+                  `${cookingPack.name} fits the question, so the answer comes back ready to use.`}
                 {activeCase === "nopack" &&
-                  "Without a matching pack, DOTS doesn't pretend. It takes a closer look and replies in plain prose."}
+                  "Nothing personal to lean on yet. DOTS keeps the answer general instead of guessing."}
                 {activeCase === "memory" &&
-                  "DOTS searches your saved memory before doing any model work. If recall is enough, it stops there."}
+                  "It already lives in your saved things, so DOTS just brings it back."}
               </p>
             </div>
           </aside>
@@ -375,12 +362,9 @@ function StepView({
 
   if (step.kind === "context") {
     return (
-      <div className="rounded-lg border border-border bg-surface px-4 py-3 fade-in">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft mb-1">
-          While you wait
-        </p>
-        <p className="text-[12.5px] text-ink leading-relaxed">{step.text}</p>
-      </div>
+      <p className="text-[12.5px] text-ink-soft/90 leading-relaxed pl-4 fade-in">
+        {step.text}
+      </p>
     );
   }
 
@@ -415,8 +399,7 @@ function StepView({
         })}
         {!selectedSaved && (
           <p className="text-[11.5px] text-ink-soft pl-1">
-            Tap one to open. DOTS won't run inference unless you ask for
-            something it doesn't already have.
+            Pick one and I'll open it.
           </p>
         )}
       </div>
@@ -441,12 +424,9 @@ function StepView({
 
   if (step.kind === "footer") {
     return (
-      <div className="flex items-center gap-2 pt-1 fade-in">
-        <span className="h-1 w-1 rounded-full bg-ink-soft" />
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-          {step.text}
-        </span>
-      </div>
+      <p className="text-[11.5px] text-ink-soft/80 pl-1 fade-in">
+        {step.text}
+      </p>
     );
   }
 

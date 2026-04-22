@@ -108,24 +108,16 @@ function ChatPage() {
             <h1 className="text-[15px] font-semibold tracking-tight text-ink">
               Conversation
             </h1>
-            <p className="text-[11.5px] text-ink-soft mt-0.5">
-              Same base model. Personal layer adjusts the path.
-            </p>
           </div>
-          <div className="hidden sm:flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft">
-              Active packs
-            </span>
-            <div className="flex gap-1.5">
-              {installed.map((p) => (
-                <span
-                  key={p.id}
-                  className="px-2.5 py-1 rounded-full bg-surface-2 hairline text-[11.5px] text-ink"
-                >
-                  {p.name}
-                </span>
-              ))}
-            </div>
+          <div className="hidden sm:flex items-center gap-1.5">
+            {installed.map((p) => (
+              <span
+                key={p.id}
+                className="px-2.5 py-1 rounded-full bg-surface-2 hairline text-[11.5px] text-ink-soft"
+              >
+                {p.name}
+              </span>
+            ))}
           </div>
         </header>
 
@@ -134,15 +126,11 @@ function ChatPage() {
           <div className="max-w-3xl mx-auto px-6 md:px-10 py-10 space-y-8">
             {messages.length === 0 && (
               <div className="fade-in">
-                <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft mb-3">
-                  Start
-                </p>
                 <h2 className="text-[28px] md:text-[32px] font-semibold tracking-tight leading-[1.15] text-ink max-w-xl">
-                  Ask anything. DOTS already knows a little about how you like answers.
+                  What's on your mind?
                 </h2>
                 <p className="mt-3 text-[14px] text-ink-soft max-w-lg">
-                  Quick things come back fast. If something needs a closer look,
-                  it just takes a moment longer — same conversation, no handoff.
+                  I'll keep it short when it can be short.
                 </p>
                 <div className="mt-8 grid sm:grid-cols-3 gap-2">
                   {STARTERS.map((s) => (
@@ -182,18 +170,6 @@ function ChatPage() {
                           {m.text}
                         </div>
                       )}
-                      <div className="flex items-center gap-2 pt-1">
-                        <span
-                          className={`h-1 w-1 rounded-full ${
-                            m.route === "local" ? "bg-ink-soft" : "bg-primary"
-                          }`}
-                        />
-                        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                          {m.packName
-                            ? `shaped by ${m.packName}`
-                            : "from your personal layer"}
-                        </span>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -233,12 +209,9 @@ function ChatPage() {
                 Send
               </button>
             </form>
-            <div className="flex items-center justify-between mt-2 px-1">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+            <div className="mt-2 px-1">
+              <p className="text-[10.5px] text-ink-soft/70">
                 ⏎ to send · ⇧⏎ for newline
-              </p>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                {installed.length} packs · local memory ready
               </p>
             </div>
           </div>
