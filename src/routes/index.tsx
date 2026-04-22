@@ -32,9 +32,9 @@ type Msg =
     };
 
 const STARTERS = [
-  "How do I make kimchi stew?",
-  "What's on my schedule today?",
-  "Explain transformer attention briefly.",
+  "김치찌개 어떻게 끓여?",
+  "오늘 일정 뭐 있어?",
+  "트랜스포머 어텐션 짧게 설명해줘.",
 ];
 
 function ChatPage() {
@@ -77,7 +77,7 @@ function ChatPage() {
           body = "";
         } else if (parsed.kind === "generic-recipe") {
           body =
-            "Kimchi stew is a Korean dish. You'd typically use aged kimchi, pork or tuna, tofu, onion, and stock. Sear the protein, add kimchi, pour stock, simmer about 20 minutes, then add tofu near the end. Season to taste.";
+            "김치찌개는 보통 묵은지에 돼지고기나 참치, 두부, 양파, 육수를 넣어. 고기를 먼저 살짝 볶다가 김치를 넣고, 육수를 부어서 한 20분 끓인 다음 마지막에 두부를 올려. 간은 입맛에 맞춰서.";
         }
       } catch {
         // not json, keep as-is
@@ -106,7 +106,7 @@ function ChatPage() {
         <header className="px-8 md:px-12 pt-7 pb-4 border-b border-border flex items-center justify-between">
           <div>
             <h1 className="text-[15px] font-semibold tracking-tight text-ink">
-              Conversation
+              대화
             </h1>
           </div>
           <div className="hidden sm:flex items-center gap-1.5">
@@ -127,10 +127,10 @@ function ChatPage() {
             {messages.length === 0 && (
               <div className="fade-in">
                 <h2 className="text-[28px] md:text-[32px] font-semibold tracking-tight leading-[1.15] text-ink max-w-xl">
-                  What's on your mind?
+                  뭐부터 볼까?
                 </h2>
                 <p className="mt-3 text-[14px] text-ink-soft max-w-lg">
-                  I'll keep it short when it can be short.
+                  짧게 끝낼 수 있는 건 짧게 답할게.
                 </p>
                 <div className="mt-8 grid sm:grid-cols-3 gap-2">
                   {STARTERS.map((s) => (
