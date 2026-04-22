@@ -399,7 +399,7 @@ function StepView({
         })}
         {!selectedSaved && (
           <p className="text-[11.5px] text-ink-soft pl-1">
-            Pick one and I'll open it.
+            하나 골라줘, 바로 열어볼게.
           </p>
         )}
       </div>
