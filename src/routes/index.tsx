@@ -108,9 +108,6 @@ function ChatPage() {
             <h1 className="text-[15px] font-semibold tracking-tight text-ink">
               Conversation
             </h1>
-            <p className="text-[11.5px] text-ink-soft mt-0.5">
-              Same base model. Personal layer adjusts the path.
-            </p>
           </div>
           <div className="hidden sm:flex items-center gap-1.5">
             {installed.map((p) => (
@@ -212,12 +209,9 @@ function ChatPage() {
                 Send
               </button>
             </form>
-            <div className="flex items-center justify-between mt-2 px-1">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+            <div className="mt-2 px-1">
+              <p className="text-[10.5px] text-ink-soft/70">
                 ⏎ to send · ⇧⏎ for newline
-              </p>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                {installed.length} packs · local memory ready
               </p>
             </div>
           </div>
