@@ -198,7 +198,7 @@ function ChatPage() {
                   }
                 }}
                 rows={1}
-                placeholder="Message DOTS"
+                placeholder="DOTS에게 말 걸기"
                 className="flex-1 resize-none bg-transparent outline-none text-[14.5px] leading-relaxed text-ink placeholder:text-ink-soft/70 max-h-40"
               />
               <button
@@ -206,12 +206,12 @@ function ChatPage() {
                 disabled={!input.trim() || busy}
                 className="shrink-0 h-8 px-3 rounded-md bg-ink text-background text-[12.5px] font-medium disabled:opacity-30 transition-opacity"
               >
-                Send
+                보내기
               </button>
             </form>
             <div className="mt-2 px-1">
               <p className="text-[10.5px] text-ink-soft/70">
-                ⏎ to send · ⇧⏎ for newline
+                ⏎ 보내기 · ⇧⏎ 줄바꿈
               </p>
             </div>
           </div>
