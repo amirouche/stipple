@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Route } from "@/lib/dots-data";
 
-// Subtle processing UI. Same voice across both modes — the only difference is
-// how long DOTS needs and whether it surfaces a small contextual note while
-// you wait. No "system handoff" language.
+// Quiet processing UI. No system labels, no handoff language — just a soft
+// pulse and, on longer waits, a brief personal note while DOTS thinks.
 export function ProcessingTrace({
   route,
   reason,
@@ -16,9 +15,11 @@ export function ProcessingTrace({
   const [showContext, setShowContext] = useState(false);
   useEffect(() => {
     if (route !== "deep") return;
-    const t = setTimeout(() => setShowContext(true), 900);
+    const t = setTimeout(() => setShowContext(true), 1100);
     return () => clearTimeout(t);
   }, [route]);
+
+  if (!reason && route === "local") return null;
 
   if (route === "local") {
     return (
@@ -30,23 +31,17 @@ export function ProcessingTrace({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden fade-in">
-      <div className="px-4 py-3 flex items-center gap-2.5">
+    <div className="fade-in space-y-2">
+      <div className="flex items-center gap-2.5 text-[13px] text-ink-soft">
         <span className="dot-deep" />
-        <span className="text-[13px] text-ink leading-snug">{reason}</span>
+        <span className="leading-snug">{reason}</span>
       </div>
-
       {showContext && (
-        <div className="px-4 py-3 border-t border-border bg-surface fade-in">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft mb-1.5">
-            While you wait
-          </p>
-          <p className="text-[12.5px] text-ink leading-relaxed">
-            {packName
-              ? `You usually ask follow-ups about timing on ${packName.toLowerCase()} questions. I'll line that up alongside the answer.`
-              : "I'll keep the reply tight and flag anything I'm not sure about, instead of guessing."}
-          </p>
-        </div>
+        <p className="text-[12.5px] text-ink-soft/90 leading-relaxed pl-4 fade-in">
+          {packName
+            ? `Pulling in what I remember about your ${packName.toLowerCase()} preferences.`
+            : "I'll keep it tight and flag anything I'm unsure about."}
+        </p>
       )}
     </div>
   );
