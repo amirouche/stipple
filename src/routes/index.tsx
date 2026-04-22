@@ -127,23 +127,25 @@ function ChatPage() {
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-6 md:px-10 py-10 space-y-8">
             {messages.length === 0 && (
-              <div className="fade-in">
-                <h2 className="text-[28px] md:text-[32px] font-semibold tracking-tight leading-[1.15] text-ink max-w-xl">
-                  뭐부터 볼까?
-                </h2>
-                <p className="mt-3 text-[14px] text-ink-soft max-w-lg">
-                  짧게 끝낼 수 있는 건 짧게 답할게.
+              <div className="fade-in pt-6">
+                <p className="text-[15px] text-ink-soft leading-relaxed max-w-md">
+                  여기 있어. 천천히 시작해도 돼.
                 </p>
-                <div className="mt-8 grid sm:grid-cols-3 gap-2">
-                  {STARTERS.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => send(s)}
-                      className="text-left px-4 py-3 rounded-lg border border-border bg-card hover:border-strong hover:bg-surface transition-colors text-[13px] text-ink"
-                    >
-                      {s}
-                    </button>
-                  ))}
+                <div className="mt-10">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60 mb-3">
+                    필요하면
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {STARTERS.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => send(s)}
+                        className="px-3 py-1.5 rounded-full border border-border bg-transparent hover:bg-surface hover:border-strong transition-colors text-[12px] text-ink-soft hover:text-ink"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
