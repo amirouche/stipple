@@ -310,16 +310,13 @@ function DemoFlow() {
               ]}
             />
             <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft mb-1.5">
-                What's happening
-              </p>
               <p className="text-[12.5px] text-ink leading-relaxed">
                 {activeCase === "pack" &&
-                  `${cookingPack.name} matches the question, so DOTS answers from your personal layer — no model round-trip.`}
+                  `${cookingPack.name} fits the question, so the answer comes back ready to use.`}
                 {activeCase === "nopack" &&
-                  "Without a matching pack, DOTS doesn't pretend. It takes a closer look and replies in plain prose."}
+                  "Nothing personal to lean on yet. DOTS keeps the answer general instead of guessing."}
                 {activeCase === "memory" &&
-                  "DOTS searches your saved memory before doing any model work. If recall is enough, it stops there."}
+                  "It already lives in your saved things, so DOTS just brings it back."}
               </p>
             </div>
           </aside>
