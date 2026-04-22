@@ -290,42 +290,46 @@ export function answerFor(
     return { kind: "text", text: pickGreeting() };
   }
 
-  // Memory recall path — surface saved recipes with natural phrasing.
+  // ---- MEMORY HIT: warm, recall-flavored. References "전에", "저장해둔". ----
   if (route === "memory") {
     const matches = recallFromMemory(query);
     if (matches.length === 1) {
+      const m = matches[0];
+      const intros = [
+        `응, 전에 저장해둔 ${m.title} 있어.`,
+        `${m.mentioned}한 ${m.title}, 이거 맞아?`,
+      ];
       return {
         kind: "memory-recipes",
-        recipeIds: [matches[0].id],
-        intro: `전에 저장해둔 ${matches[0].title} 있어. 이걸로 볼래?`,
+        recipeIds: [m.id],
+        intro: intros[Math.floor(Math.random() * intros.length)],
       };
     }
     if (matches.length > 1) {
+      const titles = matches.map((m) => m.title);
+      const intros = [
+        `응, 전에 저장해둔 김치찌개 쪽에서 ${matches.length}개가 보여. ${titles.join(", ")}.`,
+        `전에 이야기한 레시피 중엔 김치찌개가 ${matches.length}가지 있어 — ${titles.join(", ")}. 어느 쪽 볼래?`,
+      ];
       return {
         kind: "memory-recipes",
         recipeIds: matches.map((m) => m.id),
-        intro: `저장된 거 두 개 있어. ${matches.map((m) => m.title).join(", ")}. 어느 쪽?`,
+        intro: intros[Math.floor(Math.random() * intros.length)],
       };
     }
-    // memory route but no match — be honest, stay calm.
+    // Memory route triggered but nothing actually saved on this topic.
     return {
       kind: "text",
-      text: "그 얘기는 저장된 게 안 잡히네. 다시 한번 떠올려볼래?",
+      text: "그 얘기는 저장된 게 안 잡히네. 어떤 거였는지 한 마디만 더 줄래?",
     };
   }
 
-  // Cooking pack — return a structured recipe.
+  // ---- PACK HIT: direct, structured. No preamble — just the result. ----
   if (pack?.id === "cooking-essentials") {
-    if (q.includes("참치")) {
-      return { kind: "recipe", recipeId: "tuna-kimchi-jjigae" };
-    }
-    return {
-      kind: "recipe",
-      recipeId: "baek-kimchi-jjigae",
-    };
+    const recipeId = q.includes("참치") ? "tuna-kimchi-jjigae" : "baek-kimchi-jjigae";
+    return { kind: "recipe", recipeId };
   }
 
-  // Morning routine pack.
   if (pack?.id === "morning-routine") {
     return {
       kind: "text",
@@ -333,7 +337,6 @@ export function answerFor(
     };
   }
 
-  // Study pack.
   if (pack?.id === "study-companion") {
     return {
       kind: "text",
@@ -341,7 +344,7 @@ export function answerFor(
     };
   }
 
-  // Generic kimchi mention without pack — short prose.
+  // Generic kimchi mention without an active pack.
   if (q.includes("김치") || q.includes("kimchi")) {
     return {
       kind: "text",
@@ -349,11 +352,11 @@ export function answerFor(
     };
   }
 
-  // Deep route (unknown territory) — varied, never the same fallback twice.
+  // ---- NO LOCAL RESULT: honest, slightly slower, signals it's reaching. ----
   const deepReplies = [
-    "그건 안에 없네. 조금만 시간 줘.",
-    "처음 보는 얘기야. 잠깐 정리해볼게.",
-    "음, 이건 좀 더 봐야겠다.",
+    "지금 안에 있는 것만으론 애매해서 조금 더 확인해볼게.",
+    "이건 안에서는 안 잡혀. 잠깐 더 봐야겠다.",
+    "음, 가진 걸로는 부족해. 조금만 시간 줘.",
   ];
   return {
     kind: "text",
@@ -364,3 +367,4 @@ export function answerFor(
 export function getCookingRecipe(id: string): PackRecipe | undefined {
   return COOKING_RECIPES.find((r) => r.id === id);
 }
+
