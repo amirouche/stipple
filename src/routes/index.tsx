@@ -2,8 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { ProcessingTrace } from "@/components/ProcessingTrace";
-import { RecipeCard, KIMCHI_STEW } from "@/components/RecipeCard";
-import { PACKS, routeQuery, answerFor, type Pack, type Route as RouteType } from "@/lib/dots-data";
+import { RecipeCard } from "@/components/RecipeCard";
+import {
+  PACKS,
+  routeQuery,
+  answerFor,
+  getCookingRecipe,
+  type Pack,
+  type PackRecipe,
+  type Route as RouteType,
+} from "@/lib/dots-data";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,7 +32,7 @@ type Msg =
       id: string;
       role: "assistant";
       text?: string;
-      recipe?: typeof KIMCHI_STEW;
+      recipes?: PackRecipe[];
       route: RouteType;
       reason: string;
       packName?: string;
@@ -67,27 +75,28 @@ function ChatPage() {
     setInput("");
     setBusy(true);
 
-    const delay = decision.route === "local" ? 700 : 2400;
+    const delay =
+      decision.route === "local" ? 700 : decision.route === "memory" ? 1100 : 2400;
     setTimeout(() => {
-      const raw = answerFor(text, decision.pack);
-      let recipe: typeof KIMCHI_STEW | undefined;
-      let body = raw;
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed.kind === "recipe" && parsed.id === "kimchi-stew") {
-          recipe = KIMCHI_STEW;
-          body = "";
-        } else if (parsed.kind === "generic-recipe") {
-          body =
-            "김치찌개는 보통 묵은지에 돼지고기나 참치, 두부, 양파, 육수를 넣어. 고기를 먼저 살짝 볶다가 김치를 넣고, 육수를 부어서 한 20분 끓인 다음 마지막에 두부를 올려. 간은 입맛에 맞춰서.";
-        }
-      } catch {
-        // not json, keep as-is
+      const payload = answerFor(text, decision.pack, decision.route);
+      let body = "";
+      let recipes: PackRecipe[] | undefined;
+      if (payload.kind === "text") {
+        body = payload.text;
+      } else if (payload.kind === "recipe") {
+        const r = getCookingRecipe(payload.recipeId);
+        recipes = r ? [r] : undefined;
+        body = payload.intro ?? "";
+      } else if (payload.kind === "memory-recipes") {
+        recipes = payload.recipeIds
+          .map((id) => getCookingRecipe(id))
+          .filter((r): r is PackRecipe => Boolean(r));
+        body = payload.intro;
       }
       setMessages((m) =>
         m.map((msg) =>
           msg.id === asstId
-            ? { ...msg, pending: false, text: body, recipe }
+            ? { ...msg, pending: false, text: body, recipes }
             : msg
         )
       );
@@ -168,12 +177,14 @@ function ChatPage() {
                   )}
                   {!m.pending && (
                     <div className="space-y-3">
-                      {m.recipe && <RecipeCard recipe={m.recipe} />}
                       {m.text && (
                         <div className="text-[14.5px] leading-[1.65] text-ink max-w-2xl">
                           {m.text}
                         </div>
                       )}
+                      {m.recipes?.map((r) => (
+                        <RecipeCard key={r.id} recipe={r} />
+                      ))}
                     </div>
                   )}
                 </div>
