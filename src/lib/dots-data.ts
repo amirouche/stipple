@@ -74,7 +74,35 @@ export const PACKS: Pack[] = [
   },
 ];
 
-export type Route = "local" | "deep";
+export type Route = "local" | "memory" | "deep";
+
+// A small slice of "what the user has previously mentioned" — the kind of
+// thing a real local memory store would hold. Used by the demo flow to show
+// recall happening before any inference.
+export type SavedRecipe = {
+  id: string;
+  title: string;
+  mentioned: string; // human-readable timestamp
+  note: string;
+  matches: string[]; // lowercase tokens that should trigger recall
+};
+
+export const SAVED_RECIPES: SavedRecipe[] = [
+  {
+    id: "moms-kimchi-jjigae",
+    title: "Mom's kimchi jjigae",
+    mentioned: "saved 3 weeks ago",
+    note: "You mentioned she uses anchovy stock and skips sugar.",
+    matches: ["kimchi", "jjigae", "stew"],
+  },
+  {
+    id: "weeknight-kimchi-tofu",
+    title: "Weeknight kimchi & tofu",
+    mentioned: "saved 6 days ago",
+    note: "Lighter version, no pork. You called it 'the lazy one.'",
+    matches: ["kimchi", "tofu", "stew"],
+  },
+];
 
 // Decide whether DOTS can answer from what it already knows, or take a longer
 // look. The user never sees a handoff — it's all the same conversation.
@@ -87,7 +115,6 @@ export function routeQuery(
     p.triggers.some((t) => q.includes(t))
   );
   if (hit) {
-    // Short, factual prompts → quick. Longer/novel → take a closer look.
     const wordy = query.split(/\s+/).length > 14;
     if (!wordy) {
       return {
@@ -106,6 +133,12 @@ export function routeQuery(
     route: "deep",
     reason: "This one may need a deeper lookup. One moment.",
   };
+}
+
+// Look in local memory first, before any pack or model work.
+export function recallFromMemory(query: string): SavedRecipe[] {
+  const q = query.toLowerCase();
+  return SAVED_RECIPES.filter((r) => r.matches.some((m) => q.includes(m)));
 }
 
 // Mock answers — the same prompt produces a different shape depending on packs.
