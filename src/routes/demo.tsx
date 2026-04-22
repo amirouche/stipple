@@ -362,12 +362,9 @@ function StepView({
 
   if (step.kind === "context") {
     return (
-      <div className="rounded-lg border border-border bg-surface px-4 py-3 fade-in">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft mb-1">
-          While you wait
-        </p>
-        <p className="text-[12.5px] text-ink leading-relaxed">{step.text}</p>
-      </div>
+      <p className="text-[12.5px] text-ink-soft/90 leading-relaxed pl-4 fade-in">
+        {step.text}
+      </p>
     );
   }
 
@@ -402,8 +399,7 @@ function StepView({
         })}
         {!selectedSaved && (
           <p className="text-[11.5px] text-ink-soft pl-1">
-            Tap one to open. DOTS won't run inference unless you ask for
-            something it doesn't already have.
+            Pick one and I'll open it.
           </p>
         )}
       </div>
@@ -428,12 +424,9 @@ function StepView({
 
   if (step.kind === "footer") {
     return (
-      <div className="flex items-center gap-2 pt-1 fade-in">
-        <span className="h-1 w-1 rounded-full bg-ink-soft" />
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-          {step.text}
-        </span>
-      </div>
+      <p className="text-[11.5px] text-ink-soft/80 pl-1 fade-in">
+        {step.text}
+      </p>
     );
   }
 

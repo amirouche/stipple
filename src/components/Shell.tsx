@@ -62,7 +62,7 @@ export function Shell({ children }: { children?: ReactNode }) {
         <div className="px-6 py-5 border-t border-border">
           <div className="flex items-center gap-2 text-[11px] text-ink-soft">
             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-            <span>On-device · Personal layer active</span>
+            <span>On this device</span>
           </div>
         </div>
       </aside>
