@@ -150,6 +150,49 @@ export function recallFromMemory(query: string): SavedRecipe[] {
   return SAVED_RECIPES.filter((r) => r.matches.some((m) => q.includes(m)));
 }
 
+// Light, context-aware greetings. DOTS keeps it brief and personal — sometimes
+// reflecting the time of day or the fact that there's saved context to lean on.
+const KO_GREETINGS_BASE = [
+  "안녕. 지금은 편하게 이야기해도 돼.",
+  "안녕. 오늘은 어떤 쪽부터 볼까?",
+  "안녕. 필요한 게 있으면 바로 같이 볼게.",
+];
+const KO_GREETINGS_MORNING = [
+  "안녕. 아침은 좀 천천히 가도 돼.",
+  "안녕. 오늘 하루 어디서부터 풀어볼까?",
+];
+const KO_GREETINGS_EVENING = [
+  "안녕. 오늘 하루 어땠어?",
+  "안녕. 잠깐 정리하고 갈래, 아니면 그냥 얘기할래?",
+];
+const KO_GREETINGS_WITH_MEMORY = [
+  "안녕. 저번에 이야기하던 거 이어서 볼래?",
+  "안녕. 네가 저장해둔 것 중에 다시 꺼낼 거 있어?",
+];
+
+const EN_GREETINGS_BASE = [
+  "Hey. No rush — I'm here when you need me.",
+  "Hey. Where do you want to start today?",
+  "Hey. Anything you'd like me to look at with you?",
+];
+
+function pickGreeting(lang: "ko" | "en"): string {
+  if (lang === "en") {
+    return EN_GREETINGS_BASE[Math.floor(Math.random() * EN_GREETINGS_BASE.length)];
+  }
+  const hour = new Date().getHours();
+  const hasMemory = SAVED_RECIPES.length > 0 && Math.random() < 0.35;
+  let pool = KO_GREETINGS_BASE;
+  if (hasMemory) {
+    pool = KO_GREETINGS_WITH_MEMORY;
+  } else if (hour < 11) {
+    pool = [...KO_GREETINGS_BASE, ...KO_GREETINGS_MORNING];
+  } else if (hour >= 19) {
+    pool = [...KO_GREETINGS_BASE, ...KO_GREETINGS_EVENING];
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 // Mock answers — the same prompt produces a different shape depending on packs.
 export function answerFor(query: string, pack?: Pack): string {
   const q = query.toLowerCase();
