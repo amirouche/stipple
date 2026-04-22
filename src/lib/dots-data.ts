@@ -213,7 +213,7 @@ export function routeQuery(
   if (wantsMemory) {
     return {
       route: "memory",
-      reason: "잠깐, 전에 얘기한 거 먼저 볼게.",
+      reason: "전에 얘기한 거 먼저 볼게.",
     };
   }
 
@@ -221,15 +221,6 @@ export function routeQuery(
   const cookingHit = COOKING_TRIGGERS.some((t) => q.includes(t));
   const cookingPack = installedPacks.find((p) => p.id === "cooking-essentials");
   if (cookingHit && cookingPack) {
-    // If we also have a saved match, treat as memory recall too.
-    const memHit = recallFromMemory(query);
-    if (memHit.length > 0) {
-      return {
-        route: "memory",
-        pack: cookingPack,
-        reason: "저장해둔 게 있어서 먼저 꺼내볼게.",
-      };
-    }
     return {
       route: "local",
       pack: cookingPack,
@@ -248,7 +239,7 @@ export function routeQuery(
   // Nothing local matches — go deeper, but say it naturally.
   return {
     route: "deep",
-    reason: "안에서는 안 잡히네. 조금 더 찾아볼게.",
+    reason: "안에서는 바로 안 잡혀.",
   };
 }
 
