@@ -10,11 +10,10 @@ import {
   type PackRecipe,
   type Route as RouteType,
 } from "@/lib/dots-data";
-import { step, type ConversationState } from "@/lib/conversation-engine";
+import { step } from "@/lib/conversation-engine";
 import {
   appendMessage,
   createThread,
-  getActiveThread,
   markRecipeServed,
   patchMessage,
   renameThreadIfDefault,
@@ -22,7 +21,6 @@ import {
   setThreadPack,
   useConversationStore,
   type ThreadMsg,
-  type ThreadTheme,
 } from "@/lib/conversation-store";
 import { usePreferences } from "@/lib/preferences";
 import { buildContinuations, type ContinueCard } from "@/lib/continuations";
