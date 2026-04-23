@@ -25,6 +25,7 @@ import {
   type ThreadTheme,
 } from "@/lib/conversation-store";
 import { usePreferences } from "@/lib/preferences";
+import { buildContinuations, type ContinueCard } from "@/lib/continuations";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -47,81 +48,8 @@ const THEME_LABEL: Record<ThreadTheme, string> = {
   open: "자유 대화",
 };
 
-// Context-aware "continue from here" entry points. These replace the dense
-// example-prompt list — at most three, and they reflect the active thread.
-const CONTINUE_BY_THEME: Record<
-  ThreadTheme,
-  { label: string; sub: string; prompt: string }[]
-> = {
-  cooking: [
-    {
-      label: "오늘은 김치찌개로 갈까",
-      sub: "저장된 두 가지 중에 골라줄게.",
-      prompt: "전에 저장한 김치찌개 보여줘",
-    },
-    {
-      label: "냉장고에 있는 걸로",
-      sub: "남은 재료로 가능한 거 찾아볼게.",
-      prompt: "참치캔이랑 묵은지 있는데 뭐 만들지",
-    },
-    {
-      label: "다른 거는 어떨까",
-      sub: "같은 결로 한 가지 더.",
-      prompt: "다른거는?",
-    },
-  ],
-  study: [
-    {
-      label: "어디까지 알고 있어",
-      sub: "거기서부터 풀어볼게.",
-      prompt: "어텐션 짧게 설명해줘",
-    },
-    {
-      label: "딱 한 줄로",
-      sub: "짧은 답이 필요할 때.",
-      prompt: "트랜스포머 한 줄 요약",
-    },
-    {
-      label: "단계별로 풀기",
-      sub: "기초부터 다시.",
-      prompt: "역전파 단계별로",
-    },
-  ],
-  routine: [
-    {
-      label: "오늘 일정 한 번에",
-      sub: "기기 안에서 바로.",
-      prompt: "오늘 일정 뭐 있어?",
-    },
-    {
-      label: "오후 흐름",
-      sub: "이어서 정리.",
-      prompt: "오후에 뭐 해야 돼?",
-    },
-    {
-      label: "내일 기상",
-      sub: "리마인더 같이.",
-      prompt: "내일 7시에 깨워줘",
-    },
-  ],
-  open: [
-    {
-      label: "전에 얘기한 거 이어서",
-      sub: "기억에서 꺼내올게.",
-      prompt: "전에 얘기한 거 뭐였지",
-    },
-    {
-      label: "오늘은 뭘 도와줄까",
-      sub: "그냥 가볍게 시작.",
-      prompt: "오늘은 뭐부터 볼까",
-    },
-    {
-      label: "필요한 팩 찾아보기",
-      sub: "쓸만한 게 있는지 확인.",
-      prompt: "어떤 팩이 있어?",
-    },
-  ],
-};
+// "Continue from here" cards are now produced by buildContinuations() —
+// scored across recent threads, repeated topics, and recently used packs.
 
 function ChatPage() {
   const [installed] = useState<Pack[]>(PACKS.filter((p) => p.installed));
@@ -217,18 +145,19 @@ function ChatPage() {
 
   if (!thread) return null;
 
-  const continues = CONTINUE_BY_THEME[thread.theme];
-  // Honor home priority — slightly reorder which card is highlighted first.
+  // Score-based "Continue from here" — capped at 2.
+  // Honors home priority by giving a small boost to the matching source.
+  const baseContinues = buildContinuations(threads, installed);
   const orderedContinues =
     prefs.homePriority === "memory-first"
-      ? [...continues].sort((a) =>
-          /기억|전에/.test(a.prompt) ? -1 : 1
+      ? [...baseContinues].sort((a, b) =>
+          a.source === "topic" ? -1 : b.source === "topic" ? 1 : 0
         )
       : prefs.homePriority === "packs-first"
-        ? [...continues].sort((a) =>
-            /김치|어텐션|일정|팩/.test(a.prompt) ? -1 : 1
+        ? [...baseContinues].sort((a, b) =>
+            a.source === "pack" ? -1 : b.source === "pack" ? 1 : 0
           )
-        : continues;
+        : baseContinues;
 
   return (
     <Shell>
@@ -378,7 +307,7 @@ function WelcomeState({
   onPackJump,
 }: {
   theme: ThreadTheme;
-  continues: { label: string; sub: string; prompt: string }[];
+  continues: ContinueCard[];
   installed: Pack[];
   onPick: (s: string) => void;
   onPackJump: (packId: string) => void;
@@ -413,27 +342,28 @@ function WelcomeState({
         </div>
       </section>
 
-      {/* Continue from here */}
-      <section>
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60 mb-3">
-          여기서 이어가볼래
-        </p>
-        <div className="grid sm:grid-cols-3 gap-2">
-          {continues.map((c) => (
-            <button
-              key={c.prompt}
-              onClick={() => onPick(c.prompt)}
-              className="text-left p-4 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors group"
-            >
-              <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
-              <p className="mt-1.5 text-[11.5px] text-ink-soft leading-relaxed">
-                {c.sub}
-              </p>
-            </button>
-          ))}
-        </div>
-      </section>
-
+      {/* Continue from here — at most 2, scored, continuation tone. */}
+      {continues.length > 0 && (
+        <section>
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60 mb-3">
+            이어서
+          </p>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {continues.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => onPick(c.prompt)}
+                className="text-left p-4 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors group"
+              >
+                <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
+                <p className="mt-1.5 text-[11.5px] text-ink-soft leading-relaxed">
+                  {c.sub}
+                </p>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       {/* Subtle DTC / TTC zones */}
       <section className="border-t border-border pt-6 grid sm:grid-cols-2 gap-3">
         <div className="rounded-lg border border-dashed border-border p-3 flex items-start gap-3">
