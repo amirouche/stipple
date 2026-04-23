@@ -218,18 +218,19 @@ function ChatPage() {
 
   if (!thread) return null;
 
-  const continues = CONTINUE_BY_THEME[thread.theme];
-  // Honor home priority — slightly reorder which card is highlighted first.
+  // Score-based "Continue from here" — capped at 2.
+  // Honors home priority by giving a small boost to the matching source.
+  const baseContinues = buildContinuations(threads, installed);
   const orderedContinues =
     prefs.homePriority === "memory-first"
-      ? [...continues].sort((a) =>
-          /기억|전에/.test(a.prompt) ? -1 : 1
+      ? [...baseContinues].sort((a, b) =>
+          a.source === "topic" ? -1 : b.source === "topic" ? 1 : 0
         )
       : prefs.homePriority === "packs-first"
-        ? [...continues].sort((a) =>
-            /김치|어텐션|일정|팩/.test(a.prompt) ? -1 : 1
+        ? [...baseContinues].sort((a, b) =>
+            a.source === "pack" ? -1 : b.source === "pack" ? 1 : 0
           )
-        : continues;
+        : baseContinues;
 
   return (
     <Shell>
