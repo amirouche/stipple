@@ -364,31 +364,6 @@ function WelcomeState({
           </div>
         </section>
       )}
-      {/* Subtle DTC / TTC zones */}
-      <section className="border-t border-border pt-6 grid sm:grid-cols-2 gap-3">
-        <div className="rounded-lg border border-dashed border-border p-3 flex items-start gap-3">
-          <span className="dot-local mt-1.5" />
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/70">
-              DTC · 짧은 처리
-            </p>
-            <p className="mt-1 text-[11.5px] text-ink-soft leading-relaxed">
-              팩과 기억으로 바로 답할 수 있는 흐름.
-            </p>
-          </div>
-        </div>
-        <div className="rounded-lg border border-dashed border-border p-3 flex items-start gap-3">
-          <span className="dot-deep mt-1.5" />
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/70">
-              TTC · 더 깊이
-            </p>
-            <p className="mt-1 text-[11.5px] text-ink-soft leading-relaxed">
-              안에서 안 잡힐 때만 조금 더 시간이 걸려.
-            </p>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
