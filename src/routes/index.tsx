@@ -41,7 +41,7 @@ export const Route = createFileRoute("/")({
 
 // Theme labels are no longer surfaced on the chat home — kept internal.
 
-// "Continue from here" cards are now produced by buildContinuations() —
+// "Continue from here" cards are produced by buildContinuations() —
 // scored across recent threads, repeated topics, and recently used packs.
 
 function ChatPage() {
