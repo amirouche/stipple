@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Shell } from "@/components/Shell";
+import { Shell, useShell } from "@/components/Shell";
 import { ProcessingTrace } from "@/components/ProcessingTrace";
 import { RecipeCard } from "@/components/RecipeCard";
 import {
