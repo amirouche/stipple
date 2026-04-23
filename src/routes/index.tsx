@@ -25,6 +25,7 @@ import {
   type ThreadTheme,
 } from "@/lib/conversation-store";
 import { usePreferences } from "@/lib/preferences";
+import { buildContinuations, type ContinueCard } from "@/lib/continuations";
 
 export const Route = createFileRoute("/")({
   head: () => ({
