@@ -307,7 +307,7 @@ function WelcomeState({
   onPackJump,
 }: {
   theme: ThreadTheme;
-  continues: { label: string; sub: string; prompt: string }[];
+  continues: ContinueCard[];
   installed: Pack[];
   onPick: (s: string) => void;
   onPackJump: (packId: string) => void;
@@ -342,27 +342,28 @@ function WelcomeState({
         </div>
       </section>
 
-      {/* Continue from here */}
-      <section>
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60 mb-3">
-          여기서 이어가볼래
-        </p>
-        <div className="grid sm:grid-cols-3 gap-2">
-          {continues.map((c) => (
-            <button
-              key={c.prompt}
-              onClick={() => onPick(c.prompt)}
-              className="text-left p-4 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors group"
-            >
-              <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
-              <p className="mt-1.5 text-[11.5px] text-ink-soft leading-relaxed">
-                {c.sub}
-              </p>
-            </button>
-          ))}
-        </div>
-      </section>
-
+      {/* Continue from here — at most 2, scored, continuation tone. */}
+      {continues.length > 0 && (
+        <section>
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60 mb-3">
+            이어서
+          </p>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {continues.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => onPick(c.prompt)}
+                className="text-left p-4 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors group"
+              >
+                <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
+                <p className="mt-1.5 text-[11.5px] text-ink-soft leading-relaxed">
+                  {c.sub}
+                </p>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       {/* Subtle DTC / TTC zones */}
       <section className="border-t border-border pt-6 grid sm:grid-cols-2 gap-3">
         <div className="rounded-lg border border-dashed border-border p-3 flex items-start gap-3">
