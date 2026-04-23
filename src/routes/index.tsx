@@ -159,39 +159,65 @@ function ChatPage() {
           )
         : baseContinues;
 
+  // Quick-entry pack row (top 3) — shown on mobile as shortcuts.
+  const quickPacks = installed.slice(0, 3);
+  const hasMessages = messages.length > 0;
+
   return (
     <Shell>
       <div className="flex flex-col h-screen">
-        {/* Header */}
-        <header className="px-8 md:px-12 pt-7 pb-4 border-b border-border flex items-center justify-between">
-          <div className="flex items-baseline gap-3">
-            <h1 className="text-[15px] font-semibold tracking-tight text-ink">
-              {thread.title}
-            </h1>
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60">
-              {THEME_LABEL[thread.theme]}
-            </span>
-          </div>
-          <div className="hidden sm:flex items-center gap-1.5">
-            {installed.map((p) => (
-              <span
-                key={p.id}
-                className={`px-2.5 py-1 rounded-full hairline text-[11.5px] transition-colors ${
-                  thread.lastPackId === p.id
-                    ? "bg-accent text-ink"
-                    : "bg-surface-2 text-ink-soft"
-                }`}
-              >
-                {p.name}
+        {/* Header — desktop only keeps the thread title; mobile gets quick pack row */}
+        <header className="border-b border-border">
+          {/* Desktop header */}
+          <div className="hidden sm:flex px-8 md:px-12 pt-7 pb-4 items-center justify-between">
+            <div className="flex items-baseline gap-3">
+              <h1 className="text-[15px] font-semibold tracking-tight text-ink">
+                {thread.title}
+              </h1>
+              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60">
+                {THEME_LABEL[thread.theme]}
               </span>
-            ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {installed.map((p) => (
+                <span
+                  key={p.id}
+                  className={`px-2.5 py-1 rounded-full hairline text-[11.5px] transition-colors ${
+                    thread.lastPackId === p.id
+                      ? "bg-accent text-ink"
+                      : "bg-surface-2 text-ink-soft"
+                  }`}
+                >
+                  {p.name}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Mobile quick-entry pack row */}
+          <div className="sm:hidden px-4 pt-3 pb-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {quickPacks.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setThreadPack(thread.id, p.id)}
+                  className={`shrink-0 px-3 py-1.5 rounded-full hairline text-[12px] transition-colors ${
+                    thread.lastPackId === p.id
+                      ? "bg-accent text-ink"
+                      : "bg-surface-2 text-ink-soft"
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
           </div>
         </header>
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-6 md:px-10 py-10 space-y-8">
-            {messages.length === 0 && (
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-6 sm:py-10 space-y-8">
+            {!hasMessages && (
               <WelcomeState
                 theme={thread.theme}
                 continues={orderedContinues}
@@ -312,55 +338,74 @@ function WelcomeState({
   onPick: (s: string) => void;
   onPackJump: (packId: string) => void;
 }) {
+  const mobileContinues = continues.slice(0, 2);
+
   return (
-    <div className="fade-in pt-6 space-y-12">
-      <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/60">
-          {THEME_LABEL[theme]}
-        </p>
-        <p className="mt-3 text-[20px] leading-snug text-ink max-w-md tracking-tight">
-          여기 있어. 천천히 시작해도 돼.
-        </p>
-      </div>
-
-      {/* Active packs strip */}
-      <section>
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60 mb-3">
-          지금 켜져 있는 팩
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {installed.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => onPackJump(p.id)}
-              className="group flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-card hover:border-strong transition-colors text-[12px] text-ink"
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              {p.name}
-            </button>
-          ))}
+    <div className="fade-in space-y-12">
+      {/* Intro + active packs — desktop only. Mobile keeps chat-first. */}
+      <div className="hidden sm:block pt-6 space-y-12">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/60">
+            {THEME_LABEL[theme]}
+          </p>
+          <p className="mt-3 text-[20px] leading-snug text-ink max-w-md tracking-tight">
+            여기 있어. 천천히 시작해도 돼.
+          </p>
         </div>
-      </section>
 
-      {/* Continue from here — at most 2, scored, continuation tone. */}
-      {continues.length > 0 && (
         <section>
           <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60 mb-3">
+            지금 켜져 있는 팩
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {installed.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => onPackJump(p.id)}
+                className="group flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-card hover:border-strong transition-colors text-[12px] text-ink"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {/* Continue from here — compact on mobile, labeled on desktop. */}
+      {continues.length > 0 && (
+        <section className="pt-2 sm:pt-0">
+          <p className="hidden sm:block font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60 mb-3">
             이어서
           </p>
           <div className="grid sm:grid-cols-2 gap-2">
-            {continues.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => onPick(c.prompt)}
-                className="text-left p-4 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors group"
-              >
-                <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
-                <p className="mt-1.5 text-[11.5px] text-ink-soft leading-relaxed">
-                  {c.sub}
-                </p>
-              </button>
-            ))}
+            {/* Mobile: max 2 */}
+            <div className="contents sm:hidden">
+              {mobileContinues.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => onPick(c.prompt)}
+                  className="text-left px-4 py-3 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors"
+                >
+                  <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
+                </button>
+              ))}
+            </div>
+            {/* Desktop: full set with subtitle */}
+            <div className="hidden sm:contents">
+              {continues.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => onPick(c.prompt)}
+                  className="text-left p-4 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors group"
+                >
+                  <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
+                  <p className="mt-1.5 text-[11.5px] text-ink-soft leading-relaxed">
+                    {c.sub}
+                  </p>
+                </button>
+              ))}
+            </div>
           </div>
         </section>
       )}
