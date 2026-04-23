@@ -41,12 +41,7 @@ export const Route = createFileRoute("/")({
   component: ChatPage,
 });
 
-const THEME_LABEL: Record<ThreadTheme, string> = {
-  cooking: "요리",
-  study: "공부",
-  routine: "루틴",
-  open: "자유 대화",
-};
+// Theme labels are no longer surfaced on the chat home — kept internal.
 
 // "Continue from here" cards are now produced by buildContinuations() —
 // scored across recent threads, repeated topics, and recently used packs.
