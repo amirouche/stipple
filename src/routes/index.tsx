@@ -344,89 +344,31 @@ function AssistantBubble({
 }
 
 function WelcomeState({
-  theme,
   continues,
-  installed,
   onPick,
-  onPackJump,
 }: {
-  theme: ThreadTheme;
   continues: ContinueCard[];
-  installed: Pack[];
   onPick: (s: string) => void;
   onPackJump: (packId: string) => void;
 }) {
-  const mobileContinues = continues.slice(0, 2);
+  // Cap at 2 — the home is intentionally minimal before chat begins.
+  const items = continues.slice(0, 2);
+  if (items.length === 0) return null;
 
   return (
-    <div className="fade-in space-y-12">
-      {/* Intro + active packs — desktop only. Mobile keeps chat-first. */}
-      <div className="hidden sm:block pt-6 space-y-12">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/60">
-            {THEME_LABEL[theme]}
-          </p>
-          <p className="mt-3 text-[20px] leading-snug text-ink max-w-md tracking-tight">
-            여기 있어. 천천히 시작해도 돼.
-          </p>
-        </div>
-
-        <section>
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60 mb-3">
-            지금 켜져 있는 팩
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {installed.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => onPackJump(p.id)}
-                className="group flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-card hover:border-strong transition-colors text-[12px] text-ink"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                {p.name}
-              </button>
-            ))}
-          </div>
-        </section>
+    <div className="fade-in pt-4 sm:pt-10">
+      <div className="grid sm:grid-cols-2 gap-2">
+        {items.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => onPick(c.prompt)}
+            className="text-left px-4 py-3 sm:p-4 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors"
+          >
+            <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
+          </button>
+        ))}
       </div>
-
-      {/* Continue from here — compact on mobile, labeled on desktop. */}
-      {continues.length > 0 && (
-        <section className="pt-2 sm:pt-0">
-          <p className="hidden sm:block font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60 mb-3">
-            이어서
-          </p>
-          <div className="grid sm:grid-cols-2 gap-2">
-            {/* Mobile: max 2 */}
-            <div className="contents sm:hidden">
-              {mobileContinues.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => onPick(c.prompt)}
-                  className="text-left px-4 py-3 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors"
-                >
-                  <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
-                </button>
-              ))}
-            </div>
-            {/* Desktop: full set with subtitle */}
-            <div className="hidden sm:contents">
-              {continues.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => onPick(c.prompt)}
-                  className="text-left p-4 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors group"
-                >
-                  <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
-                  <p className="mt-1.5 text-[11.5px] text-ink-soft leading-relaxed">
-                    {c.sub}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
     </div>
   );
 }
+
