@@ -160,135 +160,158 @@ function ChatPage() {
 
   return (
     <Shell>
-      <div className="flex flex-col h-screen">
-        {/* Header — desktop only keeps the thread title; mobile gets quick pack row */}
-        <header className="border-b border-border">
-          {/* Desktop header */}
-          <div className="hidden sm:flex px-8 md:px-12 pt-7 pb-4 items-center justify-between">
-            <div className="flex items-baseline gap-3">
-              <h1 className="text-[15px] font-semibold tracking-tight text-ink">
-                {thread.title}
-              </h1>
-              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-soft/60">
-                {THEME_LABEL[thread.theme]}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {installed.map((p) => (
-                <span
-                  key={p.id}
-                  className={`px-2.5 py-1 rounded-full hairline text-[11.5px] transition-colors ${
-                    thread.lastPackId === p.id
-                      ? "bg-accent text-ink"
-                      : "bg-surface-2 text-ink-soft"
-                  }`}
-                >
-                  {p.name}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Mobile quick-entry pack row */}
-          <div className="sm:hidden px-4 pt-3 pb-3">
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {quickPacks.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setThreadPack(thread.id, p.id)}
-                  className={`shrink-0 px-3 py-1.5 rounded-full hairline text-[12px] transition-colors ${
-                    thread.lastPackId === p.id
-                      ? "bg-accent text-ink"
-                      : "bg-surface-2 text-ink-soft"
-                  }`}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        </header>
-
-        {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-6 sm:py-10 space-y-8">
-            {!hasMessages && (
-              <WelcomeState
-                theme={thread.theme}
-                continues={orderedContinues}
-                installed={installed}
-                onPick={send}
-                onPackJump={(packId) => {
-                  // Open or focus a themed thread for this pack.
-                  const themed = threads.find(
-                    (t) => t.pinned && t.lastPackId === packId
-                  );
-                  if (themed) selectThread(themed.id);
-                }}
-              />
-            )}
-
-            {messages.map((m) =>
-              m.role === "user" ? (
-                <div key={m.id} className="flex justify-end fade-in">
-                  <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md bg-ink text-background text-[14px] leading-relaxed">
-                    {m.text}
-                  </div>
-                </div>
-              ) : (
-                <AssistantBubble key={m.id} m={m} />
-              )
-            )}
-          </div>
-        </div>
-
-        {/* Composer */}
-        <div className="border-t border-border bg-surface">
-          <div className="max-w-3xl mx-auto px-6 md:px-10 py-4">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                send(input);
-              }}
-              className="flex items-end gap-3 rounded-xl border border-border bg-card px-4 py-3 focus-within:border-strong transition-colors"
-            >
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send(input);
-                  }
-                }}
-                rows={1}
-                placeholder="DOTS에게 말 걸기"
-                className="flex-1 resize-none bg-transparent outline-none text-[14.5px] leading-relaxed text-ink placeholder:text-ink-soft/70 max-h-40"
-              />
-              <button
-                type="submit"
-                disabled={!input.trim() || busy}
-                className="shrink-0 h-8 px-3 rounded-md bg-ink text-background text-[12.5px] font-medium disabled:opacity-30 transition-opacity"
-              >
-                보내기
-              </button>
-            </form>
-            <div className="mt-2 px-1 flex items-center justify-between">
-              <p className="text-[10.5px] text-ink-soft/70">
-                ⏎ 보내기 · ⇧⏎ 줄바꿈
-              </p>
-              {thread.lastPackId && (
-                <p className="text-[10.5px] text-ink-soft/70">
-                  맥락 유지 · {installed.find((p) => p.id === thread.lastPackId)?.name ?? "—"}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <ChatBody
+        threadId={thread.id}
+        activePackId={thread.lastPackId}
+        quickPacks={quickPacks}
+        hasMessages={hasMessages}
+        orderedContinues={orderedContinues}
+        messages={messages}
+        scrollRef={scrollRef}
+        input={input}
+        setInput={setInput}
+        busy={busy}
+        send={send}
+        onPackJump={(packId) => {
+          const themed = threads.find(
+            (t) => t.pinned && t.lastPackId === packId
+          );
+          if (themed) selectThread(themed.id);
+        }}
+      />
     </Shell>
   );
 }
+
+function ChatBody({
+  threadId,
+  activePackId,
+  quickPacks,
+  hasMessages,
+  orderedContinues,
+  messages,
+  scrollRef,
+  input,
+  setInput,
+  busy,
+  send,
+  onPackJump,
+}: {
+  threadId: string;
+  activePackId?: string;
+  quickPacks: Pack[];
+  hasMessages: boolean;
+  orderedContinues: ContinueCard[];
+  messages: ThreadMsg[];
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  input: string;
+  setInput: (v: string) => void;
+  busy: boolean;
+  send: (text: string) => void;
+  onPackJump: (packId: string) => void;
+}) {
+  const shell = useShell();
+
+  return (
+    <div className="flex flex-col h-screen">
+      {/* Header — mobile menu button + quick pack row, no titles or status */}
+      <header className="border-b border-border">
+        <div className="flex items-center gap-2 px-3 sm:px-8 md:px-12 py-3">
+          {/* Mobile menu button */}
+          <button
+            type="button"
+            onClick={() => shell?.openMobile()}
+            className="md:hidden shrink-0 h-9 w-9 -ml-1 inline-flex items-center justify-center rounded-md text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors"
+            aria-label="메뉴 열기"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="4" y1="7" x2="20" y2="7" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
+          </button>
+
+          {/* Quick pack row — same on desktop & mobile, just shortcuts */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            {quickPacks.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setThreadPack(threadId, p.id)}
+                className={`shrink-0 px-3 py-1.5 rounded-full hairline text-[12px] transition-colors ${
+                  activePackId === p.id
+                    ? "bg-accent text-ink"
+                    : "bg-surface-2 text-ink-soft hover:text-ink"
+                }`}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-6 sm:py-10 space-y-8">
+          {!hasMessages && (
+            <WelcomeState
+              continues={orderedContinues}
+              onPick={send}
+              onPackJump={onPackJump}
+            />
+          )}
+
+          {messages.map((m) =>
+            m.role === "user" ? (
+              <div key={m.id} className="flex justify-end fade-in">
+                <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md bg-ink text-background text-[14px] leading-relaxed">
+                  {m.text}
+                </div>
+              </div>
+            ) : (
+              <AssistantBubble key={m.id} m={m} />
+            )
+          )}
+        </div>
+      </div>
+
+      {/* Composer */}
+      <div className="border-t border-border bg-surface">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              send(input);
+            }}
+            className="flex items-end gap-3 rounded-xl border border-border bg-card px-4 py-3 focus-within:border-strong transition-colors"
+          >
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send(input);
+                }
+              }}
+              rows={1}
+              placeholder="DOTS에게 말 걸기"
+              className="flex-1 resize-none bg-transparent outline-none text-[14.5px] leading-relaxed text-ink placeholder:text-ink-soft/70 max-h-40"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || busy}
+              className="shrink-0 h-8 px-3 rounded-md bg-ink text-background text-[12.5px] font-medium disabled:opacity-30 transition-opacity"
+            >
+              보내기
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function AssistantBubble({
   m,
