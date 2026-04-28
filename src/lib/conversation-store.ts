@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from "react";
 import type { ConversationState } from "@/lib/conversation-engine";
 import type { PackRecipe, Route as RouteType } from "@/lib/dots-data";
-import type { Ad } from "@/lib/ads/types";
+import type { Ad } from "@/lib/promo/types";
 import { captureFromMessage } from "@/lib/memory";
 
 export type ThreadTheme = "cooking" | "study" | "routine" | "open";

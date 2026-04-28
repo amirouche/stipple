@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import appCss from "../styles.css?url";
 import { hydrateMemoryStore, registerScheduler, tickScheduler } from "@/lib/memory";
 import { hydrateWakeStore, registerWakeScheduler, checkWakeAlarms } from "@/lib/wake";
-import { hydrateAdCache } from "@/lib/ads";
+import { hydrateAdCache } from "@/lib/promo";
 import { hydratePreferences } from "@/lib/preferences";
 
 function NotFoundComponent() {

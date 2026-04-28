@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Shell, useShell } from "@/components/Shell";
 import { ProcessingTrace } from "@/components/ProcessingTrace";
 import { RecipeCard } from "@/components/RecipeCard";
-import { AdCard } from "@/components/AdCard";
+import { SponsorCard } from "@/components/SponsorCard";
 import {
   PACKS,
   getCookingRecipe,
@@ -336,7 +336,7 @@ function AssistantBubble({ m }: { m: Extract<ThreadMsg, { role: "assistant" }> }
           {m.recipes?.map((r) => (
             <RecipeCard key={r.id} recipe={r} />
           ))}
-          {m.ad && <AdCard ad={m.ad} />}
+          {m.ad && <SponsorCard ad={m.ad} />}
         </div>
       )}
     </div>

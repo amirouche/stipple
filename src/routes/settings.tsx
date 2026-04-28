@@ -10,8 +10,8 @@ import {
   type DefaultMode,
   type HomePriority,
 } from "@/lib/preferences";
-import { AD_CATEGORIES, getAdCount, getAds, resetAdStats, useAdStats } from "@/lib/ads";
-import type { AdCategory } from "@/lib/ads/types";
+import { AD_CATEGORIES, getAdCount, getAds, resetAdStats, useAdStats } from "@/lib/promo";
+import type { AdCategory } from "@/lib/promo/types";
 import {
   composeWakeMessage,
   isSpeechSupported,

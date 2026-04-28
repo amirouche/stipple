@@ -4,10 +4,10 @@
 // this session.
 
 import { useEffect, useState } from "react";
-import { dismissAd, recordClick, recordImpression } from "@/lib/ads";
-import type { Ad } from "@/lib/ads/types";
+import { dismissAd, recordClick, recordImpression } from "@/lib/promo";
+import type { Ad } from "@/lib/promo/types";
 
-export function AdCard({ ad }: { ad: Ad }) {
+export function SponsorCard({ ad }: { ad: Ad }) {
   const [hidden, setHidden] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
 

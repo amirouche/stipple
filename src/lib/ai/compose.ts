@@ -8,8 +8,10 @@
 // system prompt asks for a short intro that complements the recipe card.
 
 import type { AnswerPayload, Pack } from "@/lib/dots-data";
-import { extractTopics, type LookupResult } from "@/lib/memory";
-import { matchAd } from "@/lib/ads";
+import type { LookupResult } from "@/lib/memory";
+// Direct path avoids a cycle: memory/index.ts ↔ dots-data via topics.ts.
+import { extractTopics } from "@/lib/memory/topics";
+import { matchAd } from "@/lib/promo";
 import { getPreferences } from "@/lib/preferences";
 import { askGemini } from "./gemini";
 

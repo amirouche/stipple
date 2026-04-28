@@ -2,7 +2,7 @@
 // DOTS = local-first. Check packs and memory before reaching for anything deeper.
 
 import { lookupMemory, type LookupResult } from "@/lib/memory";
-import type { Ad } from "@/lib/ads/types";
+import type { Ad } from "@/lib/promo/types";
 
 export type Pack = {
   id: string;

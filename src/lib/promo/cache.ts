@@ -12,7 +12,10 @@ import { useSyncExternalStore } from "react";
 import { AD_DATA } from "./data";
 import type { Ad, AdStats } from "./types";
 
-const DB_NAME = "dots-ads";
+// IDB names live in the local browser only — adblockers don't read them —
+// but renaming alongside the URL path keeps the codebase consistent and
+// avoids confusion when debugging in DevTools.
+const DB_NAME = "dots-promo";
 const DB_VERSION = 2;
 const ADS_STORE = "ads";
 const STATS_STORE = "ad_stats";
@@ -190,7 +193,7 @@ export function useAdStats(): Map<string, AdStats> {
 // up in this session, but tomorrow's session is fair game.
 // ---------------------------------------------------------------------------
 
-const DISMISS_KEY = "dots-ads-dismissed";
+const DISMISS_KEY = "dots-promo-dismissed";
 
 export function getDismissedAds(): Set<string> {
   if (typeof sessionStorage === "undefined") return new Set();

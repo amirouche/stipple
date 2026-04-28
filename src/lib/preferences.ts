@@ -2,7 +2,7 @@
 // Persisted to localStorage so reload-survives changes the user made.
 
 import { useSyncExternalStore } from "react";
-import type { AdCategory } from "@/lib/ads/types";
+import type { AdCategory } from "@/lib/promo/types";
 
 export type HomePriority = "memory-first" | "packs-first" | "balanced";
 export type DefaultMode = "calm" | "fast" | "deep";
