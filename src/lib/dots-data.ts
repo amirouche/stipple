@@ -299,7 +299,9 @@ export type AnswerPayload =
 export function answerFor(query: string, pack?: Pack, route?: Route): AnswerPayload {
   const q = query.toLowerCase();
 
-  if (/^(안녕|하이|반가워|헬로|오랜만|hi|hello|hey|yo)\b/i.test(q)) {
+  // No `\b` — JS word-boundary doesn't fire on Hangul, which made "안녕" miss
+  // this branch and fall through to the deep-route fallback text.
+  if (/^(안녕|하이|반가워|헬로|오랜만|hi|hello|hey|yo)/i.test(q)) {
     return { kind: "text", text: pickGreeting() };
   }
 

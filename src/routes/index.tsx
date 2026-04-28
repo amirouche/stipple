@@ -24,6 +24,8 @@ import {
 } from "@/lib/conversation-store";
 import { usePreferences } from "@/lib/preferences";
 import { buildContinuations, type ContinueCard } from "@/lib/continuations";
+import { composeAnswer } from "@/lib/ai/compose";
+import type { AnswerPayload } from "@/lib/dots-data";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -95,17 +97,7 @@ function ChatPage() {
     setInput("");
     setBusy(true);
 
-    const delay =
-      result.state === "greeting"
-        ? 500
-        : result.state === "found_local"
-          ? 700
-          : result.state === "checking_external"
-            ? 2400
-            : 1100;
-
-    setTimeout(() => {
-      const payload = result.payload;
+    const renderPayload = (payload: AnswerPayload) => {
       let body = "";
       let recipes: PackRecipe[] | undefined;
       if (payload.kind === "text") {
@@ -129,11 +121,26 @@ function ChatPage() {
       setBusy(false);
       requestAnimationFrame(() => {
         scrollRef.current?.scrollTo({
-          top: scrollRef.current.scrollHeight,
+          top: scrollRef.current?.scrollHeight ?? 0,
           behavior: "smooth",
         });
       });
-    }, delay);
+    };
+
+    // Greetings stay local — fast, deterministic, save the API quota.
+    if (result.state === "greeting") {
+      setTimeout(() => renderPayload(result.payload), 500);
+      return;
+    }
+
+    // Everything else: try Gemini with memory context, fall back to the
+    // canned answerFor() payload on failure.
+    composeAnswer({
+      query: text,
+      pack: result.pack,
+      lookup: result.lookup,
+      fallback: result.payload,
+    }).then(renderPayload);
   }
 
   if (!thread) return null;
@@ -144,11 +151,11 @@ function ChatPage() {
   const orderedContinues =
     prefs.homePriority === "memory-first"
       ? [...baseContinues].sort((a, b) =>
-          a.source === "topic" ? -1 : b.source === "topic" ? 1 : 0
+          a.source === "topic" ? -1 : b.source === "topic" ? 1 : 0,
         )
       : prefs.homePriority === "packs-first"
         ? [...baseContinues].sort((a, b) =>
-            a.source === "pack" ? -1 : b.source === "pack" ? 1 : 0
+            a.source === "pack" ? -1 : b.source === "pack" ? 1 : 0,
           )
         : baseContinues;
 
@@ -171,9 +178,7 @@ function ChatPage() {
         busy={busy}
         send={send}
         onPackJump={(packId) => {
-          const themed = threads.find(
-            (t) => t.pinned && t.lastPackId === packId
-          );
+          const themed = threads.find((t) => t.pinned && t.lastPackId === packId);
           if (themed) selectThread(themed.id);
         }}
       />
@@ -222,7 +227,16 @@ function ChatBody({
             className="md:hidden shrink-0 h-9 w-9 -ml-1 inline-flex items-center justify-center rounded-md text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors"
             aria-label="메뉴 열기"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <line x1="4" y1="7" x2="20" y2="7" />
               <line x1="4" y1="12" x2="20" y2="12" />
               <line x1="4" y1="17" x2="20" y2="17" />
@@ -252,11 +266,7 @@ function ChatBody({
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-6 sm:py-10 space-y-8">
           {!hasMessages && (
-            <WelcomeState
-              continues={orderedContinues}
-              onPick={send}
-              onPackJump={onPackJump}
-            />
+            <WelcomeState continues={orderedContinues} onPick={send} onPackJump={onPackJump} />
           )}
 
           {messages.map((m) =>
@@ -268,7 +278,7 @@ function ChatBody({
               </div>
             ) : (
               <AssistantBubble key={m.id} m={m} />
-            )
+            ),
           )}
         </div>
       </div>
@@ -310,27 +320,16 @@ function ChatBody({
   );
 }
 
-
-function AssistantBubble({
-  m,
-}: {
-  m: Extract<ThreadMsg, { role: "assistant" }>;
-}) {
+function AssistantBubble({ m }: { m: Extract<ThreadMsg, { role: "assistant" }> }) {
   return (
     <div className="space-y-3 fade-in">
       {(m.pending || m.route === "deep") && (
-        <ProcessingTrace
-          route={m.route}
-          reason={m.reason}
-          packName={m.packName}
-        />
+        <ProcessingTrace route={m.route} reason={m.reason} packName={m.packName} />
       )}
       {!m.pending && (
         <div className="space-y-3">
           {m.text && (
-            <div className="text-[14.5px] leading-[1.65] text-ink max-w-2xl">
-              {m.text}
-            </div>
+            <div className="text-[14.5px] leading-[1.65] text-ink max-w-2xl">{m.text}</div>
           )}
           {m.recipes?.map((r) => (
             <RecipeCard key={r.id} recipe={r} />
@@ -369,4 +368,3 @@ function WelcomeState({
     </div>
   );
 }
-
