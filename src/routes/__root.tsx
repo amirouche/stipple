@@ -2,7 +2,7 @@ import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-r
 import { useEffect } from "react";
 
 import appCss from "../styles.css?url";
-import { hydrateMemoryStore } from "@/lib/memory";
+import { hydrateMemoryStore, registerScheduler, tickScheduler } from "@/lib/memory";
 
 function NotFoundComponent() {
   return (
@@ -55,7 +55,10 @@ export const Route = createRootRoute({
 
 function RootShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    void hydrateMemoryStore();
+    void hydrateMemoryStore().then(() => {
+      tickScheduler();
+      registerScheduler();
+    });
     if (import.meta.env.DEV) {
       void import("@/lib/memory/debug").then((m) => m.setupDebugHandle());
     }

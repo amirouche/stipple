@@ -3,8 +3,10 @@
 // `setupDebugHandle()` is called from the root route in dev mode only.
 
 import { captureFromMessage } from "./capture";
+import { DECAY_THRESHOLDS, decay, shouldDecayToDormant } from "./decay";
 import { EMOTION_LIMITS, computeEmotionScore, mergeEmotionSources, scoreEmotion } from "./emotion";
 import { PROMOTION_THRESHOLDS, shouldPromote } from "./promote";
+import { registerScheduler, tickScheduler } from "./scheduler";
 import {
   clearMemories,
   deleteMemory,
@@ -33,6 +35,12 @@ declare global {
       shouldPromote: typeof shouldPromote;
       thresholds: typeof PROMOTION_THRESHOLDS;
       emotionLimits: typeof EMOTION_LIMITS;
+      // stage 3
+      tick: typeof tickScheduler;
+      registerScheduler: typeof registerScheduler;
+      decay: typeof decay;
+      shouldDecayToDormant: typeof shouldDecayToDormant;
+      decayThresholds: typeof DECAY_THRESHOLDS;
     };
   }
 }
@@ -55,5 +63,10 @@ export async function setupDebugHandle(): Promise<void> {
     shouldPromote,
     thresholds: PROMOTION_THRESHOLDS,
     emotionLimits: EMOTION_LIMITS,
+    tick: tickScheduler,
+    registerScheduler,
+    decay,
+    shouldDecayToDormant,
+    decayThresholds: DECAY_THRESHOLDS,
   };
 }
