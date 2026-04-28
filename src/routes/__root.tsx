@@ -1,6 +1,8 @@
 import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import appCss from "../styles.css?url";
+import { hydrateMemoryStore } from "@/lib/memory";
 
 function NotFoundComponent() {
   return (
@@ -54,6 +56,10 @@ export const Route = createRootRoute({
 });
 
 function RootShell({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    void hydrateMemoryStore();
+  }, []);
+
   return (
     <html lang="en">
       <head>
