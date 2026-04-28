@@ -63,7 +63,10 @@ const WAKE_KIND_LABEL: Record<WakeKind, string> = {
   lunch: "점심 멘트",
   evening: "저녁 회상",
   bedtime: "자기 전",
+  homecoming: "귀가",
 };
+
+const HOMECOMING_HOUR_OPTIONS = [1, 2, 3, 4, 5, 6];
 
 const WAKE_TONE_LABEL: Record<WakeTone, string> = {
   warm: "편안하게",
@@ -282,17 +285,56 @@ function WakeRow({ alarm }: { alarm: WakeAlarm }) {
     speak(composeWakeMessage(alarm, { topicMention: top }));
   }
 
+  const isHomecoming = alarm.kind === "homecoming";
+
   return (
     <li className="px-3 py-3 flex items-center gap-2 bg-card flex-wrap">
       <span className="text-[13px] text-ink w-24 shrink-0">{WAKE_KIND_LABEL[alarm.kind]}</span>
 
-      <input
-        type="time"
-        value={alarm.time}
-        disabled={!alarm.enabled}
-        onChange={(e) => updateAlarm(alarm.id, { time: e.target.value })}
-        className="h-8 px-2 rounded-md border border-border bg-card text-[12.5px] text-ink font-mono disabled:opacity-40 focus:outline-none focus:border-strong"
-      />
+      {isHomecoming ? (
+        <>
+          <span className="flex items-center gap-1">
+            <input
+              type="time"
+              value={alarm.activeWindowStart ?? "17:00"}
+              disabled={!alarm.enabled}
+              onChange={(e) => updateAlarm(alarm.id, { activeWindowStart: e.target.value })}
+              className="h-8 px-2 rounded-md border border-border bg-card text-[12.5px] text-ink font-mono disabled:opacity-40 focus:outline-none focus:border-strong"
+              aria-label="활성 시간대 시작"
+            />
+            <span className="text-[11px] text-ink-soft">~</span>
+            <input
+              type="time"
+              value={alarm.activeWindowEnd ?? "23:00"}
+              disabled={!alarm.enabled}
+              onChange={(e) => updateAlarm(alarm.id, { activeWindowEnd: e.target.value })}
+              className="h-8 px-2 rounded-md border border-border bg-card text-[12.5px] text-ink font-mono disabled:opacity-40 focus:outline-none focus:border-strong"
+              aria-label="활성 시간대 끝"
+            />
+          </span>
+          <select
+            value={alarm.minBackgroundHours ?? 2}
+            disabled={!alarm.enabled}
+            onChange={(e) => updateAlarm(alarm.id, { minBackgroundHours: Number(e.target.value) })}
+            className="h-8 px-2 rounded-md border border-border bg-card text-[12.5px] text-ink disabled:opacity-40 focus:outline-none focus:border-strong"
+            aria-label="최소 외출 시간"
+          >
+            {HOMECOMING_HOUR_OPTIONS.map((h) => (
+              <option key={h} value={h}>
+                {h}시간↑
+              </option>
+            ))}
+          </select>
+        </>
+      ) : (
+        <input
+          type="time"
+          value={alarm.time}
+          disabled={!alarm.enabled}
+          onChange={(e) => updateAlarm(alarm.id, { time: e.target.value })}
+          className="h-8 px-2 rounded-md border border-border bg-card text-[12.5px] text-ink font-mono disabled:opacity-40 focus:outline-none focus:border-strong"
+        />
+      )}
 
       <select
         value={alarm.tone}

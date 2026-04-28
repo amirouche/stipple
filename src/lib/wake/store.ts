@@ -12,6 +12,16 @@ const DEFAULT_ALARMS: WakeAlarm[] = [
   { id: "lunch", kind: "lunch", time: "12:00", enabled: false, tone: "brief" },
   { id: "evening", kind: "evening", time: "19:00", enabled: false, tone: "calm" },
   { id: "bedtime", kind: "bedtime", time: "23:00", enabled: false, tone: "calm" },
+  {
+    id: "homecoming",
+    kind: "homecoming",
+    time: "20:00",
+    enabled: false,
+    tone: "warm",
+    minBackgroundHours: 2,
+    activeWindowStart: "17:00",
+    activeWindowEnd: "23:00",
+  },
 ];
 
 let state: WakeAlarm[] = DEFAULT_ALARMS;

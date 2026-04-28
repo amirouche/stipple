@@ -46,6 +46,19 @@ const TEMPLATES: Record<WakeKind, TemplateGroup> = {
       "오늘 하루도 충분했어. 잘 자.",
     ],
   },
+  homecoming: {
+    warm: [
+      "오늘도 수고했어요. 다녀왔어요?",
+      "왔구나. 오늘 {topic} 얘기 했었는데, 잘 풀렸어?",
+      "다녀왔어. 오늘 어땠어?",
+    ],
+    brief: ["왔어?", "수고했어요.", "다녀왔구나."],
+    calm: [
+      "오늘도 수고했어. 천천히 쉬어.",
+      "어서 와. 오늘 하루 어땠어?",
+      "이제 좀 쉬자. 다녀왔어요.",
+    ],
+  },
 };
 
 export type ComposeContext = {
