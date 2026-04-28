@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Shell, useShell } from "@/components/Shell";
 import { ProcessingTrace } from "@/components/ProcessingTrace";
 import { RecipeCard } from "@/components/RecipeCard";
+import { AdCard } from "@/components/AdCard";
 import {
   PACKS,
   getCookingRecipe,
@@ -117,6 +118,7 @@ function ChatPage() {
         pending: false,
         text: body,
         recipes,
+        ad: payload.ad,
       });
       setBusy(false);
       requestAnimationFrame(() => {
@@ -334,6 +336,7 @@ function AssistantBubble({ m }: { m: Extract<ThreadMsg, { role: "assistant" }> }
           {m.recipes?.map((r) => (
             <RecipeCard key={r.id} recipe={r} />
           ))}
+          {m.ad && <AdCard ad={m.ad} />}
         </div>
       )}
     </div>

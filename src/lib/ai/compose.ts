@@ -8,7 +8,9 @@
 // system prompt asks for a short intro that complements the recipe card.
 
 import type { AnswerPayload, Pack } from "@/lib/dots-data";
-import type { LookupResult } from "@/lib/memory";
+import { extractTopics, type LookupResult } from "@/lib/memory";
+import { matchAd } from "@/lib/ads";
+import { getPreferences } from "@/lib/preferences";
 import { askGemini } from "./gemini";
 
 export type ComposeArgs = {
@@ -29,10 +31,7 @@ const BASE_PERSONA = [
 function buildSystemPrompt(args: ComposeArgs): string {
   const sections: string[] = [BASE_PERSONA];
 
-  if (
-    args.fallback.kind === "recipe" ||
-    args.fallback.kind === "memory-recipes"
-  ) {
+  if (args.fallback.kind === "recipe" || args.fallback.kind === "memory-recipes") {
     sections.push(
       "[중요] 답변 직후 별도의 레시피 카드가 화면에 표시됩니다. 재료·단계·시간을 다시 적지 마세요. 1~2 문장의 짧은 인사·맥락만 작성하세요. 사용자가 전에 좋아한 재료나 흐름이 있으면 자연스럽게 언급하세요.",
     );
@@ -69,6 +68,20 @@ function buildSystemPrompt(args: ComposeArgs): string {
   return sections.join("\n\n");
 }
 
+function attachAd(payload: AnswerPayload, query: string): AnswerPayload {
+  // Ad matching is purely local — nothing about the query, topics, or the
+  // chosen ad leaves the device. The LLM never sees the ad either; we
+  // attach it next to the answer the model already produced.
+  const prefs = getPreferences();
+  if (!prefs.ads.enabled || prefs.ads.categories.length === 0) return payload;
+  const ad = matchAd({
+    query,
+    topics: extractTopics(query),
+    enabledCategories: prefs.ads.categories,
+  });
+  return ad ? { ...payload, ad } : payload;
+}
+
 export async function composeAnswer(args: ComposeArgs): Promise<AnswerPayload> {
   const systemPrompt = buildSystemPrompt(args);
 
@@ -79,18 +92,19 @@ export async function composeAnswer(args: ComposeArgs): Promise<AnswerPayload> {
 
     // Wrap Gemini text into the same payload shape as the fallback so
     // structured fields (recipeId/recipeIds) survive.
+    let payload: AnswerPayload;
     if (args.fallback.kind === "text") {
-      return { kind: "text", text };
+      payload = { kind: "text", text };
+    } else if (args.fallback.kind === "recipe") {
+      payload = { ...args.fallback, intro: text };
+    } else if (args.fallback.kind === "memory-recipes") {
+      payload = { ...args.fallback, intro: text };
+    } else {
+      payload = args.fallback;
     }
-    if (args.fallback.kind === "recipe") {
-      return { ...args.fallback, intro: text };
-    }
-    if (args.fallback.kind === "memory-recipes") {
-      return { ...args.fallback, intro: text };
-    }
-    return args.fallback;
+    return attachAd(payload, args.query);
   } catch (err) {
     console.error("[compose] Gemini call failed, using fallback:", err);
-    return args.fallback;
+    return attachAd(args.fallback, args.query);
   }
 }

@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import appCss from "../styles.css?url";
 import { hydrateMemoryStore, registerScheduler, tickScheduler } from "@/lib/memory";
 import { hydrateWakeStore, registerWakeScheduler, checkWakeAlarms } from "@/lib/wake";
+import { hydrateAdCache } from "@/lib/ads";
+import { hydratePreferences } from "@/lib/preferences";
 
 function NotFoundComponent() {
   return (
@@ -56,6 +58,7 @@ export const Route = createRootRoute({
 
 function RootShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
+    hydratePreferences();
     void hydrateMemoryStore().then(() => {
       tickScheduler();
       registerScheduler();
@@ -63,6 +66,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
     hydrateWakeStore();
     checkWakeAlarms();
     registerWakeScheduler();
+    void hydrateAdCache();
     if (import.meta.env.DEV) {
       void import("@/lib/memory/debug").then((m) => m.setupDebugHandle());
     }

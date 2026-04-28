@@ -4,11 +4,14 @@ import { Shell } from "@/components/Shell";
 import { PACKS } from "@/lib/dots-data";
 import {
   movePack,
+  setAdPrefs,
   setPreferences,
   usePreferences,
   type DefaultMode,
   type HomePriority,
 } from "@/lib/preferences";
+import { AD_CATEGORIES, getAdCount } from "@/lib/ads";
+import type { AdCategory } from "@/lib/ads/types";
 import {
   composeWakeMessage,
   isSpeechSupported,
@@ -159,6 +162,9 @@ function SettingsPage() {
               </p>
             )}
           </section>
+
+          {/* Micro-ads */}
+          <AdsSection />
 
           {/* Pack order */}
           <section className="rounded-xl border border-border bg-card p-6">
@@ -362,6 +368,71 @@ function WakeRow({ alarm }: { alarm: WakeAlarm }) {
         <Toggle on={alarm.enabled} onChange={(v) => updateAlarm(alarm.id, { enabled: v })} />
       </span>
     </li>
+  );
+}
+
+function AdsSection() {
+  const prefs = usePreferences();
+  const enabled = prefs.ads.enabled;
+  const selected = new Set<AdCategory>(prefs.ads.categories);
+  const cacheCount = getAdCount();
+
+  function toggleCategory(cat: AdCategory) {
+    const next = new Set(selected);
+    if (next.has(cat)) next.delete(cat);
+    else next.add(cat);
+    setAdPrefs({ categories: [...next] });
+  }
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-6">
+      <div className="flex items-baseline justify-between mb-1">
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">마이크로 광고</h2>
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
+          기기 안
+        </span>
+      </div>
+      <p className="text-[12.5px] text-ink-soft mb-4 leading-relaxed">
+        DOTS의 광고는 디바이스 안에 머물러. 광고주는 네 데이터를 안 받아 — 매칭은 로컬에서만.
+      </p>
+
+      <div className="flex items-center justify-between py-2">
+        <div>
+          <p className="text-[13.5px] text-ink">광고 표시</p>
+          <p className="text-[11.5px] text-ink-soft mt-0.5">
+            대화 흐름과 맞을 때만, 답변 옆에 한 장.
+          </p>
+        </div>
+        <Toggle on={enabled} onChange={(v) => setAdPrefs({ enabled: v })} />
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-border">
+        <p className="text-[12.5px] text-ink mb-2">카테고리</p>
+        <div className="flex flex-wrap gap-1.5">
+          {AD_CATEGORIES.map((cat) => {
+            const on = selected.has(cat.id);
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                disabled={!enabled}
+                onClick={() => toggleCategory(cat.id)}
+                className={`px-3 py-1.5 rounded-full text-[12px] transition-colors disabled:opacity-40 ${
+                  on
+                    ? "bg-ink text-background border border-ink"
+                    : "bg-card text-ink-soft border border-border hover:text-ink hover:border-strong"
+                }`}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+          광고 {cacheCount}개 캐시됨 · 로컬
+        </p>
+      </div>
+    </section>
   );
 }
 
