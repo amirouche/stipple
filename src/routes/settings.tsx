@@ -10,7 +10,7 @@ import {
   type DefaultMode,
   type HomePriority,
 } from "@/lib/preferences";
-import { AD_CATEGORIES, getAdCount } from "@/lib/ads";
+import { AD_CATEGORIES, getAdCount, getAds, resetAdStats, useAdStats } from "@/lib/ads";
 import type { AdCategory } from "@/lib/ads/types";
 import {
   composeWakeMessage,
@@ -373,15 +373,35 @@ function WakeRow({ alarm }: { alarm: WakeAlarm }) {
 
 function AdsSection() {
   const prefs = usePreferences();
+  const statsMap = useAdStats();
   const enabled = prefs.ads.enabled;
   const selected = new Set<AdCategory>(prefs.ads.categories);
   const cacheCount = getAdCount();
+  const ads = getAds();
 
   function toggleCategory(cat: AdCategory) {
     const next = new Set(selected);
     if (next.has(cat)) next.delete(cat);
     else next.add(cat);
     setAdPrefs({ categories: [...next] });
+  }
+
+  // Sort by impressions desc, then brand. Ads with zero stats still show
+  // so the user can see the full inventory.
+  const rows = [...ads]
+    .map((ad) => ({
+      ad,
+      impressions: statsMap.get(ad.id)?.impressions ?? 0,
+      clicks: statsMap.get(ad.id)?.clicks ?? 0,
+    }))
+    .sort((a, b) => b.impressions - a.impressions || a.ad.brand.localeCompare(b.ad.brand));
+
+  const totalImpressions = rows.reduce((sum, r) => sum + r.impressions, 0);
+  const totalClicks = rows.reduce((sum, r) => sum + r.clicks, 0);
+
+  function handleReset() {
+    if (!window.confirm("이 디바이스의 광고 노출 통계를 모두 지워. 계속할까?")) return;
+    void resetAdStats();
   }
 
   return (
@@ -431,6 +451,54 @@ function AdsSection() {
         <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
           광고 {cacheCount}개 캐시됨 · 로컬
         </p>
+      </div>
+
+      {/* On-device impression stats */}
+      <div className="mt-5 pt-5 border-t border-border">
+        <div className="flex items-baseline justify-between mb-1">
+          <p className="text-[13px] text-ink">내 노출 통계</p>
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+            노출 {totalImpressions} · 클릭 {totalClicks}
+          </span>
+        </div>
+        <p className="text-[11.5px] text-ink-soft mb-3 leading-relaxed">
+          이 통계는 디바이스 안에만 머물러. 광고주는 받지 못해.
+        </p>
+        <ul className="divide-y divide-border border border-border rounded-lg overflow-hidden">
+          {rows.map(({ ad, impressions, clicks }) => (
+            <li key={ad.id} className="px-3 py-2 flex items-center gap-2 bg-card text-[12px]">
+              <span className="flex-1 min-w-0 truncate text-ink">{ad.brand}</span>
+              <span className="font-mono text-[10.5px] text-ink-soft uppercase tracking-[0.12em]">
+                {ad.displayPeriod === "weekly" ? "주간" : "월간"}
+              </span>
+              <span className="font-mono text-[11px] text-ink tabular-nums w-16 text-right">
+                {impressions} 노출
+              </span>
+              <span className="font-mono text-[11px] text-ink-soft tabular-nums w-14 text-right">
+                {clicks} 클릭
+              </span>
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={totalImpressions === 0 && totalClicks === 0}
+          className="mt-3 h-8 px-3 rounded-md border border-border text-[11.5px] text-ink-soft hover:text-ink hover:bg-surface-2 disabled:opacity-30 transition-colors"
+        >
+          통계 초기화
+        </button>
+      </div>
+
+      {/* How this works — concept block for the demo */}
+      <div className="mt-5 pt-5 border-t border-border">
+        <p className="text-[12.5px] text-ink mb-2">DOTS의 광고는 다르게 작동해</p>
+        <ul className="space-y-1.5 text-[12px] text-ink-soft leading-relaxed list-disc pl-5">
+          <li>광고주는 카테고리와 기간을 구매해 (정액제)</li>
+          <li>네 데이터는 외부로 안 나가</li>
+          <li>노출 통계는 네 디바이스 안에만 머물러</li>
+          <li>카운트는 광고 효과를 네가 직접 볼 수 있게 한 거야</li>
+        </ul>
       </div>
     </section>
   );

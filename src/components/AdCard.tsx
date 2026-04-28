@@ -3,13 +3,19 @@
 // dismissal is recorded in sessionStorage so the same ad won't reappear in
 // this session.
 
-import { useState } from "react";
-import { dismissAd } from "@/lib/ads";
+import { useEffect, useState } from "react";
+import { dismissAd, recordClick, recordImpression } from "@/lib/ads";
 import type { Ad } from "@/lib/ads/types";
 
 export function AdCard({ ad }: { ad: Ad }) {
   const [hidden, setHidden] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
+
+  // One impression per mounted card. Stays on-device — the counter lives in
+  // IndexedDB and is only ever read by Settings.
+  useEffect(() => {
+    recordImpression(ad.id);
+  }, [ad.id]);
 
   if (hidden) return null;
 
@@ -20,9 +26,18 @@ export function AdCard({ ad }: { ad: Ad }) {
     setHidden(true);
   }
 
+  function trackClick() {
+    recordClick(ad.id);
+  }
+
   const Wrapper = ad.ctaUrl ? "a" : "div";
   const wrapperProps = ad.ctaUrl
-    ? { href: ad.ctaUrl, target: "_blank", rel: "noopener noreferrer" }
+    ? {
+        href: ad.ctaUrl,
+        target: "_blank",
+        rel: "noopener noreferrer",
+        onClick: trackClick,
+      }
     : {};
 
   return (

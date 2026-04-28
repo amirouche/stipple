@@ -7,6 +7,11 @@
 
 export type AdCategory = "kimchi" | "cooking" | "book" | "health" | "drink";
 
+// How long the advertiser bought the slot. Informational only in v1 — used
+// in Settings to communicate the flat-fee model. v2 would actually expire
+// ads past their period.
+export type AdDisplayPeriod = "weekly" | "monthly";
+
 export type Ad = {
   id: string;
   brand: string;
@@ -21,4 +26,14 @@ export type Ad = {
   ctaUrl?: string;
   // Short tagline shown next to the GIF.
   tagline: string;
+  // Flat-fee window the advertiser purchased.
+  displayPeriod: AdDisplayPeriod;
+};
+
+// Per-ad on-device counters. Never leaves the device.
+export type AdStats = {
+  adId: string;
+  impressions: number;
+  clicks: number;
+  lastImpressionAt?: number;
 };

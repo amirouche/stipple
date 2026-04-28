@@ -26,6 +26,7 @@ export const AD_DATA: Ad[] = [
     duration: 3,
     ctaUrl: "https://example.com/kimchimyeongga",
     tagline: "묵은지 한 포기 — 오래 끓일수록 깊어지는 맛",
+    displayPeriod: "monthly",
   },
   {
     id: "paikseason-yangnyeom",
@@ -36,6 +37,7 @@ export const AD_DATA: Ad[] = [
     duration: 2,
     ctaUrl: "https://example.com/paikseason",
     tagline: "한 스푼이면 끝 — 30분 요리 양념",
+    displayPeriod: "weekly",
   },
   {
     id: "aladin-fall-reading",
@@ -46,6 +48,7 @@ export const AD_DATA: Ad[] = [
     duration: 3,
     ctaUrl: "https://example.com/aladin",
     tagline: "가을 독서 — 베스트셀러 30% 할인",
+    displayPeriod: "monthly",
   },
   {
     id: "yuhan-vita",
@@ -56,6 +59,7 @@ export const AD_DATA: Ad[] = [
     duration: 2,
     ctaUrl: "https://example.com/yuhan",
     tagline: "하루 한 알 — 피로 회복 비타민B",
+    displayPeriod: "monthly",
   },
   {
     id: "starbucks-newmenu",
@@ -66,5 +70,6 @@ export const AD_DATA: Ad[] = [
     duration: 2,
     ctaUrl: "https://example.com/starbucks",
     tagline: "신메뉴 — 가을 한정 라떼",
+    displayPeriod: "weekly",
   },
 ];
