@@ -11,7 +11,7 @@ import type { AnswerPayload, Pack } from "@/lib/dots-data";
 import type { LookupResult } from "@/lib/memory";
 // Direct path avoids a cycle: memory/index.ts ↔ dots-data via topics.ts.
 import { extractTopics } from "@/lib/memory/topics";
-import { matchAd } from "@/lib/promo";
+import { matchPitch } from "@/lib/pitch";
 import { getPreferences } from "@/lib/preferences";
 import { askGemini } from "./gemini";
 
@@ -70,18 +70,18 @@ function buildSystemPrompt(args: ComposeArgs): string {
   return sections.join("\n\n");
 }
 
-function attachAd(payload: AnswerPayload, query: string): AnswerPayload {
-  // Ad matching is purely local — nothing about the query, topics, or the
-  // chosen ad leaves the device. The LLM never sees the ad either; we
+function attachPitch(payload: AnswerPayload, query: string): AnswerPayload {
+  // Pitch matching is purely local — nothing about the query, topics, or
+  // the chosen pitch leaves the device. The LLM never sees it either; we
   // attach it next to the answer the model already produced.
   const prefs = getPreferences();
-  if (!prefs.ads.enabled || prefs.ads.categories.length === 0) return payload;
-  const ad = matchAd({
+  if (!prefs.pitch.enabled || prefs.pitch.categories.length === 0) return payload;
+  const pitch = matchPitch({
     query,
     topics: extractTopics(query),
-    enabledCategories: prefs.ads.categories,
+    enabledCategories: prefs.pitch.categories,
   });
-  return ad ? { ...payload, ad } : payload;
+  return pitch ? { ...payload, pitch } : payload;
 }
 
 export async function composeAnswer(args: ComposeArgs): Promise<AnswerPayload> {
@@ -104,9 +104,9 @@ export async function composeAnswer(args: ComposeArgs): Promise<AnswerPayload> {
     } else {
       payload = args.fallback;
     }
-    return attachAd(payload, args.query);
+    return attachPitch(payload, args.query);
   } catch (err) {
     console.error("[compose] Gemini call failed, using fallback:", err);
-    return attachAd(args.fallback, args.query);
+    return attachPitch(args.fallback, args.query);
   }
 }

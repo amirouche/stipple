@@ -1,42 +1,42 @@
-// Micro-ad card rendered next to an assistant answer. Auto-loops the GIF,
+// Pitch card rendered next to an assistant answer. Auto-loops the GIF,
 // labels the source, and lets the user dismiss with a single click. The
-// dismissal is recorded in sessionStorage so the same ad won't reappear in
-// this session.
+// dismissal is recorded in sessionStorage so the same pitch won't reappear
+// in this session.
 
 import { useEffect, useState } from "react";
-import { dismissAd, recordClick, recordImpression } from "@/lib/promo";
-import type { Ad } from "@/lib/promo/types";
+import { dismissPitch, recordTap, recordView } from "@/lib/pitch";
+import type { Pitch } from "@/lib/pitch/types";
 
-export function SponsorCard({ ad }: { ad: Ad }) {
+export function PitchCard({ pitch }: { pitch: Pitch }) {
   const [hidden, setHidden] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
 
-  // One impression per mounted card. Stays on-device — the counter lives in
+  // One view per mounted card. Stays on-device — the counter lives in
   // IndexedDB and is only ever read by Settings.
   useEffect(() => {
-    recordImpression(ad.id);
-  }, [ad.id]);
+    recordView(pitch.id);
+  }, [pitch.id]);
 
   if (hidden) return null;
 
   function close(e: React.MouseEvent) {
     e.stopPropagation();
     e.preventDefault();
-    dismissAd(ad.id);
+    dismissPitch(pitch.id);
     setHidden(true);
   }
 
-  function trackClick() {
-    recordClick(ad.id);
+  function trackTap() {
+    recordTap(pitch.id);
   }
 
-  const Wrapper = ad.ctaUrl ? "a" : "div";
-  const wrapperProps = ad.ctaUrl
+  const Wrapper = pitch.ctaUrl ? "a" : "div";
+  const wrapperProps = pitch.ctaUrl
     ? {
-        href: ad.ctaUrl,
+        href: pitch.ctaUrl,
         target: "_blank",
         rel: "noopener noreferrer",
-        onClick: trackClick,
+        onClick: trackTap,
       }
     : {};
 
@@ -46,7 +46,7 @@ export function SponsorCard({ ad }: { ad: Ad }) {
       className="relative block w-full max-w-md rounded-xl border border-border bg-card hover:border-strong transition-colors overflow-hidden group"
     >
       <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-full bg-background/80 backdrop-blur px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink-soft">
-        협찬 · {ad.brand}
+        협찬 · {pitch.brand}
       </span>
 
       <button
@@ -77,13 +77,13 @@ export function SponsorCard({ ad }: { ad: Ad }) {
                 GIF
               </span>
               <span className="mt-1 text-[10.5px] text-ink-soft truncate max-w-full">
-                {ad.duration}s
+                {pitch.duration}s
               </span>
             </div>
           ) : (
             <img
-              src={ad.gifPath}
-              alt={ad.brand}
+              src={pitch.gifPath}
+              alt={pitch.brand}
               loading="lazy"
               onError={() => setImgFailed(true)}
               className="w-full h-full object-cover"
@@ -92,8 +92,8 @@ export function SponsorCard({ ad }: { ad: Ad }) {
         </div>
 
         <div className="flex-1 min-w-0 px-3 py-3 flex flex-col justify-center">
-          <p className="text-[12.5px] text-ink leading-snug line-clamp-2">{ad.tagline}</p>
-          {ad.ctaUrl && (
+          <p className="text-[12.5px] text-ink leading-snug line-clamp-2">{pitch.tagline}</p>
+          {pitch.ctaUrl && (
             <p className="mt-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink-soft">
               자세히 →
             </p>

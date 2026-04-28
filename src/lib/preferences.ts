@@ -2,16 +2,16 @@
 // Persisted to localStorage so reload-survives changes the user made.
 
 import { useSyncExternalStore } from "react";
-import type { AdCategory } from "@/lib/promo/types";
+import type { PitchCategory } from "@/lib/pitch/types";
 
 export type HomePriority = "memory-first" | "packs-first" | "balanced";
 export type DefaultMode = "calm" | "fast" | "deep";
 
-export type AdPrefs = {
+export type PitchPrefs = {
   enabled: boolean;
-  // Empty list = no ads even if enabled. Mirrors the "opt-in per category"
-  // model — user must check the boxes they're OK with.
-  categories: AdCategory[];
+  // Empty list = no pitches even if enabled. Mirrors the "opt-in per
+  // category" model — user must check the boxes they're OK with.
+  categories: PitchCategory[];
 };
 
 export type Preferences = {
@@ -19,7 +19,7 @@ export type Preferences = {
   defaultMode: DefaultMode;
   // ordered list of pack ids — first one shows up first on home + sidebar
   packOrder: string[];
-  ads: AdPrefs;
+  pitch: PitchPrefs;
 };
 
 const STORAGE_KEY = "dots-preferences";
@@ -35,7 +35,7 @@ const DEFAULTS: Preferences = {
     "wine-cellar",
     "code-review",
   ],
-  ads: { enabled: false, categories: [] },
+  pitch: { enabled: false, categories: [] },
 };
 
 let prefs: Preferences = DEFAULTS;
@@ -68,7 +68,7 @@ export function hydratePreferences(): void {
     prefs = {
       ...DEFAULTS,
       ...parsed,
-      ads: { ...DEFAULTS.ads, ...(parsed.ads ?? {}) },
+      pitch: { ...DEFAULTS.pitch, ...(parsed.pitch ?? {}) },
     };
     emit();
   } catch (err) {
@@ -97,8 +97,8 @@ export function setPreferences(patch: Partial<Preferences>) {
   persist();
 }
 
-export function setAdPrefs(patch: Partial<AdPrefs>) {
-  prefs = { ...prefs, ads: { ...prefs.ads, ...patch } };
+export function setPitchPrefs(patch: Partial<PitchPrefs>) {
+  prefs = { ...prefs, pitch: { ...prefs.pitch, ...patch } };
   emit();
   persist();
 }

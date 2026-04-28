@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import appCss from "../styles.css?url";
 import { hydrateMemoryStore, registerScheduler, tickScheduler } from "@/lib/memory";
 import { hydrateWakeStore, registerWakeScheduler, checkWakeAlarms } from "@/lib/wake";
-import { hydrateAdCache } from "@/lib/promo";
+import { hydratePitchCache } from "@/lib/pitch";
 import { hydratePreferences } from "@/lib/preferences";
 
 function NotFoundComponent() {
@@ -66,7 +66,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
     hydrateWakeStore();
     checkWakeAlarms();
     registerWakeScheduler();
-    void hydrateAdCache();
+    void hydratePitchCache();
     if (import.meta.env.DEV) {
       void import("@/lib/memory/debug").then((m) => m.setupDebugHandle());
     }

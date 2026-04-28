@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from "react";
 import type { ConversationState } from "@/lib/conversation-engine";
 import type { PackRecipe, Route as RouteType } from "@/lib/dots-data";
-import type { Ad } from "@/lib/promo/types";
+import type { Pitch } from "@/lib/pitch/types";
 import { captureFromMessage } from "@/lib/memory";
 
 export type ThreadTheme = "cooking" | "study" | "routine" | "open";
@@ -18,7 +18,7 @@ export type ThreadMsg =
       role: "assistant";
       text?: string;
       recipes?: PackRecipe[];
-      ad?: Ad;
+      pitch?: Pitch;
       route: RouteType;
       state: ConversationState;
       reason: string;

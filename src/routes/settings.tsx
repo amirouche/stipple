@@ -4,14 +4,20 @@ import { Shell } from "@/components/Shell";
 import { PACKS } from "@/lib/dots-data";
 import {
   movePack,
-  setAdPrefs,
+  setPitchPrefs,
   setPreferences,
   usePreferences,
   type DefaultMode,
   type HomePriority,
 } from "@/lib/preferences";
-import { AD_CATEGORIES, getAdCount, getAds, resetAdStats, useAdStats } from "@/lib/promo";
-import type { AdCategory } from "@/lib/promo/types";
+import {
+  PITCH_CATEGORIES,
+  getPitchCount,
+  getPitches,
+  resetPitchStats,
+  usePitchStats,
+} from "@/lib/pitch";
+import type { PitchCategory } from "@/lib/pitch/types";
 import {
   composeWakeMessage,
   isSpeechSupported,
@@ -163,8 +169,8 @@ function SettingsPage() {
             )}
           </section>
 
-          {/* Micro-ads */}
-          <AdsSection />
+          {/* Micro-pitches */}
+          <PitchSection />
 
           {/* Pack order */}
           <section className="rounded-xl border border-border bg-card p-6">
@@ -371,37 +377,37 @@ function WakeRow({ alarm }: { alarm: WakeAlarm }) {
   );
 }
 
-function AdsSection() {
+function PitchSection() {
   const prefs = usePreferences();
-  const statsMap = useAdStats();
-  const enabled = prefs.ads.enabled;
-  const selected = new Set<AdCategory>(prefs.ads.categories);
-  const cacheCount = getAdCount();
-  const ads = getAds();
+  const statsMap = usePitchStats();
+  const enabled = prefs.pitch.enabled;
+  const selected = new Set<PitchCategory>(prefs.pitch.categories);
+  const cacheCount = getPitchCount();
+  const pitches = getPitches();
 
-  function toggleCategory(cat: AdCategory) {
+  function toggleCategory(cat: PitchCategory) {
     const next = new Set(selected);
     if (next.has(cat)) next.delete(cat);
     else next.add(cat);
-    setAdPrefs({ categories: [...next] });
+    setPitchPrefs({ categories: [...next] });
   }
 
-  // Sort by impressions desc, then brand. Ads with zero stats still show
-  // so the user can see the full inventory.
-  const rows = [...ads]
-    .map((ad) => ({
-      ad,
-      impressions: statsMap.get(ad.id)?.impressions ?? 0,
-      clicks: statsMap.get(ad.id)?.clicks ?? 0,
+  // Sort by views desc, then brand. Items with zero stats still show so
+  // the user can see the full inventory.
+  const rows = [...pitches]
+    .map((pitch) => ({
+      pitch,
+      views: statsMap.get(pitch.id)?.views ?? 0,
+      taps: statsMap.get(pitch.id)?.taps ?? 0,
     }))
-    .sort((a, b) => b.impressions - a.impressions || a.ad.brand.localeCompare(b.ad.brand));
+    .sort((a, b) => b.views - a.views || a.pitch.brand.localeCompare(b.pitch.brand));
 
-  const totalImpressions = rows.reduce((sum, r) => sum + r.impressions, 0);
-  const totalClicks = rows.reduce((sum, r) => sum + r.clicks, 0);
+  const totalViews = rows.reduce((sum, r) => sum + r.views, 0);
+  const totalTaps = rows.reduce((sum, r) => sum + r.taps, 0);
 
   function handleReset() {
     if (!window.confirm("이 디바이스의 광고 노출 통계를 모두 지워. 계속할까?")) return;
-    void resetAdStats();
+    void resetPitchStats();
   }
 
   return (
@@ -423,13 +429,13 @@ function AdsSection() {
             대화 흐름과 맞을 때만, 답변 옆에 한 장.
           </p>
         </div>
-        <Toggle on={enabled} onChange={(v) => setAdPrefs({ enabled: v })} />
+        <Toggle on={enabled} onChange={(v) => setPitchPrefs({ enabled: v })} />
       </div>
 
       <div className="mt-4 pt-4 border-t border-border">
         <p className="text-[12.5px] text-ink mb-2">카테고리</p>
         <div className="flex flex-wrap gap-1.5">
-          {AD_CATEGORIES.map((cat) => {
+          {PITCH_CATEGORIES.map((cat) => {
             const on = selected.has(cat.id);
             return (
               <button
@@ -453,29 +459,29 @@ function AdsSection() {
         </p>
       </div>
 
-      {/* On-device impression stats */}
+      {/* On-device view stats */}
       <div className="mt-5 pt-5 border-t border-border">
         <div className="flex items-baseline justify-between mb-1">
           <p className="text-[13px] text-ink">내 노출 통계</p>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-            노출 {totalImpressions} · 클릭 {totalClicks}
+            노출 {totalViews} · 클릭 {totalTaps}
           </span>
         </div>
         <p className="text-[11.5px] text-ink-soft mb-3 leading-relaxed">
           이 통계는 디바이스 안에만 머물러. 광고주는 받지 못해.
         </p>
         <ul className="divide-y divide-border border border-border rounded-lg overflow-hidden">
-          {rows.map(({ ad, impressions, clicks }) => (
-            <li key={ad.id} className="px-3 py-2 flex items-center gap-2 bg-card text-[12px]">
-              <span className="flex-1 min-w-0 truncate text-ink">{ad.brand}</span>
+          {rows.map(({ pitch, views, taps }) => (
+            <li key={pitch.id} className="px-3 py-2 flex items-center gap-2 bg-card text-[12px]">
+              <span className="flex-1 min-w-0 truncate text-ink">{pitch.brand}</span>
               <span className="font-mono text-[10.5px] text-ink-soft uppercase tracking-[0.12em]">
-                {ad.displayPeriod === "weekly" ? "주간" : "월간"}
+                {pitch.displayPeriod === "weekly" ? "주간" : "월간"}
               </span>
               <span className="font-mono text-[11px] text-ink tabular-nums w-16 text-right">
-                {impressions} 노출
+                {views} 노출
               </span>
               <span className="font-mono text-[11px] text-ink-soft tabular-nums w-14 text-right">
-                {clicks} 클릭
+                {taps} 클릭
               </span>
             </li>
           ))}
@@ -483,7 +489,7 @@ function AdsSection() {
         <button
           type="button"
           onClick={handleReset}
-          disabled={totalImpressions === 0 && totalClicks === 0}
+          disabled={totalViews === 0 && totalTaps === 0}
           className="mt-3 h-8 px-3 rounded-md border border-border text-[11.5px] text-ink-soft hover:text-ink hover:bg-surface-2 disabled:opacity-30 transition-colors"
         >
           통계 초기화

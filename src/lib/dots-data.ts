@@ -2,7 +2,7 @@
 // DOTS = local-first. Check packs and memory before reaching for anything deeper.
 
 import { lookupMemory, type LookupResult } from "@/lib/memory";
-import type { Ad } from "@/lib/promo/types";
+import type { Pitch } from "@/lib/pitch/types";
 
 export type Pack = {
   id: string;
@@ -293,9 +293,9 @@ function pickGreeting(): string {
 // ---------------------------------------------------------------------------
 
 export type AnswerPayload =
-  | { kind: "text"; text: string; ad?: Ad }
-  | { kind: "recipe"; recipeId: string; intro?: string; ad?: Ad }
-  | { kind: "memory-recipes"; recipeIds: string[]; intro: string; ad?: Ad };
+  | { kind: "text"; text: string; pitch?: Pitch }
+  | { kind: "recipe"; recipeId: string; intro?: string; pitch?: Pitch }
+  | { kind: "memory-recipes"; recipeIds: string[]; intro: string; pitch?: Pitch };
 
 export function answerFor(query: string, pack?: Pack, route?: Route): AnswerPayload {
   const q = query.toLowerCase();
