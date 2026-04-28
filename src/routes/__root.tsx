@@ -3,6 +3,7 @@ import { useEffect } from "react";
 
 import appCss from "../styles.css?url";
 import { hydrateMemoryStore, registerScheduler, tickScheduler } from "@/lib/memory";
+import { hydrateWakeStore, registerWakeScheduler, checkWakeAlarms } from "@/lib/wake";
 
 function NotFoundComponent() {
   return (
@@ -59,6 +60,9 @@ function RootShell({ children }: { children: React.ReactNode }) {
       tickScheduler();
       registerScheduler();
     });
+    hydrateWakeStore();
+    checkWakeAlarms();
+    registerWakeScheduler();
     if (import.meta.env.DEV) {
       void import("@/lib/memory/debug").then((m) => m.setupDebugHandle());
     }
