@@ -2,20 +2,26 @@
 // debug needs to import capture/scoreEmotion which import the store.
 // `setupDebugHandle()` is called from the root route in dev mode only.
 
+import { ARCHIVE_THRESHOLDS, archiveId, archiveTick, shouldArchiveDormant } from "./archive";
 import { captureFromMessage } from "./capture";
 import { DECAY_THRESHOLDS, decay, shouldDecayToDormant } from "./decay";
 import { EMOTION_LIMITS, computeEmotionScore, mergeEmotionSources, scoreEmotion } from "./emotion";
 import { PROMOTION_THRESHOLDS, shouldPromote } from "./promote";
 import { registerScheduler, tickScheduler } from "./scheduler";
 import {
+  clearAll,
+  clearArchives,
   clearMemories,
+  deleteArchive,
   deleteMemory,
   getMemorySnapshot,
   hydrateMemoryStore,
+  putArchive,
   putMemory,
   rehydrateMemoryStore,
 } from "./store";
 import { extractTopics } from "./topics";
+import { bucketFor, parentGranularity } from "./windows";
 
 declare global {
   interface Window {
@@ -41,6 +47,17 @@ declare global {
       decay: typeof decay;
       shouldDecayToDormant: typeof shouldDecayToDormant;
       decayThresholds: typeof DECAY_THRESHOLDS;
+      // stage 4
+      putArchive: typeof putArchive;
+      deleteArchive: typeof deleteArchive;
+      clearArchives: typeof clearArchives;
+      clearAll: typeof clearAll;
+      archiveTick: typeof archiveTick;
+      shouldArchiveDormant: typeof shouldArchiveDormant;
+      archiveId: typeof archiveId;
+      archiveThresholds: typeof ARCHIVE_THRESHOLDS;
+      bucketFor: typeof bucketFor;
+      parentGranularity: typeof parentGranularity;
     };
   }
 }
@@ -68,5 +85,15 @@ export async function setupDebugHandle(): Promise<void> {
     decay,
     shouldDecayToDormant,
     decayThresholds: DECAY_THRESHOLDS,
+    putArchive,
+    deleteArchive,
+    clearArchives,
+    clearAll,
+    archiveTick,
+    shouldArchiveDormant,
+    archiveId,
+    archiveThresholds: ARCHIVE_THRESHOLDS,
+    bucketFor,
+    parentGranularity,
   };
 }

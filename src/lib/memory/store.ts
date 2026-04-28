@@ -8,15 +8,17 @@
 
 import { useSyncExternalStore } from "react";
 import * as persistence from "./persistence";
-import type { MemoryRecord } from "./types";
+import type { ArchiveEntry, MemoryRecord } from "./types";
 
 type MemoryStoreState = {
   memories: MemoryRecord[];
+  archives: ArchiveEntry[];
   hydrated: boolean;
 };
 
 let state: MemoryStoreState = {
   memories: [],
+  archives: [],
   hydrated: false,
 };
 
@@ -36,8 +38,11 @@ export function hydrateMemoryStore(): Promise<void> {
   }
   hydrationPromise = (async () => {
     try {
-      const memories = await persistence.getAll<MemoryRecord>(persistence.STORES.memories);
-      state = { memories, hydrated: true };
+      const [memories, archives] = await Promise.all([
+        persistence.getAll<MemoryRecord>(persistence.STORES.memories),
+        persistence.getAll<ArchiveEntry>(persistence.STORES.archives),
+      ]);
+      state = { memories, archives, hydrated: true };
       emit();
     } catch (err) {
       console.error("[memory] hydrate failed", err);
@@ -93,6 +98,42 @@ export async function clearMemories(): Promise<void> {
   state = { ...state, memories: [] };
   emit();
   await persistence.clear(persistence.STORES.memories);
+}
+
+export function putArchive(entry: ArchiveEntry): void {
+  const next = state.archives.filter((a) => a.id !== entry.id);
+  next.push(entry);
+  state = { ...state, archives: next };
+  emit();
+  persistence.put(persistence.STORES.archives, entry).catch((err) => {
+    console.error("[memory] putArchive failed", err);
+  });
+}
+
+export function deleteArchive(id: string): void {
+  state = {
+    ...state,
+    archives: state.archives.filter((a) => a.id !== id),
+  };
+  emit();
+  persistence.del(persistence.STORES.archives, id).catch((err) => {
+    console.error("[memory] deleteArchive failed", err);
+  });
+}
+
+export async function clearArchives(): Promise<void> {
+  state = { ...state, archives: [] };
+  emit();
+  await persistence.clear(persistence.STORES.archives);
+}
+
+export async function clearAll(): Promise<void> {
+  state = { ...state, memories: [], archives: [] };
+  emit();
+  await Promise.all([
+    persistence.clear(persistence.STORES.memories),
+    persistence.clear(persistence.STORES.archives),
+  ]);
 }
 
 // Dev verification handle lives in `./debug` to avoid importing capture/promote
