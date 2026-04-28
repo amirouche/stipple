@@ -44,9 +44,13 @@ export function hydrateMemoryStore(): Promise<void> {
       state = { ...state, hydrated: true };
       emit();
     }
-    attachDebugHandle();
   })();
   return hydrationPromise;
+}
+
+export function rehydrateMemoryStore(): Promise<void> {
+  hydrationPromise = null;
+  return hydrateMemoryStore();
 }
 
 export function useMemoryStore() {
@@ -91,33 +95,5 @@ export async function clearMemories(): Promise<void> {
   await persistence.clear(persistence.STORES.memories);
 }
 
-// ---- Dev verification handle ----------------------------------------------
-// Exposes the store on `window.__dotsMemory` in dev so we can manually
-// put/snapshot/refresh during stage-1 verification. Stripped in production.
-
-declare global {
-  interface Window {
-    __dotsMemory?: {
-      put: typeof putMemory;
-      delete: typeof deleteMemory;
-      clear: typeof clearMemories;
-      snapshot: typeof getMemorySnapshot;
-      rehydrate: () => Promise<void>;
-    };
-  }
-}
-
-function attachDebugHandle() {
-  if (typeof window === "undefined") return;
-  if (!import.meta.env.DEV) return;
-  window.__dotsMemory = {
-    put: putMemory,
-    delete: deleteMemory,
-    clear: clearMemories,
-    snapshot: getMemorySnapshot,
-    rehydrate: () => {
-      hydrationPromise = null;
-      return hydrateMemoryStore();
-    },
-  };
-}
+// Dev verification handle lives in `./debug` to avoid importing capture/promote
+// here (would create a cycle: store → capture → store).

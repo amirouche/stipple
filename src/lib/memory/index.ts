@@ -15,4 +15,11 @@ export {
   deleteMemory,
   clearMemories,
   hydrateMemoryStore,
+  rehydrateMemoryStore,
 } from "./store";
+
+export { extractTopics } from "./topics";
+export { scoreEmotion, computeEmotionScore, mergeEmotionSources, EMOTION_LIMITS } from "./emotion";
+export { promote, shouldPromote, PROMOTION_THRESHOLDS } from "./promote";
+export { captureFromMessage } from "./capture";
+export type { CaptureCtx } from "./capture";

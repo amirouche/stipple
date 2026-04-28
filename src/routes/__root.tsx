@@ -8,9 +8,7 @@ function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-soft">
-          404
-        </p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-soft">404</p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink">
           Nothing routed here.
         </h1>
@@ -58,6 +56,9 @@ export const Route = createRootRoute({
 function RootShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     void hydrateMemoryStore();
+    if (import.meta.env.DEV) {
+      void import("@/lib/memory/debug").then((m) => m.setupDebugHandle());
+    }
   }, []);
 
   return (

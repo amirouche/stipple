@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from "react";
 import type { ConversationState } from "@/lib/conversation-engine";
 import type { PackRecipe, Route as RouteType } from "@/lib/dots-data";
+import { captureFromMessage } from "@/lib/memory";
 
 export type ThreadTheme = "cooking" | "study" | "routine" | "open";
 
@@ -118,7 +119,7 @@ export function useConversationStore() {
       return () => listeners.delete(cb);
     },
     () => state,
-    () => state
+    () => state,
   );
 }
 
@@ -159,14 +160,11 @@ export function themePackId(theme: ThreadTheme): string | undefined {
   }
 }
 
-export function updateThread(
-  id: string,
-  patch: (t: Thread) => Partial<Thread>
-) {
+export function updateThread(id: string, patch: (t: Thread) => Partial<Thread>) {
   state = {
     ...state,
     threads: state.threads.map((t) =>
-      t.id === id ? { ...t, ...patch(t), updatedAt: Date.now() } : t
+      t.id === id ? { ...t, ...patch(t), updatedAt: Date.now() } : t,
     ),
   };
   emit();
@@ -174,16 +172,20 @@ export function updateThread(
 
 export function appendMessage(threadId: string, msg: ThreadMsg) {
   updateThread(threadId, (t) => ({ messages: [...t.messages, msg] }));
+  // Capture only user messages — assistant replies don't carry user intent.
+  if (msg.role === "user") {
+    captureFromMessage(msg.text, { sourceThreadId: threadId });
+  }
 }
 
 export function patchMessage(
   threadId: string,
   msgId: string,
-  patch: Partial<Extract<ThreadMsg, { role: "assistant" }>>
+  patch: Partial<Extract<ThreadMsg, { role: "assistant" }>>,
 ) {
   updateThread(threadId, (t) => ({
     messages: t.messages.map((m) =>
-      m.id === msgId && m.role === "assistant" ? { ...m, ...patch } : m
+      m.id === msgId && m.role === "assistant" ? { ...m, ...patch } : m,
     ),
   }));
 }
