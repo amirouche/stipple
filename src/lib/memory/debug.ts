@@ -6,6 +6,7 @@ import { ARCHIVE_THRESHOLDS, archiveId, archiveTick, shouldArchiveDormant } from
 import { captureFromMessage } from "./capture";
 import { DECAY_THRESHOLDS, decay, shouldDecayToDormant } from "./decay";
 import { EMOTION_LIMITS, computeEmotionScore, mergeEmotionSources, scoreEmotion } from "./emotion";
+import { GRANULARITY_WEIGHTS, STATE_WEIGHTS, lookupMemory } from "./lookup";
 import { PROMOTION_THRESHOLDS, shouldPromote } from "./promote";
 import { registerScheduler, tickScheduler } from "./scheduler";
 import {
@@ -58,6 +59,10 @@ declare global {
       archiveThresholds: typeof ARCHIVE_THRESHOLDS;
       bucketFor: typeof bucketFor;
       parentGranularity: typeof parentGranularity;
+      // stage 5
+      lookup: typeof lookupMemory;
+      stateWeights: typeof STATE_WEIGHTS;
+      granularityWeights: typeof GRANULARITY_WEIGHTS;
     };
   }
 }
@@ -95,5 +100,8 @@ export async function setupDebugHandle(): Promise<void> {
     archiveThresholds: ARCHIVE_THRESHOLDS,
     bucketFor,
     parentGranularity,
+    lookup: lookupMemory,
+    stateWeights: STATE_WEIGHTS,
+    granularityWeights: GRANULARITY_WEIGHTS,
   };
 }

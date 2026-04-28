@@ -66,6 +66,10 @@ export type EngineStep = {
   pack?: Pack;
   payload: AnswerPayload;
   reason: string;
+  // Stage-5 local-first lookup result attached when routeQuery is consulted
+  // (i.e. not for greetings or pack-context follow-ups). Downstream answer
+  // composition can use this to enrich responses with prior memory context.
+  lookup?: import("@/lib/memory").LookupResult;
 };
 
 // Tracks recently emitted assistant lines so the engine never repeats itself.
@@ -86,7 +90,7 @@ function rememberLine(line: string) {
 function nonRepeating(
   query: string,
   pack: Pack | undefined,
-  route: "local" | "memory" | "deep"
+  route: "local" | "memory" | "deep",
 ): AnswerPayload {
   let payload = answerFor(query, pack, route);
   let tries = 0;
@@ -120,7 +124,7 @@ function nextCookingRecipe(servedIds: string[] = []): {
 export function step(
   query: string,
   installed: Pack[] = PACKS.filter((p) => p.installed),
-  ctx: EngineContext = {}
+  ctx: EngineContext = {},
 ): EngineStep {
   const intent = classifyIntent(query);
 
@@ -183,8 +187,9 @@ export function step(
 
   if (intent === "memory_lookup") {
     const matches = recallFromMemory(query);
-    const sstate: ConversationState =
-      matches.length > 0 ? "found_local" : "checking_external";
+    // Either saved-recipe match OR memory-layer hit means we found something local.
+    const localHit = matches.length > 0 || (decision.lookup?.totalScore ?? 0) > 0;
+    const sstate: ConversationState = localHit ? "found_local" : "checking_external";
     const payload = nonRepeating(query, decision.pack, "memory");
     return {
       intent,
@@ -192,13 +197,12 @@ export function step(
       pack: decision.pack,
       payload,
       reason: decision.reason,
+      lookup: decision.lookup,
     };
   }
 
   if (intent === "pack_lookup") {
-    const sstate: ConversationState = decision.pack
-      ? "found_local"
-      : "checking_external";
+    const sstate: ConversationState = decision.pack ? "found_local" : "checking_external";
     const route = decision.pack ? "local" : "deep";
     const payload = nonRepeating(query, decision.pack, route);
     return {
@@ -207,6 +211,7 @@ export function step(
       pack: decision.pack,
       payload,
       reason: decision.reason,
+      lookup: decision.lookup,
     };
   }
 
@@ -222,12 +227,12 @@ export function step(
         pack: ctxPack,
         payload,
         reason: "",
+        lookup: decision.lookup,
       };
     }
   }
 
-  const sstate: ConversationState =
-    decision.route === "deep" ? "checking_external" : "found_local";
+  const sstate: ConversationState = decision.route === "deep" ? "checking_external" : "found_local";
   const payload = nonRepeating(query, decision.pack, decision.route);
   return {
     intent,
@@ -235,6 +240,7 @@ export function step(
     pack: decision.pack,
     payload,
     reason: decision.reason,
+    lookup: decision.lookup,
   };
 }
 

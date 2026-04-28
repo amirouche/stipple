@@ -42,3 +42,5 @@ export {
 export type { Window } from "./windows";
 export { tickScheduler, registerScheduler, SCHEDULER_META_KEY } from "./scheduler";
 export type { SchedulerReport } from "./scheduler";
+export { lookupMemory, STATE_WEIGHTS, GRANULARITY_WEIGHTS } from "./lookup";
+export type { LookupResult, LookupOpts, MemoryMatch, ArchiveMatch } from "./lookup";

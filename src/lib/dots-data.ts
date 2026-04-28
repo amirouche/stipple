@@ -1,6 +1,8 @@
 // Shared mock data + simulated DOTS routing logic.
 // DOTS = local-first. Check packs and memory before reaching for anything deeper.
 
+import { lookupMemory, type LookupResult } from "@/lib/memory";
+
 export type Pack = {
   id: string;
   name: string;
@@ -20,7 +22,18 @@ export const PACKS: Pack[] = [
     short: "Recipes returned as structured execution units.",
     behavior:
       "Reformats any food question into ingredients, steps, timing, and tips. Remembers your spice tolerance and household size.",
-    triggers: ["recipe", "cook", "stew", "kimchi", "pasta", "ingredients", "김치찌개", "찌개", "요리", "레시피"],
+    triggers: [
+      "recipe",
+      "cook",
+      "stew",
+      "kimchi",
+      "pasta",
+      "ingredients",
+      "김치찌개",
+      "찌개",
+      "요리",
+      "레시피",
+    ],
   },
   {
     id: "study-companion",
@@ -28,8 +41,7 @@ export const PACKS: Pack[] = [
     category: "Education",
     installed: true,
     short: "Adapts explanations to your current level.",
-    behavior:
-      "Breaks complex topics into a 3-layer scaffold and quizzes you instead of lecturing.",
+    behavior: "Breaks complex topics into a 3-layer scaffold and quizzes you instead of lecturing.",
     triggers: ["explain", "what is", "study", "homework", "설명", "공부", "뭐야"],
   },
   {
@@ -48,8 +60,7 @@ export const PACKS: Pack[] = [
     category: "Work",
     installed: false,
     short: "Calm, opinionated editing for long-form writing.",
-    behavior:
-      "Suggests cuts before additions. Refuses to pad prose. Tracks your typical voice.",
+    behavior: "Suggests cuts before additions. Refuses to pad prose. Tracks your typical voice.",
     triggers: ["edit", "rewrite", "draft"],
   },
   {
@@ -58,8 +69,7 @@ export const PACKS: Pack[] = [
     category: "Lifestyle",
     installed: false,
     short: "Pairings tuned to what's actually in your kitchen.",
-    behavior:
-      "Combines pack heuristics with dormant memory of your past meals.",
+    behavior: "Combines pack heuristics with dormant memory of your past meals.",
     triggers: ["wine", "pair", "drink"],
   },
   {
@@ -68,8 +78,7 @@ export const PACKS: Pack[] = [
     category: "Work",
     installed: false,
     short: "Reviews diffs against your team's conventions.",
-    behavior:
-      "Loads your repo style as a local pack so reviews stay consistent.",
+    behavior: "Loads your repo style as a local pack so reviews stay consistent.",
     triggers: ["review", "diff", "pr"],
   },
 ];
@@ -194,19 +203,26 @@ export const STUDY_PACK = {
 const MEMORY_TRIGGERS = ["전에", "아까", "저장", "기억", "지난번", "예전"];
 const COOKING_TRIGGERS = ["recipe", "cook", "김치찌개", "찌개", "요리", "레시피", "끓"];
 
-export function routeQuery(
-  query: string,
-  installedPacks: Pack[]
-): { route: Route; pack?: Pack; reason: string } {
+export type RouteDecision = {
+  route: Route;
+  pack?: Pack;
+  reason: string;
+  lookup?: LookupResult;
+};
+
+export function routeQuery(query: string, installedPacks: Pack[]): RouteDecision {
   const q = query.toLowerCase().trim();
 
-  // Light greetings — answer naturally, no status.
+  // Light greetings — answer naturally, no status. Skip lookup entirely.
   const isGreeting =
-    /^(안녕|하이|반가워|헬로|hi|hello|hey|yo|오랜만)/i.test(q) ||
-    q.split(/\s+/).length <= 1;
+    /^(안녕|하이|반가워|헬로|hi|hello|hey|yo|오랜만)/i.test(q) || q.split(/\s+/).length <= 1;
   if (isGreeting) {
     return { route: "local", reason: "" };
   }
+
+  // Local-first: consult memory + archives before any pack/deep decision.
+  // Side-effect: dormant matches get woken to active.
+  const lookup = lookupMemory(query);
 
   // Memory-first: user explicitly references prior context.
   const wantsMemory = MEMORY_TRIGGERS.some((t) => q.includes(t));
@@ -214,6 +230,7 @@ export function routeQuery(
     return {
       route: "memory",
       reason: "전에 얘기한 거 먼저 볼게.",
+      lookup,
     };
   }
 
@@ -225,37 +242,46 @@ export function routeQuery(
       route: "local",
       pack: cookingPack,
       reason: "",
+      lookup,
     };
   }
 
   // Other pack triggers.
-  const hit = installedPacks.find((p) =>
-    p.triggers.some((t) => q.includes(t))
-  );
+  const hit = installedPacks.find((p) => p.triggers.some((t) => q.includes(t)));
   if (hit) {
-    return { route: "local", pack: hit, reason: "" };
+    return { route: "local", pack: hit, reason: "", lookup };
   }
 
-  // Nothing local matches — go deeper, but say it naturally.
+  // No pack matched — but if local memory has hits, prefer memory over deep.
+  // This is the rule-book's "로컬 우선 판단": deep is the last resort.
+  if (lookup.totalScore > 0) {
+    return {
+      route: "memory",
+      reason: "전에 본 게 있어서 그쪽 먼저 볼게.",
+      lookup,
+    };
+  }
+
+  // Nothing local — go deeper.
   return {
     route: "deep",
     reason: "안에서는 바로 안 잡혀.",
+    lookup,
   };
 }
 
+// Saved recipes are a separate, hand-curated collection from the auto-captured
+// memory layer. We still trigger a memory lookup here so dormant memories that
+// the user is asking about wake up correctly — even when the saved-recipe
+// match is what ends up rendered.
 export function recallFromMemory(query: string): SavedRecipe[] {
+  lookupMemory(query);
   const q = query.toLowerCase();
   return SAVED_RECIPES.filter((r) => r.matches.some((m) => q.includes(m)));
 }
 
 // Greetings stay low-effort.
-const KO_GREETINGS = [
-  "안녕.",
-  "응, 왔어.",
-  "안녕. 편하게 있어.",
-  "어, 안녕.",
-  "왔구나.",
-];
+const KO_GREETINGS = ["안녕.", "응, 왔어.", "안녕. 편하게 있어.", "어, 안녕.", "왔구나."];
 
 function pickGreeting(): string {
   return KO_GREETINGS[Math.floor(Math.random() * KO_GREETINGS.length)];
@@ -270,11 +296,7 @@ export type AnswerPayload =
   | { kind: "recipe"; recipeId: string; intro?: string }
   | { kind: "memory-recipes"; recipeIds: string[]; intro: string };
 
-export function answerFor(
-  query: string,
-  pack?: Pack,
-  route?: Route
-): AnswerPayload {
+export function answerFor(query: string, pack?: Pack, route?: Route): AnswerPayload {
   const q = query.toLowerCase();
 
   if (/^(안녕|하이|반가워|헬로|오랜만|hi|hello|hey|yo)\b/i.test(q)) {
@@ -358,4 +380,3 @@ export function answerFor(
 export function getCookingRecipe(id: string): PackRecipe | undefined {
   return COOKING_RECIPES.find((r) => r.id === id);
 }
-
