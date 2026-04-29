@@ -28,6 +28,7 @@ import { buildContinuations, type ContinueCard } from "@/lib/continuations";
 import { composeAnswer } from "@/lib/ai/compose";
 import { askGemini } from "@/lib/ai/gemini";
 import { matchPackContent, buildPackSuggestion } from "@/lib/packs/match";
+import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import { addUserSATProblem, getUserSATProblems } from "@/lib/packs/study/user-store";
 import { buildSATMathDummy, buildSATMathFromLLM } from "@/lib/packs/study/parse-llm";
 import type { AnswerPayload } from "@/lib/dots-data";
@@ -136,7 +137,11 @@ function ChatPage() {
       const sugText = payload.kind === "pack-suggestion" ? payload.text : "";
       const sugData =
         payload.kind === "pack-suggestion"
-          ? { matchedPackName: payload.matchedPackName, options: payload.options }
+          ? {
+              matchedPackName: payload.matchedPackName,
+              options: payload.options,
+              badge: payload.badge ?? "local",
+            }
           : undefined;
 
       appendMessage(thread.id, { id: userId, role: "user", text });
@@ -160,7 +165,47 @@ function ChatPage() {
       return;
     }
 
-    // ---- No match: existing engine + composeAnswer flow ----
+    // ---- Stage 2: store search. Local match failed, but the input might
+    // map to a recognized study/lifestyle domain we can route to the
+    // marketplace. If a domain is detected (with or without store hits),
+    // we render a store-suggestion bubble instead of dropping straight
+    // to the LLM. Skipped on follow-up intent so we don't loop. ----
+    const skipStoreStep = justSawSuggestion && hasFollowUpIntent(text);
+    if (!skipStoreStep) {
+      const storeResult = searchStoreForQuery(text);
+      if (storeResult) {
+        const payload = buildStoreSuggestion(text, storeResult);
+        const userId = crypto.randomUUID();
+        const asstId = crypto.randomUUID();
+        const sugText = payload.kind === "pack-suggestion" ? payload.text : "";
+        const sugData =
+          payload.kind === "pack-suggestion"
+            ? {
+                matchedPackName: payload.matchedPackName,
+                options: payload.options,
+                badge: payload.badge ?? "store",
+              }
+            : undefined;
+        appendMessage(thread.id, { id: userId, role: "user", text });
+        renameThreadIfDefault(thread.id, text);
+        appendMessage(thread.id, {
+          id: asstId,
+          role: "assistant",
+          route: "local",
+          state: "found_local",
+          reason: "",
+          packName: "팩스토어",
+          pending: false,
+          text: sugText,
+          suggestion: sugData,
+        });
+        setInput("");
+        scrollDown();
+        return;
+      }
+    }
+
+    // ---- Stage 3: nothing matched anywhere. Existing engine + composeAnswer flow. ----
     const userId = crypto.randomUUID();
     const asstId = crypto.randomUUID();
 
@@ -199,7 +244,13 @@ function ChatPage() {
     const renderPayload = (payload: AnswerPayload) => {
       let body = "";
       let recipes: PackRecipe[] | undefined;
-      let suggestion: { matchedPackName: string; options: SuggestionOption[] } | undefined;
+      let suggestion:
+        | {
+            matchedPackName: string;
+            options: SuggestionOption[];
+            badge?: "local" | "store" | "create";
+          }
+        | undefined;
       if (payload.kind === "text") {
         body = payload.text;
       } else if (payload.kind === "recipe") {
@@ -217,6 +268,7 @@ function ChatPage() {
         suggestion = {
           matchedPackName: payload.matchedPackName,
           options: payload.options,
+          badge: payload.badge ?? "local",
         };
       }
       patchMessage(thread.id, asstId, {
@@ -612,6 +664,7 @@ function AssistantBubble({
             <SuggestionBlock
               packName={m.suggestion.matchedPackName}
               options={m.suggestion.options}
+              badge={m.suggestion.badge ?? "local"}
               onAction={onSuggestionAction}
             />
           )}
@@ -628,12 +681,24 @@ function AssistantBubble({
 function SuggestionBlock({
   packName,
   options,
+  badge,
   onAction,
 }: {
   packName: string;
   options: SuggestionOption[];
+  badge: "local" | "store" | "create";
   onAction: (option: SuggestionOption) => void;
 }) {
+  // Footer label tracks where the suggestion came from. "local" = installed
+  // pack content; "store" = marketplace search hit; "create" = no match
+  // anywhere yet, the LLM button would manufacture it.
+  const footer =
+    badge === "local"
+      ? `${packName}에서 매칭됨 · 이 기기 안에서`
+      : badge === "store"
+        ? "팩스토어에서 검색됨 · 설치 안 된 콘텐츠"
+        : "콘텐츠 없음 · 새로 만들 수 있어";
+  const dotTone = badge === "local" ? "bg-primary" : badge === "store" ? "bg-ink" : "bg-ink-soft";
   return (
     <div className="max-w-2xl">
       <div className="flex flex-wrap gap-2">
@@ -661,8 +726,8 @@ function SuggestionBlock({
         })}
       </div>
       <div className="mt-2 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-        {packName}에서 매칭됨 · 이 기기 안에서
+        <span className={`h-1.5 w-1.5 rounded-full ${dotTone}`} />
+        {footer}
       </div>
     </div>
   );

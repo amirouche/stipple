@@ -24,9 +24,25 @@ const SAT_MATH_KEYWORDS: Record<string, string[]> = {
   "sat-m-005": ["삼각비", "삼각함수", "sin", "cos", "tan", "trig"],
 };
 
-// 팩 전체를 가리키는 일반 키워드. "수학"이 들어오면 5문제 전부가 약하게
-// 매치되고, 결과는 pack-level로 분류된다 ("SAT 수학 5문제 있어").
-const SAT_MATH_GENERIC = ["수학", "math", "sat", "문제", "퀴즈"];
+// SAT 수학 도메인 키워드. 이 중 하나라도 hit하면 팩 매칭이 성립한다 —
+// "수학" 단독이면 5문제 전부 약하게 매치되고 pack-level로 분류된다.
+const SAT_MATH_DOMAIN = [
+  "수학",
+  "math",
+  "sat",
+  "방정식",
+  "함수",
+  "기하",
+  "확률",
+  "삼각",
+  "통계",
+  "대수",
+];
+
+// 일반 학습 키워드. 단독으로는 매칭 X — DOMAIN 또는 specific 키워드와
+// 함께 있어야 점수에 가산된다. 이 게이트가 "사회문제" / "국어 문제"
+// 같은 입력이 SAT 수학으로 잘못 잡히던 버그를 막는다.
+const SAT_MATH_GENERIC = ["문제", "퀴즈", "테스트"];
 
 const COOKING_RECIPE_KEYWORDS: Record<string, string[]> = {
   "baek-kimchi-jjigae": ["김치찌개", "김치", "찌개", "백종원", "돼지"],
@@ -58,17 +74,32 @@ function lower(s: string): string {
 }
 
 function scoreSATMath(q: string, problem: SATMathProblem): number {
-  let score = 0;
+  let specific = 0;
+  let domain = 0;
+  let generic = 0;
   for (const k of SAT_MATH_KEYWORDS[problem.id] ?? []) {
-    if (q.includes(lower(k))) score += SPECIFIC_HIT_SCORE;
+    if (q.includes(lower(k))) {
+      specific += SPECIFIC_HIT_SCORE;
+      break;
+    }
+  }
+  for (const k of SAT_MATH_DOMAIN) {
+    if (q.includes(lower(k))) {
+      domain = 1;
+      break;
+    }
   }
   for (const k of SAT_MATH_GENERIC) {
     if (q.includes(lower(k))) {
-      score += 1;
-      break; // generic keywords only count once per problem
+      generic = 1;
+      break;
     }
   }
-  return score;
+  // Gate: must have a specific (per-problem) or domain keyword. Generic-
+  // only ("사회문제" → only "문제" matches GENERIC) → 0, lets the input
+  // fall through to store search instead of mis-matching SAT math.
+  if (specific === 0 && domain === 0) return 0;
+  return specific + domain + generic;
 }
 
 function scoreCookingRecipe(q: string, recipe: PackRecipe): number {

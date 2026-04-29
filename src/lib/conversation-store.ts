@@ -17,6 +17,9 @@ export type ThreadTheme = "cooking" | "study" | "routine" | "open";
 export type ThreadSuggestion = {
   matchedPackName: string;
   options: SuggestionOption[];
+  // Mirrors AnswerPayload.pack-suggestion.badge — controls the footer
+  // label under the buttons.
+  badge?: "local" | "store" | "create";
 };
 
 export type ThreadMsg =

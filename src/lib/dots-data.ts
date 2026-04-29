@@ -395,6 +395,12 @@ export type AnswerPayload =
       text: string;
       options: SuggestionOption[];
       matchedPackName: string;
+      // Where the suggestion came from. Drives the small footer label
+      // under the buttons:
+      //   "local"  (default) — local pack content matched ("이 기기 안에서")
+      //   "store"           — store-search hit ("팩스토어에서 검색됨")
+      //   "create"          — no match anywhere; LLM will fabricate ("새로 만들 수 있어")
+      badge?: "local" | "store" | "create";
     };
 
 export function answerFor(query: string, pack?: Pack, route?: Route): AnswerPayload {
