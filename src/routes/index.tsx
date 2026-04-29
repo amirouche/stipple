@@ -99,6 +99,14 @@ function ChatPage() {
   const thread = threads.find((t) => t.id === activeId) ?? threads[0];
   const messages = thread?.messages ?? [];
 
+  // CONSTITUTION: send() must NEVER call the LLM on its own.
+  //   - Stage 1 (matchPackContent hit) → render suggestion + return
+  //   - Stage 2 (searchStoreForQuery hit) → render suggestion + return
+  //   - Stage 3 (no match anywhere) → engine + composeAnswer is allowed,
+  //     because at that point we've exhausted local + store options.
+  // The LLM is otherwise only invoked from onSuggestionAction("llm-call"),
+  // which fires from an explicit user button click. If you're touching
+  // this function: keep the early-returns, never let stages cascade.
   function send(text: string) {
     if (!text.trim() || busy || !thread) return;
 
@@ -300,8 +308,13 @@ function ChatPage() {
   // or call the LLM with a tailored prompt. Adds new assistant messages
   // rather than mutating the suggestion bubble so the conversation keeps
   // a clean trail.
+  //
+  // The `busy` guard is intentional: this handler is the ONLY entry point
+  // for cloud calls outside Stage 3 of send(). Blocking it while another
+  // call is in flight closes the door on accidental double-fires from
+  // double-clicks or any unexpected re-invocation of the click handler.
   function onSuggestionAction(option: SuggestionOption) {
-    if (!thread) return;
+    if (!thread || busy) return;
     if (option.kind === "open-folder") {
       navigate({ to: option.target });
       return;
@@ -707,7 +720,16 @@ function SuggestionBlock({
           return (
             <button
               key={`${o.kind}-${idx}`}
-              onClick={() => onAction(o)}
+              // Explicit type="button" so this button never gets pulled into
+              // any sibling form's submit handler and accidentally fires the
+              // LLM call on Enter / form submission. Constitution: cloud
+              // calls only on explicit user click.
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onAction(o);
+              }}
               className={`h-9 px-3.5 rounded-full text-[12.5px] font-medium transition-colors ${
                 isLlm
                   ? "border border-border text-ink-soft hover:text-ink hover:bg-surface-2"
