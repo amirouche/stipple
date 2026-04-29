@@ -7,6 +7,7 @@ import { hydrateWakeStore, registerWakeScheduler, checkWakeAlarms } from "@/lib/
 import { hydratePitchCache } from "@/lib/pitch";
 import { hydratePreferences } from "@/lib/preferences";
 import { hydrateUserSATProblems } from "@/lib/packs/study/user-store";
+import { hydrateLearned, setupLearningDebug } from "@/lib/learning";
 
 function NotFoundComponent() {
   return (
@@ -61,6 +62,8 @@ function RootShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     hydratePreferences();
     hydrateUserSATProblems();
+    hydrateLearned();
+    if (import.meta.env.DEV) setupLearningDebug();
     void hydrateMemoryStore().then(() => {
       tickScheduler();
       registerScheduler();

@@ -29,6 +29,7 @@ import { composeAnswer } from "@/lib/ai/compose";
 import { dispatchLLMCall, type DispatchTurn } from "@/lib/ai/dispatch";
 import { matchPackContent, buildPackSuggestion, inferDomainPack } from "@/lib/packs/match";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
+import { incrementUsedCount, matchLearnedResponse, saveLearned } from "@/lib/learning";
 import { addUserSATProblem, getUserSATProblems } from "@/lib/packs/study/user-store";
 import { buildSATMathDummy, buildSATMathFromLLM } from "@/lib/packs/study/parse-llm";
 import type { AnswerPayload } from "@/lib/dots-data";
@@ -216,6 +217,36 @@ function ChatPage() {
       }
     }
 
+    // ---- Stage 2.5: learned cache. V2 헌법 2번 (자동 학습) + 3번
+    // (점진적 온디바이스 진화). Phase A: exact-match (lower+trim) on
+    // userInput. Hit → render the cached response directly, no LLM call,
+    // bump usedCount. Skipped on follow-up intent so "다른거" goes to a
+    // fresh LLM turn instead of replaying the previous cached one. ----
+    if (!justSawSuggestion || !hasFollowUpIntent(text)) {
+      const learned = matchLearnedResponse(text);
+      if (learned) {
+        const userId = crypto.randomUUID();
+        const asstId = crypto.randomUUID();
+        appendMessage(thread.id, { id: userId, role: "user", text });
+        renameThreadIfDefault(thread.id, text);
+        appendMessage(thread.id, {
+          id: asstId,
+          role: "assistant",
+          route: "local",
+          state: "found_local",
+          reason: "",
+          packName: learned.packName,
+          pending: false,
+          text: learned.response,
+          provider: "learned",
+        });
+        void incrementUsedCount(learned.id);
+        setInput("");
+        scrollDown();
+        return;
+      }
+    }
+
     // ---- Stage 3: nothing matched anywhere. Existing engine + composeAnswer flow. ----
     const userId = crypto.randomUUID();
     const asstId = crypto.randomUUID();
@@ -296,6 +327,28 @@ function ChatPage() {
       });
       setBusy(false);
       scrollDown();
+
+      // V2 Phase 2 자동 학습. Save only when an LLM actually ran (provider
+      // set) and produced plain text — recipe cards / memory-recipes are
+      // structured outputs whose value lives in the recipe ids, not the
+      // intro text; pack-suggestion bubbles aren't LLM output at all.
+      // Constitution: 사용자 명시 X 자동 작동 — but here we're caching a
+      // call the user already made, not making a new one. Cache use on
+      // the next exact-match query is what skips a future LLM call.
+      if (provider && payload.kind === "text" && body.trim()) {
+        void saveLearned({
+          id: crypto.randomUUID(),
+          userInput: text,
+          response: body,
+          provider,
+          packId: composePack?.id,
+          packName: composePack?.name,
+          voice: composePack?.voice,
+          tone: composePack?.tone,
+          createdAt: Date.now(),
+          usedCount: 0,
+        });
+      }
     };
 
     if (result.state === "greeting") {
@@ -733,19 +786,24 @@ function AssistantBubble({
   );
 }
 
-function ProviderBadge({ provider }: { provider: "webllm" | "gemini" }) {
+function ProviderBadge({ provider }: { provider: "webllm" | "gemini" | "learned" }) {
   // Three-tone visual contract across the chat:
-  //   red   — local match (SuggestionBlock; no LLM ran)
+  //   red   — local match or learned cache (no LLM call this turn)
   //   green — WebLLM (private, on-device, zero external calls)
   //   blue  — Gemini  (cloud API)
-  // Hidden when the user has flipped showLLMProvenance off; that lives
-  // in prefs (no settings UI yet) so the demo can leave it on while
-  // everyday use can clean up the chat.
+  // V2 narrative: as the learning cache grows, red appears more often
+  // and blue/green less. The user watches their AI go local over time.
+  // Hidden when showLLMProvenance is off (no settings UI yet).
   const prefs = usePreferences();
   if (!prefs.showLLMProvenance) return null;
-  const isWebLLM = provider === "webllm";
-  const dot = isWebLLM ? "bg-green-500" : "bg-blue-500";
-  const label = isWebLLM ? "내 기기 (WebLLM) · 외부 호출 0" : "클라우드 (Gemini) · 외부 API";
+  const dot =
+    provider === "webllm" ? "bg-green-500" : provider === "gemini" ? "bg-blue-500" : "bg-red-500";
+  const label =
+    provider === "webllm"
+      ? "내 기기 (WebLLM) · 외부 호출 0"
+      : provider === "gemini"
+        ? "클라우드 (Gemini) · 외부 API"
+        : "학습됨 · 캐시에서 (외부 호출 0)";
   return (
     <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft flex items-center gap-1.5">
       <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />

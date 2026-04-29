@@ -41,9 +41,12 @@ export type ThreadMsg =
       packName?: string;
       pending?: boolean;
       suggestion?: ThreadSuggestion;
-      // Which LLM produced this turn — drives the small "기기 안" / "클라우드"
-      // footer on the bubble. Absent for canned/local replies (no LLM ran).
-      provider?: "webllm" | "gemini";
+      // Where the answer came from. Drives the small footer badge:
+      //   webllm  → 초록 (내 기기, V2 헌법: 외부 호출 0)
+      //   gemini  → 파란 (외부 클라우드)
+      //   learned → 빨강 (학습 캐시 — V2 Phase 2)
+      // Absent for canned/local replies that never went through dispatch.
+      provider?: "webllm" | "gemini" | "learned";
     };
 
 export type Thread = {
