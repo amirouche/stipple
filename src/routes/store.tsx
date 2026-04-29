@@ -160,7 +160,10 @@ function StoreBody({
                 <h3 className="text-[15.5px] font-semibold tracking-tight text-ink leading-snug">
                   {p.name}
                 </h3>
-                <p className="mt-1.5 text-[12.5px] text-ink-soft leading-relaxed">{p.short}</p>
+                <p className="mt-1 text-[12px] text-ink-soft leading-snug">
+                  <span className="text-ink">{p.voice}</span> · {p.tone}
+                </p>
+                <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">{p.short}</p>
 
                 <div className="mt-3 flex items-center gap-2 text-[11px] text-ink-soft">
                   <span className="font-mono">{p.contentCount}</span>

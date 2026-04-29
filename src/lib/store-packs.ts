@@ -14,6 +14,11 @@ export type StorePack = {
   contentCount: string;
   priceWon: number;
   author: string;
+  // Same shape as Pack.voice / Pack.tone in dots-data.ts. Surfaces in
+  // store cards so the user can pick by persona before install — the
+  // demo's hero moment.
+  voice: string;
+  tone: string;
   installed?: boolean;
 };
 
@@ -26,6 +31,8 @@ export const STORE_PACKS: StorePack[] = [
     contentCount: "5문제",
     priceWon: 0,
     author: "DOTS 공식",
+    voice: "영어 강사",
+    tone: "정확하고 격식 있는 — 문법·독해·작문 분석 위주",
   },
   {
     id: "toefl-speaking-10",
@@ -35,6 +42,8 @@ export const STORE_PACKS: StorePack[] = [
     contentCount: "10문제",
     priceWon: 2900,
     author: "ETS 협력",
+    voice: "영어 코치",
+    tone: "격려하는 — 답안 분석 + 발음·문장 구조 피드백",
   },
   {
     id: "japanese-conversation-50",
@@ -44,6 +53,8 @@ export const STORE_PACKS: StorePack[] = [
     contentCount: "50개 대화",
     priceWon: 4900,
     author: "JLPT Pro",
+    voice: "일본어 선생님",
+    tone: "친근한 — 상황별 표현 + 문화 컨텍스트",
   },
   {
     id: "baek-korean-recipes",
@@ -53,6 +64,8 @@ export const STORE_PACKS: StorePack[] = [
     contentCount: "36 레시피",
     priceWon: 0,
     author: "백종원",
+    voice: "백종원 톤 한식 마스터",
+    tone: "투박하면서 친근한 — 재료·불·시간 위주",
   },
   {
     id: "wine-pairing",
@@ -62,6 +75,8 @@ export const STORE_PACKS: StorePack[] = [
     contentCount: "120 페어링",
     priceWon: 1900,
     author: "Sommelier KR",
+    voice: "소믈리에",
+    tone: "차분하고 전문적 — 향·맛·페어링 분석",
   },
   {
     id: "morning-stretch-5",
@@ -71,6 +86,8 @@ export const STORE_PACKS: StorePack[] = [
     contentCount: "12 루틴",
     priceWon: 0,
     author: "DOTS 공식",
+    voice: "필라테스 강사",
+    tone: "활기찬 격려 — 동작·호흡·시간 단계별",
   },
   {
     id: "code-review-rust",
@@ -80,6 +97,8 @@ export const STORE_PACKS: StorePack[] = [
     contentCount: "리뷰 룰 84개",
     priceWon: 3900,
     author: "Rust Korea",
+    voice: "Rust 시니어 엔지니어",
+    tone: "직접적이고 정확 — 안전성·성능·이디엄 위주",
   },
   {
     id: "git-pro",
@@ -89,6 +108,8 @@ export const STORE_PACKS: StorePack[] = [
     contentCount: "30 시나리오",
     priceWon: 0,
     author: "DOTS 공식",
+    voice: "Git 전문가",
+    tone: "간결하고 정확 — 명령어 + 사용 시나리오",
   },
   {
     id: "movie-mood",
@@ -98,6 +119,8 @@ export const STORE_PACKS: StorePack[] = [
     contentCount: "150 작품",
     priceWon: 1900,
     author: "Cinekick",
+    voice: "영화 큐레이터",
+    tone: "공감적이고 따뜻 — 장르·분위기·감정 매칭",
   },
   {
     id: "indie-music-2026",
@@ -107,6 +130,8 @@ export const STORE_PACKS: StorePack[] = [
     contentCount: "월 30곡",
     priceWon: 0,
     author: "Indie Weekly",
+    voice: "음악 큐레이터",
+    tone: "감각적이고 차분 — 아티스트·앨범·분위기",
   },
 ];
 
