@@ -110,7 +110,9 @@ function ChatPage() {
   function send(text: string) {
     if (!text.trim() || busy || !thread) return;
 
-    const activePack = installed.find((p) => p.id === thread.lastPackId);
+    // No `activePack` lookup: there's no "active mode" anymore.
+    // matchPackContent (Stage 1) handles routing to the right pack;
+    // when nothing matches, Stage 3 calls the LLM with default voice.
     const scrollDown = () =>
       requestAnimationFrame(() => {
         scrollRef.current?.scrollTo({
@@ -137,7 +139,7 @@ function ChatPage() {
     const matched =
       justSawSuggestion && hasFollowUpIntent(text)
         ? null
-        : matchPackContent(text, installed, activePack?.id);
+        : matchPackContent(text, installed, undefined);
     if (matched) {
       const userId = crypto.randomUUID();
       const asstId = crypto.randomUUID();
@@ -147,6 +149,7 @@ function ChatPage() {
         payload.kind === "pack-suggestion"
           ? {
               matchedPackName: payload.matchedPackName,
+              matchedPackId: payload.matchedPackId,
               options: payload.options,
               badge: payload.badge ?? "local",
             }
@@ -242,9 +245,11 @@ function ChatPage() {
 
     if (result.pack) setThreadPack(thread.id, result.pack.id);
 
-    // result.pack is the engine's trigger-detected pack; activePack is the
-    // user-selected mode and wins for the system prompt.
-    const composePack = activePack ?? result.pack;
+    // No fallback to a "user-selected mode": there is none anymore. The
+    // engine's trigger-detected pack (set only when the input itself
+    // smells like a pack — e.g. typing "레시피") drives voice/tone.
+    // Generic inputs ("양자역학") have no pack here → default tone.
+    const composePack = result.pack;
 
     setInput("");
     setBusy(true);
@@ -326,8 +331,13 @@ function ChatPage() {
   // for cloud calls outside Stage 3 of send(). Blocking it while another
   // call is in flight closes the door on accidental double-fires from
   // double-clicks or any unexpected re-invocation of the click handler.
-  function onSuggestionAction(option: SuggestionOption) {
+  function onSuggestionAction(option: SuggestionOption, matchedPackId?: string) {
     if (!thread || busy) return;
+    // The matched pack is the one the suggestion came from. It used to be
+    // looked up via thread.lastPackId (the old "active mode"), but with
+    // activation removed, the suggestion itself carries the pack id —
+    // matching IS the activation now.
+    const matchedPack = matchedPackId ? installed.find((p) => p.id === matchedPackId) : undefined;
     if (option.kind === "open-folder") {
       navigate({ to: option.target });
       return;
@@ -342,7 +352,7 @@ function ChatPage() {
         route: "local",
         state: "found_local",
         reason: "",
-        packName: activePackName(thread.lastPackId),
+        packName: matchedPack?.name,
         pending: false,
         recipes: [r],
       });
@@ -356,7 +366,6 @@ function ChatPage() {
       return;
     }
     if (option.kind === "llm-call") {
-      const activePack = installed.find((p) => p.id === thread.lastPackId);
       const id = crypto.randomUUID();
       appendMessage(thread.id, {
         id,
@@ -364,7 +373,7 @@ function ChatPage() {
         route: "deep",
         state: "checking_external",
         reason: "클라우드로 보낼게.",
-        packName: option.systemPrompt ? "SAT 수학 튜터" : activePack?.name,
+        packName: option.systemPrompt ? "SAT 수학 튜터" : matchedPack?.name,
         pending: true,
       });
       setBusy(true);
@@ -466,7 +475,7 @@ function ChatPage() {
       } else {
         composeAnswer({
           query: option.prompt,
-          pack: activePack,
+          pack: matchedPack,
           fallback: { kind: "text", text: "지금은 응답을 가져오지 못했어." },
           history: threadHistory(thread.messages),
           onToken: streamToken,
@@ -477,11 +486,6 @@ function ChatPage() {
           .catch(onFail);
       }
     }
-  }
-
-  function activePackName(packId?: string): string | undefined {
-    if (!packId) return undefined;
-    return installed.find((p) => p.id === packId)?.name;
   }
 
   // Convert thread messages → DispatchTurn[] for LLM context. Drops
@@ -523,8 +527,6 @@ function ChatPage() {
   return (
     <Shell>
       <ChatBody
-        threadId={thread.id}
-        activePackId={thread.lastPackId}
         quickPacks={quickPacks}
         hasMessages={hasMessages}
         orderedContinues={orderedContinues}
@@ -542,8 +544,6 @@ function ChatPage() {
 }
 
 function ChatBody({
-  threadId,
-  activePackId,
   quickPacks,
   hasMessages,
   orderedContinues,
@@ -556,8 +556,6 @@ function ChatBody({
   onSuggestionAction,
   onOpenFolder,
 }: {
-  threadId: string;
-  activePackId?: string;
   quickPacks: Pack[];
   hasMessages: boolean;
   orderedContinues: ContinueCard[];
@@ -567,11 +565,10 @@ function ChatBody({
   setInput: (v: string) => void;
   busy: boolean;
   send: (text: string) => void;
-  onSuggestionAction: (option: SuggestionOption) => void;
+  onSuggestionAction: (option: SuggestionOption, matchedPackId?: string) => void;
   onOpenFolder: (route: string) => void;
 }) {
   const shell = useShell();
-  const activePack = quickPacks.find((p) => p.id === activePackId);
 
   return (
     <div className="flex flex-col h-screen">
@@ -601,58 +598,29 @@ function ChatBody({
             </svg>
           </button>
 
-          {/* Pack pill row — pill toggles mode on/off; the ◇ button (only
-              on packs with a folderRoute, currently Study) jumps to the
-              pack's folder UI. Two distinct affordances on one row. */}
+          {/* Pack pill row — each pill is a folder shortcut. There is no
+              "active mode" anymore: voice/tone is decided by what the user
+              types (auto-matching), not by what they toggled. Clicking a
+              pack opens its folder if it has one, otherwise the catalog. */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            {quickPacks.map((p) => {
-              const active = activePackId === p.id;
-              return (
-                <div key={p.id} className="shrink-0 inline-flex items-center">
-                  <button
-                    onClick={() => setThreadPack(threadId, active ? undefined : p.id)}
-                    className={`px-3 py-1.5 hairline text-[12px] transition-colors ${
-                      p.folderRoute ? "rounded-l-full" : "rounded-full"
-                    } ${
-                      active ? "bg-accent text-ink" : "bg-surface-2 text-ink-soft hover:text-ink"
-                    }`}
-                    title={active ? "다시 누르면 모드 해제" : `${p.name} 모드 켜기`}
-                  >
-                    {p.name}
-                  </button>
-                  {p.folderRoute && (
-                    <button
-                      onClick={() => onOpenFolder(p.folderRoute!)}
-                      className={`px-2 py-1.5 -ml-px hairline text-[13px] rounded-r-full transition-colors ${
-                        active
-                          ? "bg-accent text-ink hover:bg-accent/80"
-                          : "bg-surface-2 text-ink-soft hover:text-ink"
-                      }`}
-                      title={`${p.name} 폴더 열기`}
-                      aria-label={`${p.name} 폴더`}
-                    >
-                      ◇
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+            {quickPacks.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onOpenFolder(p.folderRoute ?? "/packs")}
+                className="shrink-0 px-3 py-1.5 rounded-full hairline text-[12px] bg-surface-2 text-ink-soft hover:text-ink transition-colors"
+                title={p.folderRoute ? `${p.name} 폴더 열기` : `${p.name} 카드 보기`}
+              >
+                {p.name}
+              </button>
+            ))}
           </div>
         </div>
-        {/* Mode indicator — small, subtle, but the only visual cue that the
-            AI is now answering in a different voice. Voice + tone come from
-            the pack metadata; today they're cosmetic, but once WebLLM lands
-            they become the source of truth for the persona prompt. */}
+        {/* Single-line tagline — replaces the old "{name} 모드 · voice · tone"
+            indicator. With activation gone, voice/tone is decided by the
+            input itself, so there's nothing fixed to display here. */}
         <div className="px-3 sm:px-8 md:px-12 pb-2 -mt-1 text-[11px] text-ink-soft">
-          {activePack ? (
-            <span>
-              <span className="text-ink">{activePack.name}</span> 모드 ·{" "}
-              <span className="text-ink">{activePack.voice}</span> ·{" "}
-              <span className="opacity-80">{activePack.tone}</span>
-            </span>
-          ) : (
-            <span>모드 없음 — 일반 DOTS 톤</span>
-          )}
+          DOTS — 한국어 도우미. 입력에 맞춰 자동으로 톤이 바뀌어.
         </div>
       </header>
 
@@ -721,7 +689,7 @@ function AssistantBubble({
   onSuggestionAction,
 }: {
   m: Extract<ThreadMsg, { role: "assistant" }>;
-  onSuggestionAction: (option: SuggestionOption) => void;
+  onSuggestionAction: (option: SuggestionOption, matchedPackId?: string) => void;
 }) {
   // Streaming state: while pending, partial text from onToken trickles
   // in. Show the trace until the first delta lands, then swap to the
@@ -752,7 +720,7 @@ function AssistantBubble({
               packName={m.suggestion.matchedPackName}
               options={m.suggestion.options}
               badge={m.suggestion.badge ?? "local"}
-              onAction={onSuggestionAction}
+              onAction={(opt) => onSuggestionAction(opt, m.suggestion?.matchedPackId)}
             />
           )}
           {!m.pending && m.recipes?.map((r) => <RecipeCard key={r.id} recipe={r} />)}
@@ -764,17 +732,16 @@ function AssistantBubble({
 }
 
 function ProviderBadge({ provider }: { provider: "webllm" | "gemini" }) {
-  // Subtle source label — primary accent for on-device, soft gray for
-  // cloud. Matches the dot-tone hierarchy used by SuggestionBlock so
-  // "기기 안" reads as the warmer, default state.
-  const isLocal = provider === "webllm";
+  // Blue dot = LLM compute, regardless of where it ran. The on-device vs
+  // cloud distinction lives in the parens of the label so the user still
+  // sees it but the dot color carries one consistent meaning: "this came
+  // from a model, not a local match." Matching hits use red dots
+  // (SuggestionBlock) — the two colors are the visual contract.
+  const label = provider === "webllm" ? "연산 (WebLLM)" : "연산 (Gemini)";
   return (
     <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft flex items-center gap-1.5">
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${isLocal ? "bg-primary" : "bg-ink-soft"}`}
-        aria-hidden
-      />
-      {isLocal ? "이 기기 안에서 응답" : "클라우드 응답"}
+      <span className="h-1.5 w-1.5 rounded-full bg-blue-500" aria-hidden />
+      {label}
     </p>
   );
 }
@@ -795,14 +762,16 @@ function SuggestionBlock({
   // anywhere yet, the LLM button would manufacture it.
   const footer =
     badge === "local"
-      ? `${packName}에서 매칭됨 · 이 기기 안에서`
+      ? `${packName}에서 매칭됨 · 로컬 매칭`
       : badge === "store"
-        ? "팩스토어에서 검색됨 · 설치 안 된 콘텐츠"
+        ? "팩스토어에서 검색됨 · 로컬 매칭"
         : "콘텐츠 없음 · 새로 만들 수 있어";
-  // Visual hierarchy: local = bright (primary accent), store = mid gray
-  // (installed-but-not-here), create = dim (nothing exists yet).
-  const dotTone =
-    badge === "local" ? "bg-primary" : badge === "store" ? "bg-ink-soft" : "bg-ink-soft/40";
+  // Red dot = on-device match (Stage 1/2). Used uniformly across the
+  // three badge variants — the differentiation now lives in the footer
+  // text, not the color. "create" stays slightly dim because nothing
+  // actually exists yet; clicking will trigger a fresh LLM call that
+  // would then earn the blue ProviderBadge below.
+  const dotTone = badge === "create" ? "bg-red-500/40" : "bg-red-500";
   return (
     <div className="max-w-2xl">
       <div className="flex flex-wrap gap-2">

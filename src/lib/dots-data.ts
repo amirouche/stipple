@@ -417,6 +417,10 @@ export type AnswerPayload =
       text: string;
       options: SuggestionOption[];
       matchedPackName: string;
+      // Pack id behind the match — only set when this came from an
+      // installed pack (Stage 1). Threaded into onSuggestionAction so the
+      // matched pack's voice/tone applies on llm-call clicks.
+      matchedPackId?: string;
       // Where the suggestion came from. Drives the small footer label
       // under the buttons:
       //   "local"  (default) — local pack content matched ("이 기기 안에서")

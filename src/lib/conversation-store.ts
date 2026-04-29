@@ -16,6 +16,11 @@ export type ThreadTheme = "cooking" | "study" | "routine" | "open";
 // without calling Gemini — it should render buttons instead of free text.
 export type ThreadSuggestion = {
   matchedPackName: string;
+  // Set when the suggestion came from an installed-pack match. Lets
+  // onSuggestionAction(llm-call) lift the matched pack's voice/tone
+  // onto the LLM call without needing a separate "active pack" mode —
+  // matching IS the activation in this design.
+  matchedPackId?: string;
   options: SuggestionOption[];
   // Mirrors AnswerPayload.pack-suggestion.badge — controls the footer
   // label under the buttons.

@@ -347,5 +347,6 @@ export function buildPackSuggestion(result: PackMatchResult): AnswerPayload {
     text: body.text,
     options: body.options,
     matchedPackName: result.pack.name,
+    matchedPackId: result.pack.id,
   };
 }
