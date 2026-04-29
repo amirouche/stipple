@@ -80,10 +80,25 @@ const COOKING_DOMAIN = [
 // via "레시피").
 const COOKING_GENERIC = ["맛", "한식", "양식", "추천"];
 
-// Score thresholds:
-//   - SPECIFIC_HIT (>=3): user named a topic-specific term → content-level match
-//   - GENERIC_HIT (1):    only the umbrella keyword fired → pack-level match
-const SPECIFIC_HIT_SCORE = 3;
+// Score weights — rescaled so we can apply a "must be confident" threshold
+// before forcing the user into a local match. The previous 1/1/3 scale
+// made every domain or generic word above 0, so "메뉴 추천" still surfaced
+// kimchi cards. With these weights:
+//   "김치찌개"        → specific(60) + domain(20) = 80   → match
+//   "한식 레시피"     → domain(20)   + generic(5)  = 25   → below → LLM
+//   "메뉴 추천"       → only generic, gated to 0           → LLM
+//   "수학"            → only domain  = 20                 → below → LLM
+// V2 헌법: 자연스러움 우선. 점수 낮으면 억지로 카드 띄우지 말고 LLM이
+// 자연스러운 톤으로 답하게.
+const SPECIFIC_HIT_SCORE = 60;
+const DOMAIN_HIT_SCORE = 20;
+const GENERIC_HIT_SCORE = 5;
+
+// Below this, matchPackContent returns null even though we found a
+// non-zero score — the input is too ambiguous to justify a SuggestionBlock.
+// inferDomainPack still surfaces the leaning pack so the LLM can pick up
+// its voice/tone for a natural response.
+export const MATCH_THRESHOLD = 30;
 
 export type ContentMatch =
   | { kind: "sat-math"; problem: SATMathProblem; score: number }
@@ -114,13 +129,13 @@ function scoreSATMath(q: string, problem: SATMathProblem): number {
   }
   for (const k of SAT_MATH_DOMAIN) {
     if (q.includes(lower(k))) {
-      domain = 1;
+      domain = DOMAIN_HIT_SCORE;
       break;
     }
   }
   for (const k of SAT_MATH_GENERIC) {
     if (q.includes(lower(k))) {
-      generic = 1;
+      generic = GENERIC_HIT_SCORE;
       break;
     }
   }
@@ -146,13 +161,13 @@ function scoreCookingRecipe(q: string, recipe: PackRecipe): number {
   }
   for (const k of COOKING_DOMAIN) {
     if (q.includes(lower(k))) {
-      domain = 1;
+      domain = DOMAIN_HIT_SCORE;
       break;
     }
   }
   for (const k of COOKING_GENERIC) {
     if (q.includes(lower(k))) {
-      generic = 1;
+      generic = GENERIC_HIT_SCORE;
       break;
     }
   }
@@ -163,20 +178,23 @@ function scoreCookingRecipe(q: string, recipe: PackRecipe): number {
   return specific + domain + generic;
 }
 
-export function matchPackContent(
+type Candidate = {
+  pack: Pack;
+  isActive: boolean;
+  matches: ContentMatch[];
+  bestScore: number;
+};
+
+// Shared scoring loop. Builds candidates with non-zero scores; sorts so
+// the active pack wins ties, then highest-score wins. Both
+// matchPackContent and inferDomainPack use this — same scoring, different
+// thresholds.
+function scoreCandidates(
   query: string,
   installedPacks: Pack[],
   activePackId?: string,
-): PackMatchResult | null {
+): Candidate[] {
   const q = lower(query);
-
-  type Candidate = {
-    pack: Pack;
-    isActive: boolean;
-    matches: ContentMatch[];
-    bestScore: number;
-  };
-
   const candidates: Candidate[] = [];
 
   for (const pack of installedPacks) {
@@ -214,15 +232,28 @@ export function matchPackContent(
     });
   }
 
-  if (candidates.length === 0) return null;
-
   // Active pack wins ties; otherwise highest-scoring pack wins.
   candidates.sort((a, b) => {
     if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
     return b.bestScore - a.bestScore;
   });
 
+  return candidates;
+}
+
+export function matchPackContent(
+  query: string,
+  installedPacks: Pack[],
+  activePackId?: string,
+): PackMatchResult | null {
+  const candidates = scoreCandidates(query, installedPacks, activePackId);
+  if (candidates.length === 0) return null;
+
   const winner = candidates[0];
+  // V2: 점수가 임계값 미만이면 매칭 자체를 포기한다. "메뉴 추천"·"수학"
+  // 같은 모호한 입력은 SuggestionBlock 강제 X, Stage 3 LLM이 자연스럽게.
+  if (winner.bestScore < MATCH_THRESHOLD) return null;
+
   const packLevel = winner.bestScore < SPECIFIC_HIT_SCORE;
   // Pack-level match → keep all matches (used for "5문제 있어"). Content-
   // level → keep only the items that tie at the top score, capped at 2.
@@ -236,6 +267,24 @@ export function matchPackContent(
     packLevel,
     matches,
   };
+}
+
+// V2 voice/tone hint: when matchPackContent returns null but the input
+// still leans toward a domain ("메뉴 추천" → cooking domain via "추천"
+// generic, "수학" → study domain via "수학" domain), surface the
+// closest pack so Stage 3 dispatch can apply its voice/tone. Matching
+// itself is too soft to show a SuggestionBlock, but the LLM answering
+// in cooking voice still feels right.
+//
+// Returns undefined when no pack scored above 0 — fully off-topic input
+// like "양자역학" gets the default DOTS tone.
+export function inferDomainPack(
+  query: string,
+  installedPacks: Pack[],
+  activePackId?: string,
+): Pack | undefined {
+  const candidates = scoreCandidates(query, installedPacks, activePackId);
+  return candidates[0]?.pack;
 }
 
 // ---------------------------------------------------------------------------

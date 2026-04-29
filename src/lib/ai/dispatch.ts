@@ -67,13 +67,48 @@ const BASE_DISCIPLINE = [
   "답: 사과는 장미과 사과나무 열매. 비타민 C와 식이섬유가 풍부하고 한국에서 많이 먹는 과일이야.",
 ].join("\n");
 
+// Recommendation-intent words. When the user's message contains one of
+// these AND we've inferred a pack, we add a small discipline section
+// telling the model to make ONE concrete suggestion instead of dumping
+// a catalog. "메뉴 추천" + cooking → "오늘 김치찌개 어때?" (one specific
+// item) instead of "이런 옵션이 있어요: ..." (catalog).
+const RECOMMENDATION_HINTS = [
+  "추천",
+  "뭐",
+  "고민",
+  "메뉴",
+  "어떨까",
+  "어때",
+  "recommend",
+  "suggest",
+];
+
+const RECOMMENDATION_DISCIPLINE = [
+  "사용자가 추천을 요청했습니다. 다음을 지키세요:",
+  "- 한 가지 구체적 제안만 (예: 음식 이름 하나).",
+  "- 짧은 이유 한 줄 (시간/날씨/기분/상황 중 하나).",
+  "- 카탈로그 / 옵션 나열 X. 친구처럼 자연스럽게.",
+].join("\n");
+
+function hasRecommendationIntent(userMessage: string): boolean {
+  const q = userMessage.toLowerCase();
+  return RECOMMENDATION_HINTS.some((h) => q.includes(h));
+}
+
 // Voice + tone become the next lines after the base discipline. We keep
 // this separate from the pack's longer `systemPrompt` field so the next
 // step (WebLLM-driven persona synthesis) has a clear seam to swap in.
-function buildSystemPrompt(systemPrompt: string | undefined, pack: Pack | undefined): string {
+function buildSystemPrompt(
+  userMessage: string,
+  systemPrompt: string | undefined,
+  pack: Pack | undefined,
+): string {
   const sections: string[] = [BASE_DISCIPLINE];
   if (pack?.voice && pack.tone) {
     sections.push([`너는 "${pack.voice}"로서 사용자에게 답한다.`, `톤: ${pack.tone}`].join("\n"));
+  }
+  if (pack && hasRecommendationIntent(userMessage)) {
+    sections.push(RECOMMENDATION_DISCIPLINE);
   }
   if (systemPrompt) {
     sections.push(systemPrompt);
@@ -127,7 +162,7 @@ export async function dispatchLLMCall(
   onToken: (delta: string, sofar: string) => void = () => {},
 ): Promise<DispatchResult> {
   const provider: LLMProvider = getPreferences().llmProvider;
-  const systemPrompt = buildSystemPrompt(input.systemPrompt, input.pack);
+  const systemPrompt = buildSystemPrompt(input.userMessage, input.systemPrompt, input.pack);
   const history = trimHistory(input.history);
 
   if (provider === "gemini-only") {

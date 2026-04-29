@@ -27,7 +27,7 @@ import { usePreferences } from "@/lib/preferences";
 import { buildContinuations, type ContinueCard } from "@/lib/continuations";
 import { composeAnswer } from "@/lib/ai/compose";
 import { dispatchLLMCall, type DispatchTurn } from "@/lib/ai/dispatch";
-import { matchPackContent, buildPackSuggestion } from "@/lib/packs/match";
+import { matchPackContent, buildPackSuggestion, inferDomainPack } from "@/lib/packs/match";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import { addUserSATProblem, getUserSATProblems } from "@/lib/packs/study/user-store";
 import { buildSATMathDummy, buildSATMathFromLLM } from "@/lib/packs/study/parse-llm";
@@ -245,11 +245,13 @@ function ChatPage() {
 
     if (result.pack) setThreadPack(thread.id, result.pack.id);
 
-    // No fallback to a "user-selected mode": there is none anymore. The
-    // engine's trigger-detected pack (set only when the input itself
-    // smells like a pack — e.g. typing "레시피") drives voice/tone.
-    // Generic inputs ("양자역학") have no pack here → default tone.
-    const composePack = result.pack;
+    // V2 voice/tone inference: when matchPackContent returned null due to
+    // the threshold (or routeQuery couldn't pin a pack), there may still
+    // be a domain leaning. inferDomainPack returns the closest pack —
+    // "메뉴 추천" → cooking, "수학" → study — so the LLM answers in the
+    // right voice even when nothing was strong enough to surface a card.
+    // Falls back to undefined for fully off-topic input ("양자역학").
+    const composePack = result.pack ?? inferDomainPack(text, installed);
 
     setInput("");
     setBusy(true);
