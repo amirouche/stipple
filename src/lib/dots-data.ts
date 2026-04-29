@@ -468,11 +468,18 @@ export function answerFor(query: string, pack?: Pack, route?: Route): AnswerPayl
     };
   }
 
-  // ---- PACK HIT: direct, structured. No preamble — just the result. ----
-  if (pack?.id === "cooking-essentials") {
-    const recipeId = q.includes("참치") ? "tuna-kimchi-jjigae" : "baek-kimchi-jjigae";
-    return { kind: "recipe", recipeId };
-  }
+  // ---- PACK HIT: text-only canned fallbacks. ----
+  // CONSTITUTION: Stage 3 LLM 응답에 — 자동 콘텐츠 첨부 X.
+  // 모드 활성은 voice/tone 적용까지. 콘텐츠 표시는 매칭 hit 시에만.
+  // 사용자 명시 X 자동 작동 X.
+  //
+  // The cooking-essentials branch used to return `{ kind: "recipe",
+  // recipeId }` here, which made every Stage 3 input under cooking mode
+  // (e.g. "양자역학") show a kimchi recipe alongside the LLM reply. That
+  // path is dead since matchPackContent (Stage 1) catches real cooking
+  // queries and the follow-up "다른거" branch in engine.step builds its
+  // recipe payloads directly. So Stage 3 cooking just falls through to
+  // the text fallbacks below — LLM voice/tone still applies via dispatch.
 
   if (pack?.id === "morning-routine") {
     return {
