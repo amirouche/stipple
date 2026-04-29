@@ -22,7 +22,7 @@ import type { WebLLMModelId } from "./types";
 export type { WebLLMModelId, WebLLMStatus, WebLLMProgress } from "./types";
 export type { ModelInfo } from "./config";
 export { AVAILABLE_MODELS, DEFAULT_MODEL } from "./config";
-export { useWebLLMStatus } from "./store";
+export { useWebLLMStatus, getStatusSnapshot as getWebLLMStatus } from "./store";
 export { checkWebGPUSupport } from "./compat";
 
 // Trigger the 1.8GB+ download + GPU compile for `modelId`. MUST be called

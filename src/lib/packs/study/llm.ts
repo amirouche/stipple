@@ -1,7 +1,7 @@
 // LLM 폴백 — commonMistakes에 잡히지 않는 깊은 설명, 변형 문제 생성에만 사용.
 // 정답/오답 판정 자체는 sat-math.ts::checkAnswer가 온디바이스로 처리한다.
 
-import { askGemini } from "@/lib/ai/gemini";
+import { dispatchLLMCall } from "@/lib/ai/dispatch";
 import type { SATMathProblem } from "./types";
 
 const TUTOR_PERSONA = [
@@ -29,8 +29,9 @@ export async function explainMistake(problem: SATMathProblem, selected: string):
     "이 학생이 왜 이 답을 골랐을지 추측해서, 어디서 사고가 새었는지 짚어줘. 그리고 다음에 같은 함정을 피할 한 줄을 마지막에 덧붙여.",
   ].join("\n");
 
-  const { text } = await askGemini({
-    data: { userMessage, systemPrompt: TUTOR_PERSONA },
+  const { text } = await dispatchLLMCall({
+    userMessage,
+    systemPrompt: TUTOR_PERSONA,
   });
   return text;
 }
@@ -42,8 +43,9 @@ export async function generateVariant(problem: SATMathProblem): Promise<string> 
     "이 문제와 같은 개념을 묻는 변형 문제 1개만 만들어줘. 보기 4개, 정답 표시까지 포함해서. 풀이는 짧게 한 줄.",
   ].join("\n");
 
-  const { text } = await askGemini({
-    data: { userMessage, systemPrompt: TUTOR_PERSONA },
+  const { text } = await dispatchLLMCall({
+    userMessage,
+    systemPrompt: TUTOR_PERSONA,
   });
   return text;
 }

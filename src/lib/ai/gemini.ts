@@ -11,9 +11,20 @@ import { createServerFn } from "@tanstack/react-start";
 const MODEL = "gemini-2.5-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
+// Prior turns to pass as multi-turn context. Same shape as DispatchTurn
+// in src/lib/ai/dispatch.ts — kept structural here to avoid importing
+// client-side code into a server function module. Gemini wants role
+// "user" | "model" but the dispatch layer speaks in "user" | "assistant",
+// so the handler maps `assistant` → `model` below.
+export type GeminiHistoryTurn = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 export type GeminiInput = {
   userMessage: string;
   systemPrompt?: string;
+  history?: GeminiHistoryTurn[];
 };
 
 export type GeminiOutput = {
@@ -40,8 +51,28 @@ export const askGemini = createServerFn({ method: "POST" })
       throw new Error("GEMINI_API_KEY is not configured");
     }
 
+    // Stitch history (oldest → newest) before the current turn. Gemini
+    // refuses messages where two consecutive turns share the same role,
+    // so adjacent same-role entries get folded into one — defensive,
+    // since the chat store should already alternate.
+    const historyContents = (data.history ?? [])
+      .map((t) => ({
+        role: t.role === "assistant" ? "model" : "user",
+        parts: [{ text: t.content }],
+      }))
+      .reduce<{ role: string; parts: { text: string }[] }[]>((acc, turn) => {
+        const last = acc[acc.length - 1];
+        if (last && last.role === turn.role) {
+          last.parts.push(...turn.parts);
+        } else {
+          acc.push(turn);
+        }
+        return acc;
+      }, []);
+
     const body = {
       contents: [
+        ...historyContents,
         {
           role: "user",
           parts: [{ text: data.userMessage }],

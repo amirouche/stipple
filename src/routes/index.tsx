@@ -26,7 +26,7 @@ import {
 import { usePreferences } from "@/lib/preferences";
 import { buildContinuations, type ContinueCard } from "@/lib/continuations";
 import { composeAnswer } from "@/lib/ai/compose";
-import { askGemini } from "@/lib/ai/gemini";
+import { dispatchLLMCall, type DispatchTurn } from "@/lib/ai/dispatch";
 import { matchPackContent, buildPackSuggestion } from "@/lib/packs/match";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import { addUserSATProblem, getUserSATProblems } from "@/lib/packs/study/user-store";
@@ -300,6 +300,7 @@ function ChatPage() {
       pack: composePack,
       lookup: result.lookup,
       fallback: result.payload,
+      history: threadHistory(thread.messages),
     }).then(renderPayload);
   }
 
@@ -409,12 +410,15 @@ function ChatPage() {
       //  - With option.systemPrompt: bypass composeAnswer entirely so the
       //    matched-pack persona (e.g. SAT 수학 튜터) can override the
       //    chat thread's active mode. Without this override the cooking
-      //    persona refuses SAT math requests.
+      //    persona refuses SAT math requests. We also skip pack injection
+      //    for the same reason — the option's prompt IS the persona.
       //  - Without: keep the active-pack injection from composeAnswer so
       //    "다른 음식" stays in cooking voice.
       if (option.systemPrompt) {
-        askGemini({
-          data: { userMessage: option.prompt, systemPrompt: option.systemPrompt },
+        dispatchLLMCall({
+          userMessage: option.prompt,
+          systemPrompt: option.systemPrompt,
+          history: threadHistory(thread.messages),
         })
           .then((res) => {
             if (postAction === "save-as-sat-problem") {
@@ -431,6 +435,7 @@ function ChatPage() {
           query: option.prompt,
           pack: activePack,
           fallback: { kind: "text", text: "지금은 응답을 가져오지 못했어." },
+          history: threadHistory(thread.messages),
         })
           .then((payload) => onDoneText(payload.kind === "text" ? payload.text : ""))
           .catch(onFail);
@@ -441,6 +446,22 @@ function ChatPage() {
   function activePackName(packId?: string): string | undefined {
     if (!packId) return undefined;
     return installed.find((p) => p.id === packId)?.name;
+  }
+
+  // Convert thread messages → DispatchTurn[] for LLM context. Drops
+  // pending bubbles, recipe-only / suggestion-only assistant messages
+  // (no `text`), and anything that wouldn't help the model interpret
+  // the next user turn. dispatch trims to N internally.
+  function threadHistory(msgs: ThreadMsg[]): DispatchTurn[] {
+    const turns: DispatchTurn[] = [];
+    for (const m of msgs) {
+      if (m.role === "user") {
+        turns.push({ role: "user", content: m.text });
+      } else if (!m.pending && m.text) {
+        turns.push({ role: "assistant", content: m.text });
+      }
+    }
+    return turns;
   }
 
   if (!thread) return null;

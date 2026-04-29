@@ -13,13 +13,16 @@ import type { LookupResult } from "@/lib/memory";
 import { extractTopics } from "@/lib/memory/topics";
 import { matchPitch } from "@/lib/pitch";
 import { getPreferences } from "@/lib/preferences";
-import { askGemini } from "./gemini";
+import { dispatchLLMCall, type DispatchTurn } from "./dispatch";
 
 export type ComposeArgs = {
   query: string;
   pack?: Pack;
   lookup?: LookupResult;
   fallback: AnswerPayload;
+  // Prior turns from the active thread, oldest → newest. dispatch trims
+  // to the last N internally so callers can pass the whole conversation.
+  history?: DispatchTurn[];
 };
 
 const BASE_PERSONA = [
@@ -94,11 +97,17 @@ export async function composeAnswer(args: ComposeArgs): Promise<AnswerPayload> {
   const systemPrompt = buildSystemPrompt(args);
 
   try {
-    const { text } = await askGemini({
-      data: { userMessage: args.query, systemPrompt },
+    // Pack is passed separately so dispatch's voice/tone prefix can stack
+    // on top of the buildSystemPrompt sections without duplicating the
+    // pack's own systemPrompt block.
+    const { text } = await dispatchLLMCall({
+      userMessage: args.query,
+      systemPrompt,
+      history: args.history,
+      pack: args.pack,
     });
 
-    // Wrap Gemini text into the same payload shape as the fallback so
+    // Wrap text into the same payload shape as the fallback so
     // structured fields (recipeId/recipeIds) survive.
     let payload: AnswerPayload;
     if (args.fallback.kind === "text") {
@@ -112,7 +121,7 @@ export async function composeAnswer(args: ComposeArgs): Promise<AnswerPayload> {
     }
     return attachPitch(payload, args.query);
   } catch (err) {
-    console.error("[compose] Gemini call failed, using fallback:", err);
+    console.error("[compose] LLM call failed, using fallback:", err);
     return attachPitch(args.fallback, args.query);
   }
 }

@@ -7,6 +7,14 @@ import type { PitchCategory } from "@/lib/pitch/types";
 export type HomePriority = "memory-first" | "packs-first" | "balanced";
 export type DefaultMode = "calm" | "fast" | "deep";
 
+// Which LLM the dispatch layer should reach for. "webllm-first" is the
+// constitution-aligned default — try the on-device engine, fall back to
+// Gemini only if it's not loaded. "gemini-only" disables WebLLM entirely
+// (lets users skip the 1.8GB download). "webllm-only" forbids the cloud
+// call — useful for the "이 기기 안에서" demo path; surfaces an error if
+// the model isn't loaded instead of quietly hitting the network.
+export type LLMProvider = "webllm-first" | "gemini-only" | "webllm-only";
+
 export type PitchPrefs = {
   enabled: boolean;
   // Empty list = no pitches even if enabled. Mirrors the "opt-in per
@@ -20,6 +28,7 @@ export type Preferences = {
   // ordered list of pack ids — first one shows up first on home + sidebar
   packOrder: string[];
   pitch: PitchPrefs;
+  llmProvider: LLMProvider;
 };
 
 const STORAGE_KEY = "dots-preferences";
@@ -36,6 +45,7 @@ const DEFAULTS: Preferences = {
     "code-review",
   ],
   pitch: { enabled: false, categories: [] },
+  llmProvider: "webllm-first",
 };
 
 let prefs: Preferences = DEFAULTS;
@@ -95,6 +105,10 @@ export function setPreferences(patch: Partial<Preferences>) {
   prefs = { ...prefs, ...patch };
   emit();
   persist();
+}
+
+export function setLLMProvider(provider: LLMProvider) {
+  setPreferences({ llmProvider: provider });
 }
 
 export function setPitchPrefs(patch: Partial<PitchPrefs>) {
