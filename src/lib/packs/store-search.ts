@@ -82,7 +82,12 @@ export function buildStoreSuggestion(query: string, result: StoreSearchResult): 
     };
   }
 
-  // No store match — content-creation path.
+  // No store match — content-creation path. The LLM doesn't see the
+  // suggestion bubble that triggered this click, so without an explicit
+  // creator persona + original-query context it tends to drift into
+  // dictionary mode ("국어 = 한국어"). The systemPrompt below pins the
+  // role to "출제 전문가" and the prompt repeats the user's original
+  // input so the model can pick a sub-topic.
   return {
     kind: "pack-suggestion",
     matchedPackName: "팩스토어",
@@ -92,8 +97,20 @@ export function buildStoreSuggestion(query: string, result: StoreSearchResult): 
       {
         kind: "llm-call",
         label: "만들어줘",
-        systemPrompt: `당신은 ${domain} 분야 친절한 튜터입니다. 한국어로 짧고 정확하게 답하세요.`,
-        prompt: query,
+        systemPrompt: [
+          `당신은 ${domain} 분야 학습 콘텐츠 출제 전문가입니다.`,
+          `사용자가 ${domain} 영역의 새로운 객관식 문제를 만들어 달라고 요청했습니다.`,
+          "다음 형식을 정확히 지켜 4지선다 문제 1개만 만들어 주세요. 한국어로 작성하세요.",
+          "",
+          `문제: [한 두 문장의 ${domain} 문제]`,
+          "① [보기 1]",
+          "② [보기 2]",
+          "③ [보기 3]",
+          "④ [보기 4]",
+          "정답: [번호]",
+          "풀이: [두세 줄의 짧은 풀이]",
+        ].join("\n"),
+        prompt: `${domain} 분야 객관식 문제 1개를 만들어 주세요. (사용자 원본 입력: "${query}")`,
       },
     ],
   };
