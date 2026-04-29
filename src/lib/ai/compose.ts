@@ -23,6 +23,17 @@ export type ComposeArgs = {
   // Prior turns from the active thread, oldest → newest. dispatch trims
   // to the last N internally so callers can pass the whole conversation.
   history?: DispatchTurn[];
+  // Per-token callback for streaming UIs. Fires once per delta with the
+  // partial text so far. Gemini answers in one go (single onToken call
+  // with the full text); WebLLM streams incrementally. Default no-op.
+  onToken?: (delta: string, sofar: string) => void;
+};
+
+export type ComposeResult = {
+  payload: AnswerPayload;
+  // Which provider answered, if an LLM call ran. Absent on the fallback
+  // path (network failure → canned reply has no LLM origin).
+  provider?: "webllm" | "gemini";
 };
 
 const BASE_PERSONA = [
@@ -93,19 +104,22 @@ function attachPitch(payload: AnswerPayload, query: string): AnswerPayload {
   return pitch ? { ...payload, pitch } : payload;
 }
 
-export async function composeAnswer(args: ComposeArgs): Promise<AnswerPayload> {
+export async function composeAnswer(args: ComposeArgs): Promise<ComposeResult> {
   const systemPrompt = buildSystemPrompt(args);
 
   try {
     // Pack is passed separately so dispatch's voice/tone prefix can stack
     // on top of the buildSystemPrompt sections without duplicating the
     // pack's own systemPrompt block.
-    const { text } = await dispatchLLMCall({
-      userMessage: args.query,
-      systemPrompt,
-      history: args.history,
-      pack: args.pack,
-    });
+    const { text, provider } = await dispatchLLMCall(
+      {
+        userMessage: args.query,
+        systemPrompt,
+        history: args.history,
+        pack: args.pack,
+      },
+      args.onToken,
+    );
 
     // Wrap text into the same payload shape as the fallback so
     // structured fields (recipeId/recipeIds) survive.
@@ -119,9 +133,9 @@ export async function composeAnswer(args: ComposeArgs): Promise<AnswerPayload> {
     } else {
       payload = args.fallback;
     }
-    return attachPitch(payload, args.query);
+    return { payload: attachPitch(payload, args.query), provider };
   } catch (err) {
     console.error("[compose] LLM call failed, using fallback:", err);
-    return attachPitch(args.fallback, args.query);
+    return { payload: attachPitch(args.fallback, args.query) };
   }
 }

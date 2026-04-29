@@ -36,6 +36,9 @@ export type ThreadMsg =
       packName?: string;
       pending?: boolean;
       suggestion?: ThreadSuggestion;
+      // Which LLM produced this turn — drives the small "기기 안" / "클라우드"
+      // footer on the bubble. Absent for canned/local replies (no LLM ran).
+      provider?: "webllm" | "gemini";
     };
 
 export type Thread = {

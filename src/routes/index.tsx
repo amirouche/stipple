@@ -249,7 +249,7 @@ function ChatPage() {
     setInput("");
     setBusy(true);
 
-    const renderPayload = (payload: AnswerPayload) => {
+    const renderPayload = (payload: AnswerPayload, provider?: "webllm" | "gemini") => {
       let body = "";
       let recipes: PackRecipe[] | undefined;
       let suggestion:
@@ -285,6 +285,7 @@ function ChatPage() {
         recipes,
         pitch: payload.kind === "pack-suggestion" ? undefined : payload.pitch,
         suggestion,
+        provider,
       });
       setBusy(false);
       scrollDown();
@@ -295,13 +296,24 @@ function ChatPage() {
       return;
     }
 
+    // Streaming: each delta extends the bubble's text while still pending.
+    // The final renderPayload below replaces with the canonical text and
+    // flips pending: false. text/recipe/memory-recipes payloads use the
+    // streamed text as their body or intro; pack-suggestion payloads
+    // ignore it (they don't carry LLM-generated prose).
+    const onToken = (_delta: string, sofar: string) => {
+      patchMessage(thread.id, asstId, { text: sofar });
+      scrollDown();
+    };
+
     composeAnswer({
       query: text,
       pack: composePack,
       lookup: result.lookup,
       fallback: result.payload,
       history: threadHistory(thread.messages),
-    }).then(renderPayload);
+      onToken,
+    }).then(({ payload, provider }) => renderPayload(payload, provider));
   }
 
   // Suggestion buttons — invoked from rendered messages. Each option is one
@@ -406,6 +418,24 @@ function ChatPage() {
         onDoneText(`(클라우드 호출 실패: ${msg})`);
       };
 
+      // Streaming token sink — same shape as Stage 3. Skip while a
+      // postAction will replace the bubble entirely (save-as-sat-problem
+      // builds a "Study에 저장됨" message, so streaming raw output then
+      // overwriting it would just flicker).
+      const streamToken =
+        postAction === "save-as-sat-problem"
+          ? undefined
+          : (_delta: string, sofar: string) => {
+              patchMessage(thread.id, id, { text: sofar });
+              scrollDown();
+            };
+
+      const onDoneTextWithProvider = (text: string, provider?: "webllm" | "gemini") => {
+        patchMessage(thread.id, id, { pending: false, text, provider });
+        setBusy(false);
+        scrollDown();
+      };
+
       // Two paths:
       //  - With option.systemPrompt: bypass composeAnswer entirely so the
       //    matched-pack persona (e.g. SAT 수학 튜터) can override the
@@ -415,18 +445,21 @@ function ChatPage() {
       //  - Without: keep the active-pack injection from composeAnswer so
       //    "다른 음식" stays in cooking voice.
       if (option.systemPrompt) {
-        dispatchLLMCall({
-          userMessage: option.prompt,
-          systemPrompt: option.systemPrompt,
-          history: threadHistory(thread.messages),
-        })
+        dispatchLLMCall(
+          {
+            userMessage: option.prompt,
+            systemPrompt: option.systemPrompt,
+            history: threadHistory(thread.messages),
+          },
+          streamToken,
+        )
           .then((res) => {
             if (postAction === "save-as-sat-problem") {
               const built = buildSATMathFromLLM(res.text, getUserSATProblems().length);
               addUserSATProblem(built.problem);
               onSavedProblem(built.source);
             } else {
-              onDoneText(res.text);
+              onDoneTextWithProvider(res.text, res.provider);
             }
           })
           .catch(onFail);
@@ -436,8 +469,11 @@ function ChatPage() {
           pack: activePack,
           fallback: { kind: "text", text: "지금은 응답을 가져오지 못했어." },
           history: threadHistory(thread.messages),
+          onToken: streamToken,
         })
-          .then((payload) => onDoneText(payload.kind === "text" ? payload.text : ""))
+          .then(({ payload, provider }) =>
+            onDoneTextWithProvider(payload.kind === "text" ? payload.text : "", provider),
+          )
           .catch(onFail);
       }
     }
@@ -687,17 +723,31 @@ function AssistantBubble({
   m: Extract<ThreadMsg, { role: "assistant" }>;
   onSuggestionAction: (option: SuggestionOption) => void;
 }) {
+  // Streaming state: while pending, partial text from onToken trickles
+  // in. Show the trace until the first delta lands, then swap to the
+  // streaming bubble with a blinking caret. When pending flips false
+  // the caret disappears and the rest of the bubble (suggestions,
+  // recipes, pitch) renders.
+  const isStreaming = Boolean(m.pending && m.text);
+  const showTrace = m.pending ? !m.text : m.route === "deep";
   return (
     <div className="space-y-3 fade-in">
-      {(m.pending || m.route === "deep") && (
-        <ProcessingTrace route={m.route} reason={m.reason} packName={m.packName} />
-      )}
-      {!m.pending && (
+      {showTrace && <ProcessingTrace route={m.route} reason={m.reason} packName={m.packName} />}
+      {(isStreaming || !m.pending) && (
         <div className="space-y-3">
           {m.text && (
-            <div className="text-[14.5px] leading-[1.65] text-ink max-w-2xl">{m.text}</div>
+            <div className="text-[14.5px] leading-[1.65] text-ink max-w-2xl whitespace-pre-wrap">
+              {m.text}
+              {isStreaming && (
+                <span
+                  aria-hidden
+                  className="inline-block w-[2px] h-[1em] align-[-0.15em] ml-[1px] bg-ink animate-pulse"
+                />
+              )}
+            </div>
           )}
-          {m.suggestion && (
+          {!m.pending && m.provider && <ProviderBadge provider={m.provider} />}
+          {!m.pending && m.suggestion && (
             <SuggestionBlock
               packName={m.suggestion.matchedPackName}
               options={m.suggestion.options}
@@ -705,13 +755,27 @@ function AssistantBubble({
               onAction={onSuggestionAction}
             />
           )}
-          {m.recipes?.map((r) => (
-            <RecipeCard key={r.id} recipe={r} />
-          ))}
-          {m.pitch && <PitchCard pitch={m.pitch} />}
+          {!m.pending && m.recipes?.map((r) => <RecipeCard key={r.id} recipe={r} />)}
+          {!m.pending && m.pitch && <PitchCard pitch={m.pitch} />}
         </div>
       )}
     </div>
+  );
+}
+
+function ProviderBadge({ provider }: { provider: "webllm" | "gemini" }) {
+  // Subtle source label — primary accent for on-device, soft gray for
+  // cloud. Matches the dot-tone hierarchy used by SuggestionBlock so
+  // "기기 안" reads as the warmer, default state.
+  const isLocal = provider === "webllm";
+  return (
+    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft flex items-center gap-1.5">
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${isLocal ? "bg-primary" : "bg-ink-soft"}`}
+        aria-hidden
+      />
+      {isLocal ? "이 기기 안에서 응답" : "클라우드 응답"}
+    </p>
   );
 }
 
