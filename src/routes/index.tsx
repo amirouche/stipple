@@ -583,12 +583,15 @@ function ChatBody({
           </div>
         </div>
         {/* Mode indicator — small, subtle, but the only visual cue that the
-            AI is now answering in a different voice. */}
+            AI is now answering in a different voice. Voice + tone come from
+            the pack metadata; today they're cosmetic, but once WebLLM lands
+            they become the source of truth for the persona prompt. */}
         <div className="px-3 sm:px-8 md:px-12 pb-2 -mt-1 text-[11px] text-ink-soft">
           {activePack ? (
             <span>
-              <span className="text-ink">{activePack.name}</span> 모드 — 같은 질문도 이 톤으로
-              답해요
+              <span className="text-ink">{activePack.name}</span> 모드 ·{" "}
+              <span className="text-ink">{activePack.voice}</span> ·{" "}
+              <span className="opacity-80">{activePack.tone}</span>
             </span>
           ) : (
             <span>모드 없음 — 일반 DOTS 톤</span>

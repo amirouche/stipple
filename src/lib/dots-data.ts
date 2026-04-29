@@ -20,6 +20,16 @@ export type Pack = {
   short: string;
   behavior: string;
   triggers: string[];
+  // Persona label shown in UI (chat header, pack cards). Short noun phrase
+  // — "요리 전문가", "학습 코치". Today this is purely cosmetic, but the
+  // intent is that once WebLLM lands, voice + tone become the source of
+  // truth for the persona prompt and `systemPrompt` below is generated
+  // from them. Keep them aligned.
+  voice: string;
+  // One-line tone descriptor — answer shape, register, what to avoid.
+  // Mirrors the bullet points inside `systemPrompt` so the user sees the
+  // same promise the model is being given.
+  tone: string;
   // Injected into the AI's system prompt when this pack is the active mode.
   // Defines tone, answer shape, recommendation flow — not just a trigger label.
   systemPrompt: string;
@@ -54,6 +64,8 @@ export const PACKS: Pack[] = [
       "요리",
       "레시피",
     ],
+    voice: "요리 전문가",
+    tone: "짧고 실용적 — 재료·조리법·타이밍·팁 위주",
     systemPrompt: [
       "지금 당신은 요리 전문가 모드입니다.",
       "- 답변은 짧고 실용적으로. 재료, 조리법, 타이밍, 팁 위주로.",
@@ -73,6 +85,8 @@ export const PACKS: Pack[] = [
     short: "Adapts explanations to your current level.",
     behavior: "Breaks complex topics into a 3-layer scaffold and quizzes you instead of lecturing.",
     triggers: ["explain", "what is", "study", "homework", "설명", "공부", "뭐야"],
+    voice: "학습 코치",
+    tone: "단계적이고 차분 — 비유 → 예시 → 핵심 정리 3단계",
     systemPrompt: [
       "지금 당신은 학습 코치 모드입니다.",
       "- 답변은 단계적이고 차분하게. 톤은 침착함을 유지하세요.",
@@ -98,6 +112,8 @@ export const PACKS: Pack[] = [
     behavior:
       "Handles weather, schedule, and reminders from on-device memory without going to the cloud.",
     triggers: ["weather", "schedule", "today", "remind", "날씨", "오늘", "일정"],
+    voice: "아침 루틴 동반자",
+    tone: "짧고 부드러움 — 1~2 문장, 에너지는 끌어올리되 과하지 않게",
     systemPrompt: [
       "지금 당신은 아침 루틴 동반자 모드입니다.",
       "- 답변은 짧고 부드럽게. 에너지를 끌어올리는 톤이지만 과하지 않게.",
@@ -113,6 +129,8 @@ export const PACKS: Pack[] = [
     short: "Calm, opinionated editing for long-form writing.",
     behavior: "Suggests cuts before additions. Refuses to pad prose. Tracks your typical voice.",
     triggers: ["edit", "rewrite", "draft"],
+    voice: "글쓰기 편집자",
+    tone: "간결하고 단호 — 추가보다 삭제 먼저, 칭찬·아이스브레이커 없음",
     systemPrompt: [
       "지금 당신은 글쓰기 편집자 모드입니다.",
       "- 답변은 간결하고 단호하게. 칭찬·아이스브레이커는 빼세요.",
@@ -128,6 +146,8 @@ export const PACKS: Pack[] = [
     short: "Pairings tuned to what's actually in your kitchen.",
     behavior: "Combines pack heuristics with dormant memory of your past meals.",
     triggers: ["wine", "pair", "drink"],
+    voice: "와인 큐레이터",
+    tone: "감각적이지만 구체적 — 가격대·지역·페어링까지 좁혀서",
     systemPrompt: [
       "지금 당신은 와인 큐레이터 모드입니다.",
       "- 답변은 감각적이지만 구체적으로. 가격대·지역·페어링을 정확히 제시하세요.",
@@ -143,6 +163,8 @@ export const PACKS: Pack[] = [
     short: "Reviews diffs against your team's conventions.",
     behavior: "Loads your repo style as a local pack so reviews stay consistent.",
     triggers: ["review", "diff", "pr"],
+    voice: "시니어 엔지니어",
+    tone: "직설적이고 기술적 — 문제 → 개선 → 트레이드오프 순서",
     systemPrompt: [
       "지금 당신은 시니어 엔지니어 모드입니다.",
       "- 답변은 직설적이고 기술적으로. 과한 칭찬은 빼세요.",

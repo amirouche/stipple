@@ -10,8 +10,7 @@ export const Route = createFileRoute("/packs")({
       { title: "팩 — DOTS" },
       {
         name: "description",
-        content:
-          "DOTS의 팩을 둘러보세요. 각 팩은 같은 모델의 행동을 한 영역에서 다르게 바꿉니다.",
+        content: "DOTS의 팩을 둘러보세요. 각 팩은 같은 모델의 행동을 한 영역에서 다르게 바꿉니다.",
       },
     ],
   }),
@@ -50,13 +49,10 @@ function PacksPage() {
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
   });
 
-  const visible =
-    filter === "전체" ? ordered : ordered.filter((p) => p.category === filter);
+  const visible = filter === "전체" ? ordered : ordered.filter((p) => p.category === filter);
 
   function toggleInstall(id: string) {
-    setPacks((ps) =>
-      ps.map((p) => (p.id === id ? { ...p, installed: !p.installed } : p))
-    );
+    setPacks((ps) => ps.map((p) => (p.id === id ? { ...p, installed: !p.installed } : p)));
   }
   function togglePause(id: string) {
     setPaused((s) => {
@@ -74,12 +70,9 @@ function PacksPage() {
           <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft">
             팩 라이브러리
           </p>
-          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-ink">
-            팩
-          </h1>
+          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-ink">팩</h1>
           <p className="mt-2 text-[14px] text-ink-soft max-w-xl">
-            팩은 작은 실행 단위. DOTS가 같은 질문을 어떻게 해석하고
-            정리해줄지 한 영역에서 바꿔.
+            팩은 작은 실행 단위. DOTS가 같은 질문을 어떻게 해석하고 정리해줄지 한 영역에서 바꿔.
           </p>
 
           <div className="mt-6 flex gap-1">
@@ -93,7 +86,7 @@ function PacksPage() {
                     : "text-ink-soft hover:text-ink hover:bg-surface-2"
                 }`}
               >
-                {c === "전체" ? c : CATEGORY_KO[c as Pack["category"]] ?? c}
+                {c === "전체" ? c : (CATEGORY_KO[c as Pack["category"]] ?? c)}
               </button>
             ))}
           </div>
@@ -115,12 +108,11 @@ function PacksPage() {
                     </span>
                     <StateBadge installed={installed} active={active} />
                   </div>
-                  <h3 className="text-[16px] font-semibold tracking-tight text-ink">
-                    {p.name}
-                  </h3>
-                  <p className="mt-1.5 text-[13px] text-ink-soft leading-relaxed">
-                    {p.short}
+                  <h3 className="text-[16px] font-semibold tracking-tight text-ink">{p.name}</h3>
+                  <p className="mt-1 text-[12px] text-ink-soft">
+                    <span className="text-ink">{p.voice}</span> · {p.tone}
                   </p>
+                  <p className="mt-2 text-[13px] text-ink-soft leading-relaxed">{p.short}</p>
 
                   {/* One-line behavior — the headline change */}
                   <div className="mt-3 px-3 py-2 rounded-md bg-surface border border-border">
@@ -133,9 +125,7 @@ function PacksPage() {
                     <summary className="cursor-pointer text-[11px] font-mono uppercase tracking-[0.14em] text-ink-soft hover:text-ink list-none">
                       더 자세히
                     </summary>
-                    <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">
-                      {p.behavior}
-                    </p>
+                    <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">{p.behavior}</p>
                   </details>
 
                   <div className="mt-5 flex items-center gap-2">
