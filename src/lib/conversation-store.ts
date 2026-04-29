@@ -5,11 +5,19 @@
 
 import { useSyncExternalStore } from "react";
 import type { ConversationState } from "@/lib/conversation-engine";
-import type { PackRecipe, Route as RouteType } from "@/lib/dots-data";
+import type { PackRecipe, Route as RouteType, SuggestionOption } from "@/lib/dots-data";
 import type { Pitch } from "@/lib/pitch/types";
 import { captureFromMessage } from "@/lib/memory";
 
 export type ThreadTheme = "cooking" | "study" | "routine" | "open";
+
+// On-device pack-content match attached to an assistant message. Presence
+// of this field is the signal to the UI that the response was produced
+// without calling Gemini — it should render buttons instead of free text.
+export type ThreadSuggestion = {
+  matchedPackName: string;
+  options: SuggestionOption[];
+};
 
 export type ThreadMsg =
   | { id: string; role: "user"; text: string }
@@ -24,6 +32,7 @@ export type ThreadMsg =
       reason: string;
       packName?: string;
       pending?: boolean;
+      suggestion?: ThreadSuggestion;
     };
 
 export type Thread = {

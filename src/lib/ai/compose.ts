@@ -80,6 +80,8 @@ function attachPitch(payload: AnswerPayload, query: string): AnswerPayload {
   // attach it next to the answer the model already produced.
   const prefs = getPreferences();
   if (!prefs.pitch.enabled || prefs.pitch.categories.length === 0) return payload;
+  // pack-suggestion is the on-device choice surface — no pitch overlay.
+  if (payload.kind === "pack-suggestion") return payload;
   const pitch = matchPitch({
     query,
     topics: extractTopics(query),

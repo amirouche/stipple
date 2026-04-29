@@ -8,7 +8,9 @@ import type { Pitch } from "@/lib/pitch/types";
 // `src/lib/packs/<pack>/...`; the pack only carries pointers so dots-data.ts
 // stays a flat catalog and doesn't transitively pull every pack's data into
 // every consumer.
-export type PackContentRef = { kind: "sat-math"; problemId: string };
+export type PackContentRef =
+  | { kind: "sat-math"; problemId: string }
+  | { kind: "cooking-recipe"; recipeId: string };
 
 export type Pack = {
   id: string;
@@ -53,6 +55,10 @@ export const PACKS: Pack[] = [
       "- 음식 추천 흐름으로 자연스럽게 끌어가세요. 사용자가 음식 얘기를 안 해도, 식사 시간대(아침·점심·저녁)면 자연스럽게 음식 화제로 연결하세요.",
       "- 모호한 질문도 음식·식사·장보기 관점으로 다시 풀어서 답하세요.",
     ].join("\n"),
+    contents: [
+      { kind: "cooking-recipe", recipeId: "baek-kimchi-jjigae" },
+      { kind: "cooking-recipe", recipeId: "tuna-kimchi-jjigae" },
+    ],
   },
   {
     id: "study-companion",
@@ -348,10 +354,25 @@ function pickGreeting(): string {
 // Answer composition — varied, local-first, no fixed fallback.
 // ---------------------------------------------------------------------------
 
+// One-click action attached to a pack-suggestion. The whole point of the
+// suggestion is to offer the user a no-LLM path (open the folder, render
+// the matched recipe inline) plus a single explicit "fall back to LLM"
+// choice — so the model isn't called speculatively.
+export type SuggestionOption =
+  | { kind: "open-folder"; label: string; target: string }
+  | { kind: "show-recipe"; label: string; recipeId: string }
+  | { kind: "llm-call"; label: string; prompt: string };
+
 export type AnswerPayload =
   | { kind: "text"; text: string; pitch?: Pitch }
   | { kind: "recipe"; recipeId: string; intro?: string; pitch?: Pitch }
-  | { kind: "memory-recipes"; recipeIds: string[]; intro: string; pitch?: Pitch };
+  | { kind: "memory-recipes"; recipeIds: string[]; intro: string; pitch?: Pitch }
+  | {
+      kind: "pack-suggestion";
+      text: string;
+      options: SuggestionOption[];
+      matchedPackName: string;
+    };
 
 export function answerFor(query: string, pack?: Pack, route?: Route): AnswerPayload {
   const q = query.toLowerCase();

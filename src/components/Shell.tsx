@@ -3,6 +3,7 @@ import { ReactNode, createContext, useContext, useState } from "react";
 import {
   createThread,
   selectThread,
+  themePackId,
   useConversationStore,
   type ThreadTheme,
 } from "@/lib/conversation-store";
@@ -61,6 +62,12 @@ export function Shell({ children }: { children?: ReactNode }) {
     .slice(0, 6);
 
   const onChat = loc.pathname === "/";
+  // The active thread's mode is the source of truth for which themed entry
+  // is highlighted — same signal the chat header reads. Using thread-id
+  // alone drifted from the header whenever the user switched packs inside
+  // an existing thread (e.g. study-mode in a cooking-themed thread).
+  const activeThread = threads.find((t) => t.id === activeId);
+  const activeMode = activeThread?.lastPackId;
 
   function openThread(id: string) {
     selectThread(id);
@@ -115,8 +122,21 @@ export function Shell({ children }: { children?: ReactNode }) {
               // folder lets you pick a problem before any chatting happens.
               const isStudyFolder = theme.id === "study";
               const onStudy = isStudyFolder && loc.pathname === "/study";
-              const active =
-                onStudy || (!isStudyFolder && onChat && thread && thread.id === activeId);
+              const themePack = themePackId(theme.id);
+              // Highlight rule, mirroring the chat header:
+              //   1) on /study and this is the study entry → active
+              //   2) on chat with a mode set → entry whose pack matches that mode wins
+              //   3) on chat with NO mode set → entry whose pinned thread is active wins (open theme catches the rest)
+              let active = false;
+              if (isStudyFolder && onStudy) {
+                active = true;
+              } else if (onChat && activeThread) {
+                if (activeMode && themePack) {
+                  active = activeMode === themePack;
+                } else if (!activeMode) {
+                  active = Boolean(thread && thread.id === activeId);
+                }
+              }
               return (
                 <li key={theme.id}>
                   <button

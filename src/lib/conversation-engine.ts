@@ -79,7 +79,10 @@ const RECENT_MAX = 6;
 function payloadLine(p: AnswerPayload): string {
   if (p.kind === "text") return p.text;
   if (p.kind === "memory-recipes") return p.intro;
-  return p.intro ?? `recipe:${p.recipeId}`;
+  if (p.kind === "recipe") return p.intro ?? `recipe:${p.recipeId}`;
+  // pack-suggestion never flows through the engine's anti-repeat path;
+  // guard for type completeness.
+  return p.text;
 }
 
 function rememberLine(line: string) {

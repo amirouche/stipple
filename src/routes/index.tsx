@@ -10,6 +10,7 @@ import {
   type Pack,
   type PackRecipe,
   type Route as RouteType,
+  type SuggestionOption,
 } from "@/lib/dots-data";
 import { step } from "@/lib/conversation-engine";
 import {
@@ -26,6 +27,7 @@ import {
 import { usePreferences } from "@/lib/preferences";
 import { buildContinuations, type ContinueCard } from "@/lib/continuations";
 import { composeAnswer } from "@/lib/ai/compose";
+import { matchPackContent, buildPackSuggestion } from "@/lib/packs/match";
 import type { AnswerPayload } from "@/lib/dots-data";
 
 export const Route = createFileRoute("/")({
@@ -133,6 +135,7 @@ function ChatPage() {
     const renderPayload = (payload: AnswerPayload) => {
       let body = "";
       let recipes: PackRecipe[] | undefined;
+      let suggestion: { matchedPackName: string; options: SuggestionOption[] } | undefined;
       if (payload.kind === "text") {
         body = payload.text;
       } else if (payload.kind === "recipe") {
@@ -145,12 +148,19 @@ function ChatPage() {
           .map((id) => getCookingRecipe(id))
           .filter((r): r is PackRecipe => Boolean(r));
         body = payload.intro;
+      } else if (payload.kind === "pack-suggestion") {
+        body = payload.text;
+        suggestion = {
+          matchedPackName: payload.matchedPackName,
+          options: payload.options,
+        };
       }
       patchMessage(thread.id, asstId, {
         pending: false,
         text: body,
         recipes,
-        pitch: payload.pitch,
+        pitch: payload.kind === "pack-suggestion" ? undefined : payload.pitch,
+        suggestion,
       });
       setBusy(false);
       requestAnimationFrame(() => {
@@ -167,6 +177,21 @@ function ChatPage() {
       return;
     }
 
+    // On-device content match. Skip for follow-ups (engine already produced
+    // a specific in-pack response that should pass through to composeAnswer
+    // for the intro). For everything else, if a match exists we render the
+    // suggestion bubble and never call Gemini.
+    if (result.intent !== "follow_up") {
+      const matched = matchPackContent(text, installed, activePack?.id);
+      if (matched) {
+        const payload = buildPackSuggestion(matched);
+        // Tiny delay so the pending bubble flashes briefly — feels like
+        // local lookup work, not an instant magic answer.
+        setTimeout(() => renderPayload(payload), 300);
+        return;
+      }
+    }
+
     // Everything else: try Gemini with memory context, fall back to the
     // canned answerFor() payload on failure.
     composeAnswer({
@@ -175,6 +200,78 @@ function ChatPage() {
       lookup: result.lookup,
       fallback: result.payload,
     }).then(renderPayload);
+  }
+
+  // Suggestion buttons — invoked from rendered messages. Each option is one
+  // explicit user choice: open the folder, show a recipe inline (no LLM),
+  // or call the LLM with a tailored prompt. Adds new assistant messages
+  // rather than mutating the suggestion bubble so the conversation keeps
+  // a clean trail.
+  function onSuggestionAction(option: SuggestionOption) {
+    if (!thread) return;
+    if (option.kind === "open-folder") {
+      navigate({ to: option.target });
+      return;
+    }
+    if (option.kind === "show-recipe") {
+      const r = getCookingRecipe(option.recipeId);
+      if (!r) return;
+      const id = crypto.randomUUID();
+      appendMessage(thread.id, {
+        id,
+        role: "assistant",
+        route: "local",
+        state: "found_local",
+        reason: "",
+        packName: activePackName(thread.lastPackId),
+        pending: false,
+        recipes: [r],
+      });
+      markRecipeServed(thread.id, r.id);
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({
+          top: scrollRef.current?.scrollHeight ?? 0,
+          behavior: "smooth",
+        });
+      });
+      return;
+    }
+    if (option.kind === "llm-call") {
+      const activePack = installed.find((p) => p.id === thread.lastPackId);
+      const id = crypto.randomUUID();
+      appendMessage(thread.id, {
+        id,
+        role: "assistant",
+        route: "deep",
+        state: "checking_external",
+        reason: "클라우드로 보낼게.",
+        packName: activePack?.name,
+        pending: true,
+      });
+      setBusy(true);
+      composeAnswer({
+        query: option.prompt,
+        pack: activePack,
+        fallback: { kind: "text", text: "지금은 응답을 가져오지 못했어." },
+      })
+        .then((payload) => {
+          const body = payload.kind === "text" ? payload.text : "";
+          patchMessage(thread.id, id, { pending: false, text: body });
+          setBusy(false);
+          requestAnimationFrame(() => {
+            scrollRef.current?.scrollTo({
+              top: scrollRef.current?.scrollHeight ?? 0,
+              behavior: "smooth",
+            });
+          });
+        })
+        .catch(() => setBusy(false));
+    }
+  }
+
+  function activePackName(packId?: string): string | undefined {
+    if (!packId) return undefined;
+    return installed.find((p) => p.id === packId)?.name;
   }
 
   if (!thread) return null;
@@ -211,6 +308,7 @@ function ChatPage() {
         setInput={setInput}
         busy={busy}
         send={send}
+        onSuggestionAction={onSuggestionAction}
         onPackJump={(packId) => {
           const themed = threads.find((t) => t.pinned && t.lastPackId === packId);
           if (themed) selectThread(themed.id);
@@ -232,6 +330,7 @@ function ChatBody({
   setInput,
   busy,
   send,
+  onSuggestionAction,
   onPackJump,
 }: {
   threadId: string;
@@ -245,6 +344,7 @@ function ChatBody({
   setInput: (v: string) => void;
   busy: boolean;
   send: (text: string) => void;
+  onSuggestionAction: (option: SuggestionOption) => void;
   onPackJump: (packId: string) => void;
 }) {
   const shell = useShell();
@@ -326,7 +426,7 @@ function ChatBody({
                 </div>
               </div>
             ) : (
-              <AssistantBubble key={m.id} m={m} />
+              <AssistantBubble key={m.id} m={m} onSuggestionAction={onSuggestionAction} />
             ),
           )}
         </div>
@@ -369,7 +469,13 @@ function ChatBody({
   );
 }
 
-function AssistantBubble({ m }: { m: Extract<ThreadMsg, { role: "assistant" }> }) {
+function AssistantBubble({
+  m,
+  onSuggestionAction,
+}: {
+  m: Extract<ThreadMsg, { role: "assistant" }>;
+  onSuggestionAction: (option: SuggestionOption) => void;
+}) {
   return (
     <div className="space-y-3 fade-in">
       {(m.pending || m.route === "deep") && (
@@ -380,12 +486,62 @@ function AssistantBubble({ m }: { m: Extract<ThreadMsg, { role: "assistant" }> }
           {m.text && (
             <div className="text-[14.5px] leading-[1.65] text-ink max-w-2xl">{m.text}</div>
           )}
+          {m.suggestion && (
+            <SuggestionBlock
+              packName={m.suggestion.matchedPackName}
+              options={m.suggestion.options}
+              onAction={onSuggestionAction}
+            />
+          )}
           {m.recipes?.map((r) => (
             <RecipeCard key={r.id} recipe={r} />
           ))}
           {m.pitch && <PitchCard pitch={m.pitch} />}
         </div>
       )}
+    </div>
+  );
+}
+
+function SuggestionBlock({
+  packName,
+  options,
+  onAction,
+}: {
+  packName: string;
+  options: SuggestionOption[];
+  onAction: (option: SuggestionOption) => void;
+}) {
+  return (
+    <div className="max-w-2xl">
+      <div className="flex flex-wrap gap-2">
+        {options.map((o, idx) => {
+          const isLlm = o.kind === "llm-call";
+          return (
+            <button
+              key={`${o.kind}-${idx}`}
+              onClick={() => onAction(o)}
+              className={`h-9 px-3.5 rounded-full text-[12.5px] font-medium transition-colors ${
+                isLlm
+                  ? "border border-border text-ink-soft hover:text-ink hover:bg-surface-2"
+                  : "bg-ink text-background hover:opacity-90"
+              }`}
+              title={isLlm ? "이 옵션은 클라우드 호출이 들어가" : "이 기기 안에서 처리"}
+            >
+              {o.label}
+              {isLlm && (
+                <span className="ml-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] opacity-70">
+                  cloud
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+        {packName}에서 매칭됨 · 이 기기 안에서
+      </div>
     </div>
   );
 }
