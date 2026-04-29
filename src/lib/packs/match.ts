@@ -180,7 +180,21 @@ function buildSATMathSuggestion(result: PackMatchResult): {
     {
       kind: "llm-call",
       label: "새 문제 받을래",
-      prompt: "SAT 수학 문제 하나 새로 만들어줘. 보기 4개와 정답 표시, 짧은 풀이까지 포함해서.",
+      // systemPrompt overrides whatever pack persona the thread is in. SAT
+      // math under a cooking persona would just make Gemini refuse.
+      systemPrompt:
+        "당신은 SAT 수학 튜터입니다. 한국어로 친절하지만 간결하게 답하세요. 사용자가 요청한 형식을 정확히 지키세요.",
+      prompt: [
+        "SAT 수학 객관식 문제 1개를 새로 만들어 주세요. 다음 형식을 정확히 지켜주세요.",
+        "",
+        "문제: [한 두 문장의 문제]",
+        "① [보기 1]",
+        "② [보기 2]",
+        "③ [보기 3]",
+        "④ [보기 4]",
+        "정답: [번호]",
+        "풀이: [두세 줄의 짧은 풀이]",
+      ].join("\n"),
     },
   ];
 

@@ -27,8 +27,38 @@ import {
 import { usePreferences } from "@/lib/preferences";
 import { buildContinuations, type ContinueCard } from "@/lib/continuations";
 import { composeAnswer } from "@/lib/ai/compose";
+import { askGemini } from "@/lib/ai/gemini";
 import { matchPackContent, buildPackSuggestion } from "@/lib/packs/match";
 import type { AnswerPayload } from "@/lib/dots-data";
+
+// Words that mean "give me another / something else / please do it" — when
+// the previous assistant message is a pack-suggestion and the user's next
+// input contains one of these, treat it as a follow-up choice (LLM direct)
+// rather than re-running the matcher and showing the same suggestion again.
+const FOLLOWUP_ACTION_PATTERNS = [
+  "새 문",
+  "새문",
+  "새거",
+  "새 거",
+  "다른 거",
+  "다른거",
+  "다음 거",
+  "다음거",
+  "받아줘",
+  "받아 줘",
+  "부탁",
+  "또 ",
+  "또?",
+  "또요",
+  "더 줘",
+  "더 만들",
+  "추가",
+];
+
+function hasFollowUpIntent(input: string): boolean {
+  const q = input.toLowerCase();
+  return FOLLOWUP_ACTION_PATTERNS.some((p) => q.includes(p));
+}
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -84,7 +114,20 @@ function ChatPage() {
     // sees a fallback line ("이건 안에서는 안 잡혀…") flash before the
     // suggestion. So when a match hits we skip the engine entirely and
     // render the user msg + final suggestion msg in one step.
-    const matched = matchPackContent(text, installed, activePack?.id);
+    //
+    // Skip the matcher when the previous assistant turn was a suggestion
+    // AND this input has a follow-up action word ("새 문제", "또 부탁",
+    // …). Re-matching on those would just show the same suggestion card
+    // again. The exception preserved by design: typing the topic word
+    // alone ("수학") still re-triggers a fresh match.
+    const lastAsst = [...thread.messages]
+      .reverse()
+      .find((m): m is Extract<ThreadMsg, { role: "assistant" }> => m.role === "assistant");
+    const justSawSuggestion = Boolean(lastAsst?.suggestion);
+    const matched =
+      justSawSuggestion && hasFollowUpIntent(text)
+        ? null
+        : matchPackContent(text, installed, activePack?.id);
     if (matched) {
       const userId = crypto.randomUUID();
       const asstId = crypto.randomUUID();
@@ -242,27 +285,49 @@ function ChatPage() {
         route: "deep",
         state: "checking_external",
         reason: "클라우드로 보낼게.",
-        packName: activePack?.name,
+        packName: option.systemPrompt ? "SAT 수학 튜터" : activePack?.name,
         pending: true,
       });
       setBusy(true);
-      composeAnswer({
-        query: option.prompt,
-        pack: activePack,
-        fallback: { kind: "text", text: "지금은 응답을 가져오지 못했어." },
-      })
-        .then((payload) => {
-          const body = payload.kind === "text" ? payload.text : "";
-          patchMessage(thread.id, id, { pending: false, text: body });
-          setBusy(false);
-          requestAnimationFrame(() => {
-            scrollRef.current?.scrollTo({
-              top: scrollRef.current?.scrollHeight ?? 0,
-              behavior: "smooth",
-            });
+
+      const onDone = (text: string) => {
+        patchMessage(thread.id, id, { pending: false, text });
+        setBusy(false);
+        requestAnimationFrame(() => {
+          scrollRef.current?.scrollTo({
+            top: scrollRef.current?.scrollHeight ?? 0,
+            behavior: "smooth",
           });
+        });
+      };
+      const onFail = (err: unknown) => {
+        console.error("[suggestion llm-call] failed:", err);
+        const msg = err instanceof Error ? err.message : String(err);
+        onDone(`(클라우드 호출 실패: ${msg})`);
+      };
+
+      // Two paths:
+      //  - With option.systemPrompt: bypass composeAnswer entirely so the
+      //    matched-pack persona (e.g. SAT 수학 튜터) can override the
+      //    chat thread's active mode. Without this override the cooking
+      //    persona refuses SAT math requests.
+      //  - Without: keep the active-pack injection from composeAnswer so
+      //    "다른 음식" stays in cooking voice.
+      if (option.systemPrompt) {
+        askGemini({
+          data: { userMessage: option.prompt, systemPrompt: option.systemPrompt },
         })
-        .catch(() => setBusy(false));
+          .then((res) => onDone(res.text))
+          .catch(onFail);
+      } else {
+        composeAnswer({
+          query: option.prompt,
+          pack: activePack,
+          fallback: { kind: "text", text: "지금은 응답을 가져오지 못했어." },
+        })
+          .then((payload) => onDone(payload.kind === "text" ? payload.text : ""))
+          .catch(onFail);
+      }
     }
   }
 

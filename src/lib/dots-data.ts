@@ -358,10 +358,15 @@ function pickGreeting(): string {
 // suggestion is to offer the user a no-LLM path (open the folder, render
 // the matched recipe inline) plus a single explicit "fall back to LLM"
 // choice — so the model isn't called speculatively.
+//
+// llm-call carries an optional systemPrompt so the matched pack (e.g. SAT
+// 수학 튜터 페르소나) can override the chat thread's active-pack persona.
+// Without this, asking for SAT math while the thread is in cooking mode
+// makes the cooking persona refuse or drift off-task.
 export type SuggestionOption =
   | { kind: "open-folder"; label: string; target: string }
   | { kind: "show-recipe"; label: string; recipeId: string }
-  | { kind: "llm-call"; label: string; prompt: string };
+  | { kind: "llm-call"; label: string; prompt: string; systemPrompt?: string };
 
 export type AnswerPayload =
   | { kind: "text"; text: string; pitch?: Pitch }
