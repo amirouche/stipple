@@ -117,7 +117,16 @@ function lower(s: string): string {
   return s.toLowerCase();
 }
 
-function scoreSATMath(q: string, problem: SATMathProblem): number {
+// Two scoring modes:
+//   "strict" — matchPackContent. Generic-only inputs ("맛집 추천") gate
+//              to 0 so we don't surface a SuggestionBlock from a single
+//              broad word.
+//   "soft"   — inferDomainPack. Generic-only is enough to lean toward a
+//              pack, because all we're doing is hinting voice/tone for
+//              the LLM. "메뉴 추천" leans cooking; we want that.
+type ScoreMode = "strict" | "soft";
+
+function scoreSATMath(q: string, problem: SATMathProblem, mode: ScoreMode): number {
   let specific = 0;
   let domain = 0;
   let generic = 0;
@@ -139,14 +148,11 @@ function scoreSATMath(q: string, problem: SATMathProblem): number {
       break;
     }
   }
-  // Gate: must have a specific (per-problem) or domain keyword. Generic-
-  // only ("사회문제" → only "문제" matches GENERIC) → 0, lets the input
-  // fall through to store search instead of mis-matching SAT math.
-  if (specific === 0 && domain === 0) return 0;
+  if (mode === "strict" && specific === 0 && domain === 0) return 0;
   return specific + domain + generic;
 }
 
-function scoreCookingRecipe(q: string, recipe: PackRecipe): number {
+function scoreCookingRecipe(q: string, recipe: PackRecipe, mode: ScoreMode): number {
   let specific = 0;
   let domain = 0;
   let generic = 0;
@@ -171,10 +177,7 @@ function scoreCookingRecipe(q: string, recipe: PackRecipe): number {
       break;
     }
   }
-  // Gate: same shape as scoreSATMath. Generic-only ("맛집 추천" → only
-  // "맛" + "추천" GENERIC, no DOMAIN) returns 0 so the input falls through
-  // to store search / Stage 3. "양자역학" → 0 across the board → 0.
-  if (specific === 0 && domain === 0) return 0;
+  if (mode === "strict" && specific === 0 && domain === 0) return 0;
   return specific + domain + generic;
 }
 
@@ -187,12 +190,13 @@ type Candidate = {
 
 // Shared scoring loop. Builds candidates with non-zero scores; sorts so
 // the active pack wins ties, then highest-score wins. Both
-// matchPackContent and inferDomainPack use this — same scoring, different
-// thresholds.
+// matchPackContent and inferDomainPack use this — same scoring different
+// modes (strict gates generic-only to 0; soft keeps it).
 function scoreCandidates(
   query: string,
   installedPacks: Pack[],
-  activePackId?: string,
+  activePackId: string | undefined,
+  mode: ScoreMode,
 ): Candidate[] {
   const q = lower(query);
   const candidates: Candidate[] = [];
@@ -204,12 +208,12 @@ function scoreCandidates(
       if (ref.kind === "sat-math") {
         const problem = getSATMathProblem(ref.problemId);
         if (!problem) continue;
-        const score = scoreSATMath(q, problem);
+        const score = scoreSATMath(q, problem, mode);
         if (score > 0) matches.push({ kind: "sat-math", problem, score });
       } else if (ref.kind === "cooking-recipe") {
         const recipe = COOKING_RECIPES.find((r) => r.id === ref.recipeId);
         if (!recipe) continue;
-        const score = scoreCookingRecipe(q, recipe);
+        const score = scoreCookingRecipe(q, recipe, mode);
         if (score > 0) matches.push({ kind: "cooking-recipe", recipe, score });
       }
     }
@@ -218,7 +222,7 @@ function scoreCandidates(
     // counts toward "Study에 N문제 있어".
     if (pack.id === "study-companion") {
       for (const problem of getUserSATProblems()) {
-        const score = scoreSATMath(q, problem);
+        const score = scoreSATMath(q, problem, mode);
         if (score > 0) matches.push({ kind: "sat-math", problem, score });
       }
     }
@@ -246,7 +250,7 @@ export function matchPackContent(
   installedPacks: Pack[],
   activePackId?: string,
 ): PackMatchResult | null {
-  const candidates = scoreCandidates(query, installedPacks, activePackId);
+  const candidates = scoreCandidates(query, installedPacks, activePackId, "strict");
   if (candidates.length === 0) return null;
 
   const winner = candidates[0];
@@ -283,7 +287,11 @@ export function inferDomainPack(
   installedPacks: Pack[],
   activePackId?: string,
 ): Pack | undefined {
-  const candidates = scoreCandidates(query, installedPacks, activePackId);
+  // Soft mode: generic-only inputs ("메뉴 추천" → only "추천" GENERIC)
+  // count as cooking-leaning even though matchPackContent would gate
+  // them to 0. The point is to give the LLM a voice/tone hint, not to
+  // surface a card.
+  const candidates = scoreCandidates(query, installedPacks, activePackId, "soft");
   return candidates[0]?.pack;
 }
 

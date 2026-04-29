@@ -107,7 +107,11 @@ function buildSystemPrompt(
   if (pack?.voice && pack.tone) {
     sections.push([`너는 "${pack.voice}"로서 사용자에게 답한다.`, `톤: ${pack.tone}`].join("\n"));
   }
-  if (pack && hasRecommendationIntent(userMessage)) {
+  // Recommendation discipline applies whenever the intent is detected,
+  // pack or not — "도시 추천" without a matching pack still benefits
+  // from "한 가지 구체적 제안 + 짧은 이유" framing. Voice/tone (above)
+  // is what changes when a pack is around; the discipline is universal.
+  if (hasRecommendationIntent(userMessage)) {
     sections.push(RECOMMENDATION_DISCIPLINE);
   }
   if (systemPrompt) {
