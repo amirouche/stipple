@@ -69,6 +69,11 @@ function RootShell({ children }: { children: React.ReactNode }) {
     checkWakeAlarms();
     registerWakeScheduler();
     void hydratePitchCache();
+    // Try to wake the WebLLM engine if a previous session left a cached
+    // model. Lazy-imported so the 6MB+ webllm runtime doesn't land in
+    // the eager root bundle — it only loads when this branch executes
+    // (client-side, post-hydration). Silent on failure.
+    void import("@/lib/webllm").then((m) => m.tryAutoReloadWebLLM());
     if (import.meta.env.DEV) {
       void import("@/lib/memory/debug").then((m) => m.setupDebugHandle());
     }

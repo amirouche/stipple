@@ -12,12 +12,41 @@
 // points; both are thin wrappers around engine.ts that also keep the
 // status store in sync so the UI sees state transitions.
 
-import type { ChatCompletionMessageParam } from "@mlc-ai/web-llm";
+import { hasModelInCache, type ChatCompletionMessageParam } from "@mlc-ai/web-llm";
 
+import { getPreferences } from "@/lib/preferences";
 import { checkWebGPUSupport } from "./compat";
 import { createWebLLMEngine, generateChat } from "./engine";
 import { getEngineRef, getStatusSnapshot, setEngineRef, setStatus } from "./store";
 import type { WebLLMModelId } from "./types";
+
+// Last successfully-loaded model id, persisted to localStorage so a fresh
+// page load can auto-reload from IndexedDB cache without re-downloading
+// 1.8GB. CONSTITUTION (수정):
+// - 첫 다운로드는 사용자 명시 클릭 (1.8GB 비용 인지)
+// - 그 후 자동 reload (캐시에서 5-10초)
+// - 한 번 가치 결정 = 영구 적용. 사용자가 매번 클릭 X.
+const LAST_MODEL_KEY = "dots:last-active-webllm-model";
+
+function readLastModel(): WebLLMModelId | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const v = localStorage.getItem(LAST_MODEL_KEY);
+    return v ? (v as WebLLMModelId) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistLastModel(modelId: WebLLMModelId | null): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (modelId) localStorage.setItem(LAST_MODEL_KEY, modelId);
+    else localStorage.removeItem(LAST_MODEL_KEY);
+  } catch {
+    // Storage failures are non-fatal; just lose auto-reload for this session.
+  }
+}
 
 export type { WebLLMModelId, WebLLMStatus, WebLLMProgress } from "./types";
 export type { ModelInfo } from "./config";
@@ -61,6 +90,10 @@ export async function downloadAndInitModel(modelId: WebLLMModelId): Promise<void
     });
     setEngineRef(engine);
     setStatus(() => ({ state: "ready", model: modelId }));
+    // Remember this model for the next page load. tryAutoReloadWebLLM()
+    // reads this back and skips the download dialog when the cache is
+    // still warm.
+    persistLastModel(modelId);
   } catch (e) {
     setEngineRef(null);
     setStatus(() => ({
@@ -69,6 +102,55 @@ export async function downloadAndInitModel(modelId: WebLLMModelId): Promise<void
       error: String(e),
     }));
     throw e;
+  }
+}
+
+// Quietly reload the last-used model on page mount when the cache is
+// still warm. Failures are silent — the user lands in idle and the
+// existing webllm-first → Gemini fallback keeps the chat working.
+//
+// Skipped when:
+//   - LLMProvider is "gemini-only" (user opted out of WebLLM)
+//   - WebGPU is unavailable (no point reloading)
+//   - No previous model id stored (this is a first-time visitor)
+//   - hasModelInCache returns false (user cleared site data)
+//   - An engine is already loading or ready (StrictMode double-mount,
+//     subsequent navigations)
+export async function tryAutoReloadWebLLM(): Promise<void> {
+  const current = getStatusSnapshot();
+  if (current.state === "loading" || current.state === "ready" || current.state === "generating") {
+    return;
+  }
+
+  const provider = getPreferences().llmProvider;
+  if (provider === "gemini-only") return;
+
+  const modelId = readLastModel();
+  if (!modelId) return;
+
+  const support = await checkWebGPUSupport();
+  if (!support.supported) return;
+
+  try {
+    const cached = await hasModelInCache(modelId);
+    if (!cached) {
+      // Cache evicted or never finished. Drop the stale pointer so we
+      // don't keep checking on every load.
+      persistLastModel(null);
+      return;
+    }
+  } catch {
+    // hasModelInCache itself can throw on private-mode browsers etc.
+    // Just bail silently.
+    return;
+  }
+
+  try {
+    await downloadAndInitModel(modelId);
+  } catch (err) {
+    // downloadAndInitModel already set status to "error". The user can
+    // still chat (Gemini fallback) and re-trigger from settings.
+    console.warn("[webllm] auto-reload failed:", err);
   }
 }
 
