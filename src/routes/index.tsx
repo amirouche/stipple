@@ -70,6 +70,53 @@ function ChatPage() {
   function send(text: string) {
     if (!text.trim() || busy || !thread) return;
 
+    const activePack = installed.find((p) => p.id === thread.lastPackId);
+    const scrollDown = () =>
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({
+          top: scrollRef.current?.scrollHeight ?? 0,
+          behavior: "smooth",
+        });
+      });
+
+    // ---- On-device match: runs FIRST, before the engine and before any
+    // pending bubble. The whole "이 기기 안에서" promise breaks if the user
+    // sees a fallback line ("이건 안에서는 안 잡혀…") flash before the
+    // suggestion. So when a match hits we skip the engine entirely and
+    // render the user msg + final suggestion msg in one step.
+    const matched = matchPackContent(text, installed, activePack?.id);
+    if (matched) {
+      const userId = crypto.randomUUID();
+      const asstId = crypto.randomUUID();
+      const payload = buildPackSuggestion(matched);
+      const sugText = payload.kind === "pack-suggestion" ? payload.text : "";
+      const sugData =
+        payload.kind === "pack-suggestion"
+          ? { matchedPackName: payload.matchedPackName, options: payload.options }
+          : undefined;
+
+      appendMessage(thread.id, { id: userId, role: "user", text });
+      renameThreadIfDefault(thread.id, text);
+      appendMessage(thread.id, {
+        id: asstId,
+        role: "assistant",
+        route: "local",
+        state: "found_local",
+        reason: "",
+        packName: matched.pack.name,
+        pending: false,
+        text: sugText,
+        suggestion: sugData,
+      });
+      // No setThreadPack here — typing "수학" in a cooking thread should
+      // surface the Study match without flipping the thread's mode out
+      // from under the user.
+      setInput("");
+      scrollDown();
+      return;
+    }
+
+    // ---- No match: existing engine + composeAnswer flow ----
     const userId = crypto.randomUUID();
     const asstId = crypto.randomUUID();
 
@@ -84,7 +131,6 @@ function ChatPage() {
           ? "memory"
           : "local";
 
-    // Move thread updates eagerly.
     appendMessage(thread.id, { id: userId, role: "user", text });
     renameThreadIfDefault(thread.id, text);
     appendMessage(thread.id, {
@@ -99,11 +145,9 @@ function ChatPage() {
 
     if (result.pack) setThreadPack(thread.id, result.pack.id);
 
-    // The user-selected mode (thread.lastPackId, set by clicking a pack pill)
-    // wins over the trigger-detected pack — that's what makes "switch the
-    // pack, get a different conversation" actually work. Fall back to the
-    // engine's pick if the thread has no active mode.
-    const activePack = installed.find((p) => p.id === thread.lastPackId) ?? result.pack;
+    // result.pack is the engine's trigger-detected pack; activePack is the
+    // user-selected mode and wins for the system prompt.
+    const composePack = activePack ?? result.pack;
 
     setInput("");
     setBusy(true);
@@ -139,40 +183,17 @@ function ChatPage() {
         suggestion,
       });
       setBusy(false);
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({
-          top: scrollRef.current?.scrollHeight ?? 0,
-          behavior: "smooth",
-        });
-      });
+      scrollDown();
     };
 
-    // Greetings stay local — fast, deterministic, save the API quota.
     if (result.state === "greeting") {
       setTimeout(() => renderPayload(result.payload), 500);
       return;
     }
 
-    // On-device content match. Skip for follow-ups (engine already produced
-    // a specific in-pack response that should pass through to composeAnswer
-    // for the intro). For everything else, if a match exists we render the
-    // suggestion bubble and never call Gemini.
-    if (result.intent !== "follow_up") {
-      const matched = matchPackContent(text, installed, activePack?.id);
-      if (matched) {
-        const payload = buildPackSuggestion(matched);
-        // Tiny delay so the pending bubble flashes briefly — feels like
-        // local lookup work, not an instant magic answer.
-        setTimeout(() => renderPayload(payload), 300);
-        return;
-      }
-    }
-
-    // Everything else: try Gemini with memory context, fall back to the
-    // canned answerFor() payload on failure.
     composeAnswer({
       query: text,
-      pack: activePack,
+      pack: composePack,
       lookup: result.lookup,
       fallback: result.payload,
     }).then(renderPayload);

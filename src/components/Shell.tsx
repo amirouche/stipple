@@ -123,18 +123,20 @@ export function Shell({ children }: { children?: ReactNode }) {
               const isStudyFolder = theme.id === "study";
               const onStudy = isStudyFolder && loc.pathname === "/study";
               const themePack = themePackId(theme.id);
-              // Highlight rule, mirroring the chat header:
+              // Highlight rule, mirroring the chat header strictly:
               //   1) on /study and this is the study entry → active
-              //   2) on chat with a mode set → entry whose pack matches that mode wins
-              //   3) on chat with NO mode set → entry whose pinned thread is active wins (open theme catches the rest)
+              //   2) on chat with a mode set → only the entry whose pack matches that mode is active
+              //   3) on chat with NO mode set → only the 자유 대화 entry, and only if the
+              //      active thread is itself the open-themed thread. Other themed entries
+              //      stay dim so the sidebar matches the header's "모드 없음" line.
               let active = false;
               if (isStudyFolder && onStudy) {
                 active = true;
               } else if (onChat && activeThread) {
-                if (activeMode && themePack) {
-                  active = activeMode === themePack;
-                } else if (!activeMode) {
-                  active = Boolean(thread && thread.id === activeId);
+                if (activeMode) {
+                  active = Boolean(themePack) && activeMode === themePack;
+                } else if (theme.id === "open" && activeThread.theme === "open") {
+                  active = true;
                 }
               }
               return (
