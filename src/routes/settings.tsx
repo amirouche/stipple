@@ -1,15 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { PACKS } from "@/lib/dots-data";
 import {
   movePack,
+  setLLMProvider,
   setPitchPrefs,
   setPreferences,
   usePreferences,
   type DefaultMode,
   type HomePriority,
+  type LLMProvider,
 } from "@/lib/preferences";
+import {
+  AVAILABLE_MODELS,
+  checkWebGPUSupport,
+  downloadAndInitModel,
+  useWebLLMStatus,
+  type ModelInfo,
+  type WebLLMModelId,
+} from "@/lib/webllm";
 import {
   PITCH_CATEGORIES,
   getPitchCount,
@@ -143,6 +153,9 @@ function SettingsPage() {
               ))}
             </div>
           </section>
+
+          {/* On-device LLM (WebLLM) */}
+          <WebLLMSection />
 
           {/* Wake / proactive greetings */}
           <section className="rounded-xl border border-border bg-card p-6">
@@ -507,6 +520,266 @@ function PitchSection() {
         </ul>
       </div>
     </section>
+  );
+}
+
+// CONSTITUTION: 모델 다운로드는 사용자가 "다운로드 시작" 버튼을
+// 명시적으로 눌러야 트리거. 자동 다운로드 X. 자동 활성화 X.
+// 다운로드 후에도 — 사용자가 Provider를 명시적으로 변경해야 작동.
+const LLM_PROVIDER_OPTIONS: { id: LLMProvider; title: string; desc: string }[] = [
+  {
+    id: "webllm-first",
+    title: "WebLLM 우선 (추천)",
+    desc: "내 기기에서 먼저 시도, 안 되면 클라우드.",
+  },
+  {
+    id: "gemini-only",
+    title: "Gemini만",
+    desc: "외부 API 사용. 모델 다운로드 안 해도 됨.",
+  },
+  {
+    id: "webllm-only",
+    title: "WebLLM만",
+    desc: "외부 호출 X. 모델 다운로드 필수.",
+  },
+];
+
+function formatElapsed(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function WebLLMSection() {
+  const prefs = usePreferences();
+  const status = useWebLLMStatus();
+  // null = still checking, false = unsupported, true = supported. Three
+  // states keep us from flashing the model cards before we know.
+  const [gpuOk, setGpuOk] = useState<boolean | null>(null);
+  const [gpuReason, setGpuReason] = useState<string | undefined>();
+
+  useEffect(() => {
+    let cancelled = false;
+    checkWebGPUSupport().then((res) => {
+      if (cancelled) return;
+      setGpuOk(res.supported);
+      setGpuReason(res.reason);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // A download in flight on a different model freezes other cards so the
+  // user can't kick off two big downloads in parallel (only one Worker
+  // can usefully compile at a time anyway).
+  const downloadingModel = status.state === "loading" ? status.model : undefined;
+
+  // webllm-only is only allowed once a model is actually loaded —
+  // otherwise the chat would throw on every Stage 3 input.
+  const webllmReady = status.state === "ready";
+  const providerDisabled = (id: LLMProvider): boolean => id === "webllm-only" && !webllmReady;
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-6">
+      <div className="flex items-baseline justify-between mb-1">
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">온디바이스 LLM</h2>
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
+          기기 안
+        </span>
+      </div>
+      <p className="text-[12.5px] text-ink-soft mb-4 leading-relaxed">
+        내 기기에서 직접 실행되는 AI. 첫 다운로드 후 외부 호출 없이 작동해.
+      </p>
+
+      {/* WebGPU compatibility gate */}
+      {gpuOk === null ? (
+        <p className="text-[12px] text-ink-soft">호환성 확인 중…</p>
+      ) : gpuOk === false ? (
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <p className="text-[13px] text-ink mb-1">이 브라우저에서는 WebLLM을 쓸 수 없어.</p>
+          <p className="text-[12px] text-ink-soft leading-relaxed">
+            Chrome 113+ 또는 Edge 113+ 가 필요해. (이유: {gpuReason ?? "WebGPU 미지원"})
+          </p>
+          <p className="mt-2 text-[12px] text-ink-soft leading-relaxed">
+            WebGPU가 없는 동안엔 Gemini로 자동 fallback 돼서 — 채팅은 그대로 작동해.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2.5">
+            {AVAILABLE_MODELS.map((m) => (
+              <ModelCard
+                key={m.id}
+                model={m}
+                downloadingModel={downloadingModel}
+                statusState={status.state}
+                statusModel={status.model}
+                statusError={status.error}
+                progressPct={status.progress?.progress ?? 0}
+                progressText={status.progress?.text ?? ""}
+                progressElapsed={status.progress?.timeElapsed ?? 0}
+              />
+            ))}
+          </div>
+          <p className="mt-3 text-[11.5px] text-ink-soft leading-relaxed">
+            이 다운로드는 1회만. IndexedDB에 저장되어 다음부터 즉시 작동해.
+          </p>
+        </>
+      )}
+
+      {/* Provider selection */}
+      <div className="mt-5 pt-5 border-t border-border">
+        <p className="text-[13px] text-ink mb-1">LLM 우선순위</p>
+        <p className="text-[11.5px] text-ink-soft mb-3 leading-relaxed">
+          어떤 LLM을 먼저 쓸지. 다운로드 안 해도 — 기본값으로 그대로 작동해.
+        </p>
+        <div className="space-y-2">
+          {LLM_PROVIDER_OPTIONS.map((opt) => {
+            const disabled = providerDisabled(opt.id);
+            const active = prefs.llmProvider === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => !disabled && setLLMProvider(opt.id)}
+                disabled={disabled}
+                className={`w-full text-left p-4 rounded-lg border transition-colors flex items-start gap-3 ${
+                  active ? "border-strong bg-surface" : "border-border bg-card hover:border-strong"
+                } disabled:opacity-40 disabled:hover:border-border disabled:cursor-not-allowed`}
+              >
+                <span
+                  className={`mt-1 h-3.5 w-3.5 rounded-full border-2 shrink-0 transition-all ${
+                    active ? "border-primary bg-primary" : "border-border-strong"
+                  }`}
+                />
+                <span>
+                  <span className="block text-[13.5px] font-medium text-ink">{opt.title}</span>
+                  <span className="block text-[12px] text-ink-soft mt-0.5">{opt.desc}</span>
+                  {disabled && (
+                    <span className="block text-[11px] text-ink-soft/70 mt-1 font-mono uppercase tracking-[0.12em]">
+                      모델 다운로드 후 활성화
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ModelCard({
+  model,
+  downloadingModel,
+  statusState,
+  statusModel,
+  statusError,
+  progressPct,
+  progressText,
+  progressElapsed,
+}: {
+  model: ModelInfo;
+  downloadingModel?: WebLLMModelId;
+  statusState: "idle" | "loading" | "ready" | "generating" | "error";
+  statusModel?: WebLLMModelId;
+  statusError?: string;
+  progressPct: number;
+  progressText: string;
+  progressElapsed: number;
+}) {
+  const isThis = statusModel === model.id;
+  const isLoadingThis = statusState === "loading" && isThis;
+  const isReady = (statusState === "ready" || statusState === "generating") && isThis;
+  const isError = statusState === "error" && isThis;
+  // Block parallel downloads, but allow re-trying a different model after
+  // an error or kicking off the first download while idle.
+  const otherDownloading = Boolean(downloadingModel) && downloadingModel !== model.id;
+  const disabled = otherDownloading || isLoadingThis;
+
+  function start() {
+    downloadAndInitModel(model.id).catch((err) => {
+      console.error("[webllm] 다운로드 실패:", err);
+    });
+  }
+
+  return (
+    <article className="rounded-lg border border-border bg-surface p-4">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-[14px] font-semibold tracking-tight text-ink">{model.name}</h3>
+            {model.recommended && (
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-primary">
+                추천
+              </span>
+            )}
+            {isReady && (
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-primary">
+                사용 중
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-[12px] text-ink-soft leading-relaxed">{model.description}</p>
+          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-ink-soft">
+            <span className="font-mono">{model.size}</span>
+            <span className="text-ink-soft/40">·</span>
+            <span className="flex gap-1">
+              {model.languages.map((l) => (
+                <span key={l} className="font-mono uppercase tracking-[0.1em]">
+                  {l}
+                </span>
+              ))}
+            </span>
+          </div>
+        </div>
+        {isReady ? (
+          <span className="shrink-0 h-8 px-3 inline-flex items-center rounded-md border border-border text-[11.5px] text-ink-soft">
+            준비됨
+          </span>
+        ) : isError ? (
+          <button
+            type="button"
+            onClick={start}
+            disabled={disabled}
+            className="shrink-0 h-8 px-3 rounded-md bg-ink text-background text-[12px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+          >
+            재시도
+          </button>
+        ) : !isLoadingThis ? (
+          <button
+            type="button"
+            onClick={start}
+            disabled={disabled}
+            className="shrink-0 h-8 px-3 rounded-md bg-ink text-background text-[12px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
+          >
+            다운로드 시작
+          </button>
+        ) : null}
+      </div>
+
+      {isLoadingThis && (
+        <div className="mt-3">
+          <div className="h-1.5 w-full rounded-full bg-border overflow-hidden">
+            <div
+              className="h-full bg-primary transition-[width] duration-300"
+              style={{ width: `${Math.min(100, Math.max(0, progressPct * 100))}%` }}
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-ink-soft">
+            <span className="truncate">{progressText || "준비 중…"}</span>
+            <span className="font-mono shrink-0">{formatElapsed(progressElapsed)}</span>
+          </div>
+        </div>
+      )}
+
+      {isError && statusError && (
+        <p className="mt-3 text-[11.5px] text-ink-soft leading-relaxed">에러: {statusError}</p>
+      )}
+    </article>
   );
 }
 
