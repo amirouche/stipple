@@ -26,6 +26,11 @@ export type Pack = {
   // Content the pack ships as a folder. Empty/undefined = mode-only pack
   // (no folder view).
   contents?: PackContentRef[];
+  // Route for this pack's folder UI. Only set on packs that have a
+  // dedicated folder screen — drives the ◇ icon in the chat header. A
+  // pack can have contents (used by matchPackContent) without having a
+  // folderRoute (no dedicated screen, content rendered inline).
+  folderRoute?: string;
 };
 
 export const PACKS: Pack[] = [
@@ -82,6 +87,7 @@ export const PACKS: Pack[] = [
       { kind: "sat-math", problemId: "sat-m-004" },
       { kind: "sat-math", problemId: "sat-m-005" },
     ],
+    folderRoute: "/study",
   },
   {
     id: "morning-routine",

@@ -19,7 +19,6 @@ import {
   markRecipeServed,
   patchMessage,
   renameThreadIfDefault,
-  selectThread,
   setThreadPack,
   useConversationStore,
   type ThreadMsg,
@@ -371,10 +370,7 @@ function ChatPage() {
         busy={busy}
         send={send}
         onSuggestionAction={onSuggestionAction}
-        onPackJump={(packId) => {
-          const themed = threads.find((t) => t.pinned && t.lastPackId === packId);
-          if (themed) selectThread(themed.id);
-        }}
+        onOpenFolder={(route) => navigate({ to: route })}
       />
     </Shell>
   );
@@ -393,7 +389,7 @@ function ChatBody({
   busy,
   send,
   onSuggestionAction,
-  onPackJump,
+  onOpenFolder,
 }: {
   threadId: string;
   activePackId?: string;
@@ -407,7 +403,7 @@ function ChatBody({
   busy: boolean;
   send: (text: string) => void;
   onSuggestionAction: (option: SuggestionOption) => void;
-  onPackJump: (packId: string) => void;
+  onOpenFolder: (route: string) => void;
 }) {
   const shell = useShell();
   const activePack = quickPacks.find((p) => p.id === activePackId);
@@ -440,23 +436,42 @@ function ChatBody({
             </svg>
           </button>
 
-          {/* Quick pack row — same on desktop & mobile, just shortcuts.
-              Clicking the active pill turns the mode off. */}
+          {/* Pack pill row — pill toggles mode on/off; the ◇ button (only
+              on packs with a folderRoute, currently Study) jumps to the
+              pack's folder UI. Two distinct affordances on one row. */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            {quickPacks.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setThreadPack(threadId, activePackId === p.id ? undefined : p.id)}
-                className={`shrink-0 px-3 py-1.5 rounded-full hairline text-[12px] transition-colors ${
-                  activePackId === p.id
-                    ? "bg-accent text-ink"
-                    : "bg-surface-2 text-ink-soft hover:text-ink"
-                }`}
-                title={activePackId === p.id ? "다시 누르면 모드 해제" : `${p.name} 모드 켜기`}
-              >
-                {p.name}
-              </button>
-            ))}
+            {quickPacks.map((p) => {
+              const active = activePackId === p.id;
+              return (
+                <div key={p.id} className="shrink-0 inline-flex items-center">
+                  <button
+                    onClick={() => setThreadPack(threadId, active ? undefined : p.id)}
+                    className={`px-3 py-1.5 hairline text-[12px] transition-colors ${
+                      p.folderRoute ? "rounded-l-full" : "rounded-full"
+                    } ${
+                      active ? "bg-accent text-ink" : "bg-surface-2 text-ink-soft hover:text-ink"
+                    }`}
+                    title={active ? "다시 누르면 모드 해제" : `${p.name} 모드 켜기`}
+                  >
+                    {p.name}
+                  </button>
+                  {p.folderRoute && (
+                    <button
+                      onClick={() => onOpenFolder(p.folderRoute!)}
+                      className={`px-2 py-1.5 -ml-px hairline text-[13px] rounded-r-full transition-colors ${
+                        active
+                          ? "bg-accent text-ink hover:bg-accent/80"
+                          : "bg-surface-2 text-ink-soft hover:text-ink"
+                      }`}
+                      title={`${p.name} 폴더 열기`}
+                      aria-label={`${p.name} 폴더`}
+                    >
+                      ◇
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
         {/* Mode indicator — small, subtle, but the only visual cue that the
@@ -476,9 +491,7 @@ function ChatBody({
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-6 sm:py-10 space-y-8">
-          {!hasMessages && (
-            <WelcomeState continues={orderedContinues} onPick={send} onPackJump={onPackJump} />
-          )}
+          {!hasMessages && <WelcomeState continues={orderedContinues} onPick={send} />}
 
           {messages.map((m) =>
             m.role === "user" ? (
@@ -618,7 +631,6 @@ function WelcomeState({
 }: {
   continues: ContinueCard[];
   onPick: (s: string) => void;
-  onPackJump: (packId: string) => void;
 }) {
   // Cap at 2 — the home is intentionally minimal before chat begins.
   const items = continues.slice(0, 2);

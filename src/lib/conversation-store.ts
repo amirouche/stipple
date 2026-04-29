@@ -39,7 +39,6 @@ export type Thread = {
   id: string;
   title: string;
   theme: ThreadTheme;
-  pinned?: boolean;
   // last pack the thread was operating in — used for follow-ups like "다른거는?"
   lastPackId?: string;
   // recipes already shown in this thread, so follow-ups can rotate to a new one
@@ -48,51 +47,14 @@ export type Thread = {
   updatedAt: number;
 };
 
-// ------- Seeded threads so the sidebar feels lived-in from the first load -------
+// Seed a couple of recent threads so the sidebar isn't empty on first load.
+// The previous "pinned themed" set was tied to the old "맥락" sidebar
+// section that conflated chat threads with pack modes — that section is
+// gone, so these are just chats now.
 
 const now = Date.now();
 
 const seedThreads: Thread[] = [
-  {
-    id: "thread-cooking",
-    title: "요리",
-    theme: "cooking",
-    pinned: true,
-    lastPackId: "cooking-essentials",
-    servedRecipeIds: [],
-    messages: [],
-    updatedAt: now - 1000 * 60 * 30,
-  },
-  {
-    id: "thread-study",
-    title: "공부",
-    theme: "study",
-    pinned: true,
-    lastPackId: "study-companion",
-    servedRecipeIds: [],
-    messages: [],
-    updatedAt: now - 1000 * 60 * 60 * 5,
-  },
-  {
-    id: "thread-routine",
-    title: "루틴",
-    theme: "routine",
-    pinned: true,
-    lastPackId: "morning-routine",
-    servedRecipeIds: [],
-    messages: [],
-    updatedAt: now - 1000 * 60 * 60 * 24,
-  },
-  {
-    id: "thread-open",
-    title: "자유 대화",
-    theme: "open",
-    pinned: true,
-    servedRecipeIds: [],
-    messages: [],
-    updatedAt: now - 1000 * 60 * 60 * 24 * 2,
-  },
-  // A couple of recent ad-hoc threads
   {
     id: "thread-recent-1",
     title: "점심 메뉴 골라줘",

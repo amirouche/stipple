@@ -1,32 +1,12 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ReactNode, createContext, useContext, useState } from "react";
-import {
-  createThread,
-  selectThread,
-  themePackId,
-  useConversationStore,
-  type ThreadTheme,
-} from "@/lib/conversation-store";
+import { createThread, selectThread, useConversationStore } from "@/lib/conversation-store";
 
 const NAV = [
   { to: "/packs", label: "팩", glyph: "02" },
   { to: "/memory", label: "기억", glyph: "03" },
   { to: "/settings", label: "설정", glyph: "04" },
 ] as const;
-
-const THEMES: { id: ThreadTheme; label: string; hint: string }[] = [
-  { id: "cooking", label: "요리", hint: "주방 흐름에 맞춰" },
-  { id: "study", label: "공부", hint: "이해 단계로 풀어서" },
-  { id: "routine", label: "루틴", hint: "오늘의 리듬" },
-  { id: "open", label: "자유 대화", hint: "그냥 편하게" },
-];
-
-const THEME_GLYPH: Record<ThreadTheme, string> = {
-  cooking: "◎",
-  study: "◇",
-  routine: "○",
-  open: "·",
-};
 
 function relTime(ts: number): string {
   const diff = Date.now() - ts;
@@ -52,22 +32,12 @@ export function Shell({ children }: { children?: ReactNode }) {
   const { threads, activeId } = useConversationStore();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const themed = THEMES.map((t) => ({
-    theme: t,
-    thread: threads.find((th) => th.pinned && th.theme === t.id),
-  }));
-  const recent = threads
-    .filter((t) => !t.pinned)
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 6);
-
   const onChat = loc.pathname === "/";
-  // The active thread's mode is the source of truth for which themed entry
-  // is highlighted — same signal the chat header reads. Using thread-id
-  // alone drifted from the header whenever the user switched packs inside
-  // an existing thread (e.g. study-mode in a cooking-themed thread).
-  const activeThread = threads.find((t) => t.id === activeId);
-  const activeMode = activeThread?.lastPackId;
+  // Single time-sorted chat list. The previous "맥락" section conflated
+  // pinned themed threads with the pack/mode selector — that's now
+  // owned by the chat header pill row, leaving the sidebar to do one
+  // job: list chats.
+  const sortedThreads = [...threads].sort((a, b) => b.updatedAt - a.updatedAt);
 
   function openThread(id: string) {
     selectThread(id);
@@ -109,106 +79,31 @@ export function Shell({ children }: { children?: ReactNode }) {
 
       <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-5">
         <section>
-          <div className="px-3 pt-2 pb-2 flex items-baseline justify-between">
+          <div className="px-3 pt-2 pb-2">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/70">
-              맥락
+              채팅
             </p>
-            <p className="text-[10.5px] text-ink-soft/60">고정됨</p>
           </div>
-          <ul className="space-y-0.5">
-            {themed.map(({ theme, thread }) => {
-              // 공부 entry is the gateway to the Study pack folder, not just
-              // a chat thread — it ships with content (SAT 수학) and the
-              // folder lets you pick a problem before any chatting happens.
-              const isStudyFolder = theme.id === "study";
-              const onStudy = isStudyFolder && loc.pathname === "/study";
-              const themePack = themePackId(theme.id);
-              // Highlight rule, mirroring the chat header strictly:
-              //   1) on /study and this is the study entry → active
-              //   2) on chat with a mode set → only the entry whose pack matches that mode is active
-              //   3) on chat with NO mode set → only the 자유 대화 entry, and only if the
-              //      active thread is itself the open-themed thread. Other themed entries
-              //      stay dim so the sidebar matches the header's "모드 없음" line.
-              let active = false;
-              if (isStudyFolder && onStudy) {
-                active = true;
-              } else if (onChat && activeThread) {
-                if (activeMode) {
-                  active = Boolean(themePack) && activeMode === themePack;
-                } else if (theme.id === "open" && activeThread.theme === "open") {
-                  active = true;
-                }
-              }
-              return (
-                <li key={theme.id}>
-                  <button
-                    onClick={() => {
-                      if (isStudyFolder) {
-                        setMobileOpen(false);
-                        nav({ to: "/study" });
-                        return;
-                      }
-                      if (thread) openThread(thread.id);
-                      else {
-                        const t = createThread(theme.id, theme.label);
-                        openThread(t.id);
-                      }
-                    }}
-                    className={`group w-full flex items-start gap-3 px-3 py-2 rounded-md text-left transition-colors ${
-                      active
-                        ? "bg-accent text-ink"
-                        : "text-ink-soft hover:text-ink hover:bg-surface-2"
-                    }`}
-                  >
-                    <span
-                      className={`font-mono text-[12px] mt-[1px] ${
-                        active ? "text-primary" : "text-ink-soft/60"
-                      }`}
-                    >
-                      {THEME_GLYPH[theme.id]}
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-[13.5px] truncate">
-                        {theme.label}
-                        {isStudyFolder && (
-                          <span className="ml-2 font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink-soft/70">
-                            폴더
-                          </span>
-                        )}
-                      </span>
-                      <span className="block text-[11px] text-ink-soft/70 truncate">
-                        {isStudyFolder ? "SAT 수학 5문제" : theme.hint}
-                      </span>
-                    </span>
-                    {active && <span className="h-1 w-1 mt-2 rounded-full bg-primary" />}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
-        {recent.length > 0 && (
-          <section>
-            <div className="px-3 pb-2">
-              <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/70">
-                최근
-              </p>
+          {sortedThreads.length === 0 ? (
+            <div className="px-3 py-6 text-center">
+              <p className="text-[13px] text-ink-soft leading-relaxed">아직 시작된 대화가 없어.</p>
+              <p className="mt-1 text-[12px] text-ink-soft/70">위의 + 새 대화로 시작해.</p>
             </div>
+          ) : (
             <ul className="space-y-0.5">
-              {recent.map((t) => {
+              {sortedThreads.map((t) => {
                 const active = onChat && t.id === activeId;
                 return (
                   <li key={t.id}>
                     <button
                       onClick={() => openThread(t.id)}
-                      className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-md text-left transition-colors ${
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-left transition-colors ${
                         active
                           ? "bg-accent text-ink"
                           : "text-ink-soft hover:text-ink hover:bg-surface-2"
                       }`}
                     >
-                      <span className="text-[12.5px] truncate flex-1 min-w-0">{t.title}</span>
+                      <span className="text-[13px] truncate flex-1 min-w-0">{t.title}</span>
                       <span className="font-mono text-[10px] text-ink-soft/60 shrink-0">
                         {relTime(t.updatedAt)}
                       </span>
@@ -217,12 +112,14 @@ export function Shell({ children }: { children?: ReactNode }) {
                 );
               })}
             </ul>
-          </section>
-        )}
+          )}
+        </section>
 
         <section>
           <div className="px-3 pb-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/70">층</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/70">
+              시스템
+            </p>
           </div>
           <ul className="space-y-0.5">
             {NAV.map((item) => {
