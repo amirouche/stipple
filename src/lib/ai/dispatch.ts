@@ -43,16 +43,42 @@ export type DispatchResult = {
   provider: "webllm" | "gemini";
 };
 
-// Voice + tone become the first lines of the system prompt. We keep
+// Always-prepended quality discipline. WebLLM's small models (Qwen 3B,
+// Llama 3.2 3B) drift into Japanese/English without explicit constraints
+// and tend to ramble into food recommendations on unrelated inputs. The
+// few-shot examples are small enough to not crowd the context but show
+// the model the answer shape we want.
+const BASE_DISCIPLINE = [
+  "당신은 한국어 도우미입니다.",
+  "",
+  "원칙:",
+  "- 한국어로만 답변. 일본어/중국어/영어 단어 섞지 마.",
+  "- 사용자 입력에 정확히 답. 무관한 주제로 답하지 마.",
+  "- 단어 한 개 입력 시 → 그 단어의 정의 + 핵심 1~2 문장.",
+  "- 되물음 X. 사용자가 더 묻기 전엔 추가 질문 하지 마.",
+  '- 모르면 솔직히 "잘 모르겠어" 라고 답해.',
+  "- 짧고 정확. 추측 X.",
+  "",
+  "예시:",
+  "사용자: 양자역학",
+  "답: 양자역학은 원자 이하 미시 세계의 물리 법칙을 다루는 분야야. 입자가 파동처럼 행동하거나 동시에 여러 상태에 있을 수 있는 점이 핵심이야.",
+  "",
+  "사용자: 사과",
+  "답: 사과는 장미과 사과나무 열매. 비타민 C와 식이섬유가 풍부하고 한국에서 많이 먹는 과일이야.",
+].join("\n");
+
+// Voice + tone become the next lines after the base discipline. We keep
 // this separate from the pack's longer `systemPrompt` field so the next
 // step (WebLLM-driven persona synthesis) has a clear seam to swap in.
-function withVoiceTone(
-  systemPrompt: string | undefined,
-  pack: Pack | undefined,
-): string | undefined {
-  if (!pack || !pack.voice || !pack.tone) return systemPrompt;
-  const persona = [`너는 "${pack.voice}"로서 사용자에게 답한다.`, `톤: ${pack.tone}`].join("\n");
-  return systemPrompt ? `${persona}\n\n${systemPrompt}` : persona;
+function buildSystemPrompt(systemPrompt: string | undefined, pack: Pack | undefined): string {
+  const sections: string[] = [BASE_DISCIPLINE];
+  if (pack?.voice && pack.tone) {
+    sections.push([`너는 "${pack.voice}"로서 사용자에게 답한다.`, `톤: ${pack.tone}`].join("\n"));
+  }
+  if (systemPrompt) {
+    sections.push(systemPrompt);
+  }
+  return sections.join("\n\n");
 }
 
 function trimHistory(history: DispatchTurn[] | undefined): DispatchTurn[] {
@@ -101,7 +127,7 @@ export async function dispatchLLMCall(
   onToken: (delta: string, sofar: string) => void = () => {},
 ): Promise<DispatchResult> {
   const provider: LLMProvider = getPreferences().llmProvider;
-  const systemPrompt = withVoiceTone(input.systemPrompt, input.pack);
+  const systemPrompt = buildSystemPrompt(input.systemPrompt, input.pack);
   const history = trimHistory(input.history);
 
   if (provider === "gemini-only") {

@@ -732,15 +732,21 @@ function AssistantBubble({
 }
 
 function ProviderBadge({ provider }: { provider: "webllm" | "gemini" }) {
-  // Blue dot = LLM compute, regardless of where it ran. The on-device vs
-  // cloud distinction lives in the parens of the label so the user still
-  // sees it but the dot color carries one consistent meaning: "this came
-  // from a model, not a local match." Matching hits use red dots
-  // (SuggestionBlock) — the two colors are the visual contract.
-  const label = provider === "webllm" ? "연산 (WebLLM)" : "연산 (Gemini)";
+  // Three-tone visual contract across the chat:
+  //   red   — local match (SuggestionBlock; no LLM ran)
+  //   green — WebLLM (private, on-device, zero external calls)
+  //   blue  — Gemini  (cloud API)
+  // Hidden when the user has flipped showLLMProvenance off; that lives
+  // in prefs (no settings UI yet) so the demo can leave it on while
+  // everyday use can clean up the chat.
+  const prefs = usePreferences();
+  if (!prefs.showLLMProvenance) return null;
+  const isWebLLM = provider === "webllm";
+  const dot = isWebLLM ? "bg-green-500" : "bg-blue-500";
+  const label = isWebLLM ? "내 기기 (WebLLM) · 외부 호출 0" : "클라우드 (Gemini) · 외부 API";
   return (
     <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft flex items-center gap-1.5">
-      <span className="h-1.5 w-1.5 rounded-full bg-blue-500" aria-hidden />
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
       {label}
     </p>
   );

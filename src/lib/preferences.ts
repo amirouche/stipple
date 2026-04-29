@@ -29,6 +29,12 @@ export type Preferences = {
   packOrder: string[];
   pitch: PitchPrefs;
   llmProvider: LLMProvider;
+  // Show/hide the small "내 기기 (WebLLM)" / "클라우드 (Gemini)" badge
+  // under each LLM-generated bubble. Default true for the demo so the
+  // viewer can see where each answer came from; flipping it off cleans
+  // up the chat UI for everyday use. No settings UI yet — toggle is
+  // surfaced once we move past the demo phase.
+  showLLMProvenance: boolean;
 };
 
 const STORAGE_KEY = "dots-preferences";
@@ -46,6 +52,7 @@ const DEFAULTS: Preferences = {
   ],
   pitch: { enabled: false, categories: [] },
   llmProvider: "webllm-first",
+  showLLMProvenance: true,
 };
 
 let prefs: Preferences = DEFAULTS;
