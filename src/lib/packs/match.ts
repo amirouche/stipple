@@ -42,7 +42,7 @@ const SAT_MATH_DOMAIN = [
 // 일반 학습 키워드. 단독으로는 매칭 X — DOMAIN 또는 specific 키워드와
 // 함께 있어야 점수에 가산된다. 이 게이트가 "사회문제" / "국어 문제"
 // 같은 입력이 SAT 수학으로 잘못 잡히던 버그를 막는다.
-const SAT_MATH_GENERIC = ["문제", "퀴즈", "테스트"];
+const SAT_MATH_GENERIC = ["문제", "퀴즈", "테스트", "problem", "quiz", "test"];
 
 const COOKING_RECIPE_KEYWORDS: Record<string, string[]> = {
   "baek-kimchi-jjigae": ["김치찌개", "김치", "찌개", "백종원", "돼지"],

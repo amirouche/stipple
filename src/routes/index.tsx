@@ -711,7 +711,10 @@ function SuggestionBlock({
       : badge === "store"
         ? "팩스토어에서 검색됨 · 설치 안 된 콘텐츠"
         : "콘텐츠 없음 · 새로 만들 수 있어";
-  const dotTone = badge === "local" ? "bg-primary" : badge === "store" ? "bg-ink" : "bg-ink-soft";
+  // Visual hierarchy: local = bright (primary accent), store = mid gray
+  // (installed-but-not-here), create = dim (nothing exists yet).
+  const dotTone =
+    badge === "local" ? "bg-primary" : badge === "store" ? "bg-ink-soft" : "bg-ink-soft/40";
   return (
     <div className="max-w-2xl">
       <div className="flex flex-wrap gap-2">
