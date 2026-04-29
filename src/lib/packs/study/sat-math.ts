@@ -1,8 +1,12 @@
 // SAT 수학 문제 데모 — 5개. 답 검증, 힌트, 풀이, 자주 틀리는 답까지 모두
 // 온디바이스에서 동작하도록 구조화했다. LLM은 `commonMistakes`에 잡히지
 // 않는 깊은 설명이나 변형 문제 생성에만 호출된다.
+//
+// 사용자(또는 LLM)가 만든 문제는 user-store.ts에 영속되며, 조회는 항상
+// 두 소스를 합쳐 본다 — 그래야 폴더와 매처에 새 문제가 곧바로 보인다.
 
 import type { SATMathProblem } from "./types";
+import { getUserSATProblems } from "./user-store";
 
 export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
   {
@@ -175,8 +179,17 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
 // stays on the device.
 // ---------------------------------------------------------------------------
 
+export function getAllSATMathProblems(): SATMathProblem[] {
+  // Base 5 first, then user-generated ones — that ordering makes the
+  // newest content visibly stack onto the bottom of the folder rather
+  // than reshuffling the curated set.
+  return [...SAT_MATH_PROBLEMS, ...getUserSATProblems()];
+}
+
 export function getSATMathProblem(id: string): SATMathProblem | undefined {
-  return SAT_MATH_PROBLEMS.find((p) => p.id === id);
+  return (
+    SAT_MATH_PROBLEMS.find((p) => p.id === id) ?? getUserSATProblems().find((p) => p.id === id)
+  );
 }
 
 export type CheckResult =

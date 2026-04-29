@@ -6,6 +6,7 @@ import { hydrateMemoryStore, registerScheduler, tickScheduler } from "@/lib/memo
 import { hydrateWakeStore, registerWakeScheduler, checkWakeAlarms } from "@/lib/wake";
 import { hydratePitchCache } from "@/lib/pitch";
 import { hydratePreferences } from "@/lib/preferences";
+import { hydrateUserSATProblems } from "@/lib/packs/study/user-store";
 
 function NotFoundComponent() {
   return (
@@ -59,6 +60,7 @@ export const Route = createRootRoute({
 function RootShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     hydratePreferences();
+    hydrateUserSATProblems();
     void hydrateMemoryStore().then(() => {
       tickScheduler();
       registerScheduler();

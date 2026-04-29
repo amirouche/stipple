@@ -4,8 +4,9 @@ import { createThread, selectThread, useConversationStore } from "@/lib/conversa
 
 const NAV = [
   { to: "/packs", label: "팩", glyph: "02" },
-  { to: "/memory", label: "기억", glyph: "03" },
-  { to: "/settings", label: "설정", glyph: "04" },
+  { to: "/store", label: "팩스토어", glyph: "03" },
+  { to: "/memory", label: "기억", glyph: "04" },
+  { to: "/settings", label: "설정", glyph: "05" },
 ] as const;
 
 function relTime(ts: number): string {

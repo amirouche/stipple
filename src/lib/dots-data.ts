@@ -369,10 +369,22 @@ function pickGreeting(): string {
 // 수학 튜터 페르소나) can override the chat thread's active-pack persona.
 // Without this, asking for SAT math while the thread is in cooking mode
 // makes the cooking persona refuse or drift off-task.
+//
+// postAction tells the chat handler what to do with the LLM response. The
+// default is "show as text". "save-as-sat-problem" parses the response,
+// saves it to the Study pack's user-content store, and renders a folder-
+// open message instead of raw text — the constitution's "LLM 응답을
+// 일회용으로 흘려보내지 말고 팩에 저장한다" rule.
 export type SuggestionOption =
   | { kind: "open-folder"; label: string; target: string }
   | { kind: "show-recipe"; label: string; recipeId: string }
-  | { kind: "llm-call"; label: string; prompt: string; systemPrompt?: string };
+  | {
+      kind: "llm-call";
+      label: string;
+      prompt: string;
+      systemPrompt?: string;
+      postAction?: "save-as-sat-problem";
+    };
 
 export type AnswerPayload =
   | { kind: "text"; text: string; pitch?: Pitch }

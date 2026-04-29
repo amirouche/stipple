@@ -12,6 +12,7 @@ import {
 } from "@/lib/dots-data";
 import { getSATMathProblem } from "@/lib/packs/study/sat-math";
 import type { SATMathProblem } from "@/lib/packs/study/types";
+import { getUserSATProblems } from "@/lib/packs/study/user-store";
 
 // 문제별 키워드 — 특정 문제를 정확히 가리키는 단어들. "삼각비" 같은 입력이
 // 들어오면 sat-m-005만 점수 받음.
@@ -116,6 +117,15 @@ export function matchPackContent(
         if (score > 0) matches.push({ kind: "cooking-recipe", recipe, score });
       }
     }
+    // User-generated SAT problems live outside the static contents array
+    // (added at runtime). Pull them in here so a user-saved problem also
+    // counts toward "Study에 N문제 있어".
+    if (pack.id === "study-companion") {
+      for (const problem of getUserSATProblems()) {
+        const score = scoreSATMath(q, problem);
+        if (score > 0) matches.push({ kind: "sat-math", problem, score });
+      }
+    }
     if (matches.length === 0) continue;
     matches.sort((a, b) => b.score - a.score);
     candidates.push({
@@ -195,6 +205,9 @@ function buildSATMathSuggestion(result: PackMatchResult): {
         "정답: [번호]",
         "풀이: [두세 줄의 짧은 풀이]",
       ].join("\n"),
+      // Tells the chat handler to parse the response and store it in the
+      // Study pack rather than showing raw text in chat.
+      postAction: "save-as-sat-problem",
     },
   ];
 

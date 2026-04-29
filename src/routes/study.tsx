@@ -12,14 +12,15 @@ import { useState } from "react";
 import { Shell, useShell } from "@/components/Shell";
 import { PACKS } from "@/lib/dots-data";
 import {
+  SAT_MATH_PROBLEMS,
   checkAnswer,
   difficultyLabel,
-  getSATMathProblem,
   topicLabel,
   type CheckResult,
 } from "@/lib/packs/study/sat-math";
 import { explainMistake, generateVariant } from "@/lib/packs/study/llm";
 import type { SATMathProblem } from "@/lib/packs/study/types";
+import { useUserSATProblems } from "@/lib/packs/study/user-store";
 
 export const Route = createFileRoute("/study")({
   head: () => ({
@@ -38,11 +39,11 @@ export const Route = createFileRoute("/study")({
 function StudyPage() {
   const [openProblemId, setOpenProblemId] = useState<string | null>(null);
   const studyPack = PACKS.find((p) => p.id === "study-companion");
-  const refs = studyPack?.contents ?? [];
-  const problems = refs
-    .filter((r) => r.kind === "sat-math")
-    .map((r) => getSATMathProblem(r.problemId))
-    .filter((p): p is SATMathProblem => Boolean(p));
+  // The pack ships with 5 base problems; user/LLM-generated problems live
+  // in the reactive user store and stack onto the end. Both are picked up
+  // here in one merged list so the folder view stays simple.
+  const userProblems = useUserSATProblems();
+  const problems: SATMathProblem[] = [...SAT_MATH_PROBLEMS, ...userProblems];
 
   const openProblem = openProblemId ? (problems.find((p) => p.id === openProblemId) ?? null) : null;
 
@@ -130,27 +131,35 @@ function FolderView({
           SAT 수학 · {problems.length}문제
         </p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-5xl">
-          {problems.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => onOpen(p.id)}
-              className="text-left rounded-xl border border-border bg-card p-5 hover:border-strong hover:bg-surface transition-colors"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                  {topicLabel(p.topic)}
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/50">
-                  ·
-                </span>
-                <DifficultyChip d={p.difficulty} />
-              </div>
-              <p className="text-[13.5px] text-ink leading-snug line-clamp-3">{p.question}</p>
-              <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/70">
-                {p.id}
-              </p>
-            </button>
-          ))}
+          {problems.map((p) => {
+            const isUserGen = p.id.startsWith("sat-m-user-");
+            return (
+              <button
+                key={p.id}
+                onClick={() => onOpen(p.id)}
+                className="text-left rounded-xl border border-border bg-card p-5 hover:border-strong hover:bg-surface transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+                    {topicLabel(p.topic)}
+                  </span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/50">
+                    ·
+                  </span>
+                  <DifficultyChip d={p.difficulty} />
+                  {isUserGen && (
+                    <span className="ml-auto font-mono text-[9.5px] uppercase tracking-[0.14em] text-primary">
+                      새 문제
+                    </span>
+                  )}
+                </div>
+                <p className="text-[13.5px] text-ink leading-snug line-clamp-3">{p.question}</p>
+                <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/70">
+                  {p.id}
+                </p>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

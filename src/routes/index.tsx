@@ -28,6 +28,8 @@ import { buildContinuations, type ContinueCard } from "@/lib/continuations";
 import { composeAnswer } from "@/lib/ai/compose";
 import { askGemini } from "@/lib/ai/gemini";
 import { matchPackContent, buildPackSuggestion } from "@/lib/packs/match";
+import { addUserSATProblem, getUserSATProblems } from "@/lib/packs/study/user-store";
+import { buildSATMathDummy, buildSATMathFromLLM } from "@/lib/packs/study/parse-llm";
 import type { AnswerPayload } from "@/lib/dots-data";
 
 // Words that mean "give me another / something else / please do it" — when
@@ -289,9 +291,7 @@ function ChatPage() {
       });
       setBusy(true);
 
-      const onDone = (text: string) => {
-        patchMessage(thread.id, id, { pending: false, text });
-        setBusy(false);
+      const scrollDown = () => {
         requestAnimationFrame(() => {
           scrollRef.current?.scrollTo({
             top: scrollRef.current?.scrollHeight ?? 0,
@@ -299,10 +299,45 @@ function ChatPage() {
           });
         });
       };
+      const onDoneText = (text: string) => {
+        patchMessage(thread.id, id, { pending: false, text });
+        setBusy(false);
+        scrollDown();
+      };
+      // postAction "save-as-sat-problem": parse the LLM response into a
+      // SATMathProblem, persist it to the user store, and replace the
+      // pending bubble with a folder-open suggestion. The raw LLM text
+      // never goes to chat —헌법: LLM 응답을 일회용으로 흘려보내지 않는다.
+      const onSavedProblem = (source: "llm" | "dummy") => {
+        const noteText =
+          source === "llm"
+            ? "새 SAT 수학 문제를 만들어서 Study 팩에 저장했어."
+            : "(샘플 문제로 대체) Study 팩에 저장됐어. 폴더에서 풀어볼래?";
+        patchMessage(thread.id, id, {
+          pending: false,
+          text: noteText,
+          packName: "Study Companion",
+          suggestion: {
+            matchedPackName: "Study Companion",
+            options: [{ kind: "open-folder", label: "폴더 열기", target: "/study" }],
+          },
+        });
+        setBusy(false);
+        scrollDown();
+      };
+
+      const postAction = option.postAction;
       const onFail = (err: unknown) => {
         console.error("[suggestion llm-call] failed:", err);
+        if (postAction === "save-as-sat-problem") {
+          // LLM down — still honor the constitution by storing a dummy.
+          const dummy = buildSATMathDummy(getUserSATProblems().length);
+          addUserSATProblem(dummy);
+          onSavedProblem("dummy");
+          return;
+        }
         const msg = err instanceof Error ? err.message : String(err);
-        onDone(`(클라우드 호출 실패: ${msg})`);
+        onDoneText(`(클라우드 호출 실패: ${msg})`);
       };
 
       // Two paths:
@@ -316,7 +351,15 @@ function ChatPage() {
         askGemini({
           data: { userMessage: option.prompt, systemPrompt: option.systemPrompt },
         })
-          .then((res) => onDone(res.text))
+          .then((res) => {
+            if (postAction === "save-as-sat-problem") {
+              const built = buildSATMathFromLLM(res.text, getUserSATProblems().length);
+              addUserSATProblem(built.problem);
+              onSavedProblem(built.source);
+            } else {
+              onDoneText(res.text);
+            }
+          })
           .catch(onFail);
       } else {
         composeAnswer({
@@ -324,7 +367,7 @@ function ChatPage() {
           pack: activePack,
           fallback: { kind: "text", text: "지금은 응답을 가져오지 못했어." },
         })
-          .then((payload) => onDone(payload.kind === "text" ? payload.text : ""))
+          .then((payload) => onDoneText(payload.kind === "text" ? payload.text : ""))
           .catch(onFail);
       }
     }
