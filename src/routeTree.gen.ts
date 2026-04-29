@@ -9,11 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as StudyRouteImport } from './routes/study'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PacksRouteImport } from './routes/packs'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as IndexRouteImport } from './routes/index'
 
+const StudyRoute = StudyRouteImport.update({
+  id: '/study',
+  path: '/study',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/memory': typeof MemoryRoute
   '/packs': typeof PacksRoute
   '/settings': typeof SettingsRoute
+  '/study': typeof StudyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/memory': typeof MemoryRoute
   '/packs': typeof PacksRoute
   '/settings': typeof SettingsRoute
+  '/study': typeof StudyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/memory': typeof MemoryRoute
   '/packs': typeof PacksRoute
   '/settings': typeof SettingsRoute
+  '/study': typeof StudyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/memory' | '/packs' | '/settings'
+  fullPaths: '/' | '/memory' | '/packs' | '/settings' | '/study'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/memory' | '/packs' | '/settings'
-  id: '__root__' | '/' | '/memory' | '/packs' | '/settings'
+  to: '/' | '/memory' | '/packs' | '/settings' | '/study'
+  id: '__root__' | '/' | '/memory' | '/packs' | '/settings' | '/study'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,10 +76,18 @@ export interface RootRouteChildren {
   MemoryRoute: typeof MemoryRoute
   PacksRoute: typeof PacksRoute
   SettingsRoute: typeof SettingsRoute
+  StudyRoute: typeof StudyRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/study': {
+      id: '/study'
+      path: '/study'
+      fullPath: '/study'
+      preLoaderRoute: typeof StudyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   MemoryRoute: MemoryRoute,
   PacksRoute: PacksRoute,
   SettingsRoute: SettingsRoute,
+  StudyRoute: StudyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Shell, useShell } from "@/components/Shell";
 import { ProcessingTrace } from "@/components/ProcessingTrace";
@@ -47,11 +47,28 @@ export const Route = createFileRoute("/")({
 // "Continue from here" cards are produced by buildContinuations() —
 // scored across recent threads, repeated topics, and recently used packs.
 
+// Phrases that mean "I want to do math problems" — when seen in a chat
+// input, jump to the Study folder instead of routing through the engine.
+// Folder = pack content; chat = ambient mode. The user gets to pick.
+const STUDY_FOLDER_PATTERNS: RegExp[] = [
+  /수학\s*문제/,
+  /수학.*풀/,
+  /문제\s*풀어/,
+  /문제\s*풀자/,
+  /sat\s*math/i,
+  /sat\s*수학/,
+];
+
+function shouldOpenStudyFolder(text: string): boolean {
+  return STUDY_FOLDER_PATTERNS.some((re) => re.test(text));
+}
+
 function ChatPage() {
   const [installed] = useState<Pack[]>(PACKS.filter((p) => p.installed));
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const { threads, activeId } = useConversationStore();
   const prefs = usePreferences();
@@ -66,6 +83,15 @@ function ChatPage() {
 
   function send(text: string) {
     if (!text.trim() || busy || !thread) return;
+
+    // "수학 문제 풀어볼래" 류 입력 → 채팅 라운드트립을 건너뛰고 폴더로 직행.
+    // 사용자 입력은 비워주고 메시지로 쌓진 않음 — 화면 전환이 답이라.
+    if (shouldOpenStudyFolder(text)) {
+      setInput("");
+      navigate({ to: "/study" });
+      return;
+    }
+
     const userId = crypto.randomUUID();
     const asstId = crypto.randomUUID();
 

@@ -4,6 +4,12 @@
 import { lookupMemory, type LookupResult } from "@/lib/memory";
 import type { Pitch } from "@/lib/pitch/types";
 
+// Folder content reference. The actual content lives in
+// `src/lib/packs/<pack>/...`; the pack only carries pointers so dots-data.ts
+// stays a flat catalog and doesn't transitively pull every pack's data into
+// every consumer.
+export type PackContentRef = { kind: "sat-math"; problemId: string };
+
 export type Pack = {
   id: string;
   name: string;
@@ -15,6 +21,9 @@ export type Pack = {
   // Injected into the AI's system prompt when this pack is the active mode.
   // Defines tone, answer shape, recommendation flow — not just a trigger label.
   systemPrompt: string;
+  // Content the pack ships as a folder. Empty/undefined = mode-only pack
+  // (no folder view).
+  contents?: PackContentRef[];
 };
 
 export const PACKS: Pack[] = [
@@ -60,6 +69,13 @@ export const PACKS: Pack[] = [
       "- 사용자의 질문이 흐트러져 있으면, 먼저 한 줄로 정리해주고 답변을 시작하세요.",
       "- 모호한 질문도 학습·이해·정리 관점으로 풀어서 답하세요.",
     ].join("\n"),
+    contents: [
+      { kind: "sat-math", problemId: "sat-m-001" },
+      { kind: "sat-math", problemId: "sat-m-002" },
+      { kind: "sat-math", problemId: "sat-m-003" },
+      { kind: "sat-math", problemId: "sat-m-004" },
+      { kind: "sat-math", problemId: "sat-m-005" },
+    ],
   },
   {
     id: "morning-routine",

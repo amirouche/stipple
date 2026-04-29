@@ -92,8 +92,7 @@ export function Shell({ children }: { children?: ReactNode }) {
           className="w-full flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card hover:border-strong transition-colors text-[13px] text-ink"
         >
           <span className="flex items-center gap-2">
-            <span className="font-mono text-[11px] text-ink-soft">＋</span>
-            새 대화
+            <span className="font-mono text-[11px] text-ink-soft">＋</span>새 대화
           </span>
           <span className="font-mono text-[10px] text-ink-soft uppercase tracking-[0.14em]">
             new
@@ -111,11 +110,22 @@ export function Shell({ children }: { children?: ReactNode }) {
           </div>
           <ul className="space-y-0.5">
             {themed.map(({ theme, thread }) => {
-              const active = onChat && thread && thread.id === activeId;
+              // 공부 entry is the gateway to the Study pack folder, not just
+              // a chat thread — it ships with content (SAT 수학) and the
+              // folder lets you pick a problem before any chatting happens.
+              const isStudyFolder = theme.id === "study";
+              const onStudy = isStudyFolder && loc.pathname === "/study";
+              const active =
+                onStudy || (!isStudyFolder && onChat && thread && thread.id === activeId);
               return (
                 <li key={theme.id}>
                   <button
                     onClick={() => {
+                      if (isStudyFolder) {
+                        setMobileOpen(false);
+                        nav({ to: "/study" });
+                        return;
+                      }
                       if (thread) openThread(thread.id);
                       else {
                         const t = createThread(theme.id, theme.label);
@@ -136,14 +146,19 @@ export function Shell({ children }: { children?: ReactNode }) {
                       {THEME_GLYPH[theme.id]}
                     </span>
                     <span className="flex-1 min-w-0">
-                      <span className="block text-[13.5px] truncate">{theme.label}</span>
+                      <span className="block text-[13.5px] truncate">
+                        {theme.label}
+                        {isStudyFolder && (
+                          <span className="ml-2 font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink-soft/70">
+                            폴더
+                          </span>
+                        )}
+                      </span>
                       <span className="block text-[11px] text-ink-soft/70 truncate">
-                        {theme.hint}
+                        {isStudyFolder ? "SAT 수학 5문제" : theme.hint}
                       </span>
                     </span>
-                    {active && (
-                      <span className="h-1 w-1 mt-2 rounded-full bg-primary" />
-                    )}
+                    {active && <span className="h-1 w-1 mt-2 rounded-full bg-primary" />}
                   </button>
                 </li>
               );
@@ -171,9 +186,7 @@ export function Shell({ children }: { children?: ReactNode }) {
                           : "text-ink-soft hover:text-ink hover:bg-surface-2"
                       }`}
                     >
-                      <span className="text-[12.5px] truncate flex-1 min-w-0">
-                        {t.title}
-                      </span>
+                      <span className="text-[12.5px] truncate flex-1 min-w-0">{t.title}</span>
                       <span className="font-mono text-[10px] text-ink-soft/60 shrink-0">
                         {relTime(t.updatedAt)}
                       </span>
@@ -187,9 +200,7 @@ export function Shell({ children }: { children?: ReactNode }) {
 
         <section>
           <div className="px-3 pb-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/70">
-              층
-            </p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/70">층</p>
           </div>
           <ul className="space-y-0.5">
             {NAV.map((item) => {
@@ -244,10 +255,7 @@ export function Shell({ children }: { children?: ReactNode }) {
         {/* Mobile sidebar overlay */}
         {mobileOpen && (
           <div className="md:hidden fixed inset-0 z-50 flex">
-            <div
-              className="absolute inset-0 bg-ink/40"
-              onClick={() => setMobileOpen(false)}
-            />
+            <div className="absolute inset-0 bg-ink/40" onClick={() => setMobileOpen(false)} />
             <aside className="relative flex w-72 max-w-[80%] flex-col border-r border-border bg-surface fade-in">
               {sidebarInner}
             </aside>
