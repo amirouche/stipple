@@ -49,22 +49,6 @@ export const Route = createFileRoute("/")({
 // "Continue from here" cards are produced by buildContinuations() —
 // scored across recent threads, repeated topics, and recently used packs.
 
-// Phrases that mean "I want to do math problems" — when seen in a chat
-// input, jump to the Study folder instead of routing through the engine.
-// Folder = pack content; chat = ambient mode. The user gets to pick.
-const STUDY_FOLDER_PATTERNS: RegExp[] = [
-  /수학\s*문제/,
-  /수학.*풀/,
-  /문제\s*풀어/,
-  /문제\s*풀자/,
-  /sat\s*math/i,
-  /sat\s*수학/,
-];
-
-function shouldOpenStudyFolder(text: string): boolean {
-  return STUDY_FOLDER_PATTERNS.some((re) => re.test(text));
-}
-
 function ChatPage() {
   const [installed] = useState<Pack[]>(PACKS.filter((p) => p.installed));
   const [input, setInput] = useState("");
@@ -85,14 +69,6 @@ function ChatPage() {
 
   function send(text: string) {
     if (!text.trim() || busy || !thread) return;
-
-    // "수학 문제 풀어볼래" 류 입력 → 채팅 라운드트립을 건너뛰고 폴더로 직행.
-    // 사용자 입력은 비워주고 메시지로 쌓진 않음 — 화면 전환이 답이라.
-    if (shouldOpenStudyFolder(text)) {
-      setInput("");
-      navigate({ to: "/study" });
-      return;
-    }
 
     const userId = crypto.randomUUID();
     const asstId = crypto.randomUUID();
@@ -446,10 +422,14 @@ function ChatBody({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send(input);
-                }
+                if (e.key !== "Enter" || e.shiftKey) return;
+                // 한국어 IME 합자 중 Enter는 합자 확정에만 쓰여. 여기서
+                // send()를 부르면 setInput("") 후에 IME가 마지막 글자를
+                // 다시 끼워넣어 입력창에 한 글자가 남는 React + IME 동기화
+                // 버그가 난다. keyCode 229는 구형 브라우저용 백업.
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                e.preventDefault();
+                send(input);
               }}
               rows={1}
               placeholder="DOTS에게 말 걸기"
