@@ -40,7 +40,11 @@ function buildSystemPrompt(args: ComposeArgs): string {
   }
 
   if (args.pack) {
-    sections.push(`[활성 팩: ${args.pack.name}]\n${args.pack.behavior}`);
+    // The pack's systemPrompt defines mode-of-conversation: tone, answer
+    // shape, recommendation flow. It overrides the generic DOTS persona for
+    // the duration of this turn — that's what makes packs feel like switching
+    // who you're talking to, not just adding context.
+    sections.push(`[활성 팩: ${args.pack.name}]\n${args.pack.systemPrompt}`);
   }
 
   if (args.lookup && args.lookup.totalScore > 0) {

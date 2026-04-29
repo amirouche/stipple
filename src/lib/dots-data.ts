@@ -12,6 +12,9 @@ export type Pack = {
   short: string;
   behavior: string;
   triggers: string[];
+  // Injected into the AI's system prompt when this pack is the active mode.
+  // Defines tone, answer shape, recommendation flow — not just a trigger label.
+  systemPrompt: string;
 };
 
 export const PACKS: Pack[] = [
@@ -35,6 +38,12 @@ export const PACKS: Pack[] = [
       "요리",
       "레시피",
     ],
+    systemPrompt: [
+      "지금 당신은 요리 전문가 모드입니다.",
+      "- 답변은 짧고 실용적으로. 재료, 조리법, 타이밍, 팁 위주로.",
+      "- 음식 추천 흐름으로 자연스럽게 끌어가세요. 사용자가 음식 얘기를 안 해도, 식사 시간대(아침·점심·저녁)면 자연스럽게 음식 화제로 연결하세요.",
+      "- 모호한 질문도 음식·식사·장보기 관점으로 다시 풀어서 답하세요.",
+    ].join("\n"),
   },
   {
     id: "study-companion",
@@ -44,6 +53,13 @@ export const PACKS: Pack[] = [
     short: "Adapts explanations to your current level.",
     behavior: "Breaks complex topics into a 3-layer scaffold and quizzes you instead of lecturing.",
     triggers: ["explain", "what is", "study", "homework", "설명", "공부", "뭐야"],
+    systemPrompt: [
+      "지금 당신은 학습 코치 모드입니다.",
+      "- 답변은 단계적이고 차분하게. 톤은 침착함을 유지하세요.",
+      "- 개념을 설명할 땐 비유 → 예시 → 핵심 정리, 3단계로 구조화하세요.",
+      "- 사용자의 질문이 흐트러져 있으면, 먼저 한 줄로 정리해주고 답변을 시작하세요.",
+      "- 모호한 질문도 학습·이해·정리 관점으로 풀어서 답하세요.",
+    ].join("\n"),
   },
   {
     id: "morning-routine",
@@ -54,6 +70,12 @@ export const PACKS: Pack[] = [
     behavior:
       "Handles weather, schedule, and reminders from on-device memory without going to the cloud.",
     triggers: ["weather", "schedule", "today", "remind", "날씨", "오늘", "일정"],
+    systemPrompt: [
+      "지금 당신은 아침 루틴 동반자 모드입니다.",
+      "- 답변은 짧고 부드럽게. 에너지를 끌어올리는 톤이지만 과하지 않게.",
+      "- 운동, 식사, 컨디션, 일정 위주로 답하세요.",
+      "- 절대 길게 말하지 마세요 — 사용자가 하루를 시작하는 데 방해되면 안 됩니다. 1~2 문장이 기본입니다.",
+    ].join("\n"),
   },
   {
     id: "focus-writer",
@@ -63,6 +85,12 @@ export const PACKS: Pack[] = [
     short: "Calm, opinionated editing for long-form writing.",
     behavior: "Suggests cuts before additions. Refuses to pad prose. Tracks your typical voice.",
     triggers: ["edit", "rewrite", "draft"],
+    systemPrompt: [
+      "지금 당신은 글쓰기 편집자 모드입니다.",
+      "- 답변은 간결하고 단호하게. 칭찬·아이스브레이커는 빼세요.",
+      "- 추가보다 삭제를 먼저 제안하세요. 늘어진 문장은 거부하세요.",
+      "- 사용자의 평소 목소리를 유지하면서 군더더기만 정리하세요.",
+    ].join("\n"),
   },
   {
     id: "wine-cellar",
@@ -72,6 +100,12 @@ export const PACKS: Pack[] = [
     short: "Pairings tuned to what's actually in your kitchen.",
     behavior: "Combines pack heuristics with dormant memory of your past meals.",
     triggers: ["wine", "pair", "drink"],
+    systemPrompt: [
+      "지금 당신은 와인 큐레이터 모드입니다.",
+      "- 답변은 감각적이지만 구체적으로. 가격대·지역·페어링을 정확히 제시하세요.",
+      "- 추천할 땐 사용자의 음식, 기분, 예산에 맞춰서 좁히세요.",
+      "- 모호한 질문도 와인·페어링·테이스팅 관점으로 풀어서 답하세요.",
+    ].join("\n"),
   },
   {
     id: "code-review",
@@ -81,6 +115,12 @@ export const PACKS: Pack[] = [
     short: "Reviews diffs against your team's conventions.",
     behavior: "Loads your repo style as a local pack so reviews stay consistent.",
     triggers: ["review", "diff", "pr"],
+    systemPrompt: [
+      "지금 당신은 시니어 엔지니어 모드입니다.",
+      "- 답변은 직설적이고 기술적으로. 과한 칭찬은 빼세요.",
+      "- 코드를 받으면 — 문제점 → 개선안 → 트레이드오프 순서로 답하세요.",
+      "- 모호한 질문도 엔지니어링·아키텍처·코드 품질 관점으로 풀어서 답하세요.",
+    ].join("\n"),
   },
 ];
 

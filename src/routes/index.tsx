@@ -95,6 +95,12 @@ function ChatPage() {
 
     if (result.pack) setThreadPack(thread.id, result.pack.id);
 
+    // The user-selected mode (thread.lastPackId, set by clicking a pack pill)
+    // wins over the trigger-detected pack — that's what makes "switch the
+    // pack, get a different conversation" actually work. Fall back to the
+    // engine's pick if the thread has no active mode.
+    const activePack = installed.find((p) => p.id === thread.lastPackId) ?? result.pack;
+
     setInput("");
     setBusy(true);
 
@@ -139,7 +145,7 @@ function ChatPage() {
     // canned answerFor() payload on failure.
     composeAnswer({
       query: text,
-      pack: result.pack,
+      pack: activePack,
       lookup: result.lookup,
       fallback: result.payload,
     }).then(renderPayload);
@@ -216,6 +222,7 @@ function ChatBody({
   onPackJump: (packId: string) => void;
 }) {
   const shell = useShell();
+  const activePack = quickPacks.find((p) => p.id === activePackId);
 
   return (
     <div className="flex flex-col h-screen">
@@ -245,22 +252,36 @@ function ChatBody({
             </svg>
           </button>
 
-          {/* Quick pack row — same on desktop & mobile, just shortcuts */}
+          {/* Quick pack row — same on desktop & mobile, just shortcuts.
+              Clicking the active pill turns the mode off. */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             {quickPacks.map((p) => (
               <button
                 key={p.id}
-                onClick={() => setThreadPack(threadId, p.id)}
+                onClick={() => setThreadPack(threadId, activePackId === p.id ? undefined : p.id)}
                 className={`shrink-0 px-3 py-1.5 rounded-full hairline text-[12px] transition-colors ${
                   activePackId === p.id
                     ? "bg-accent text-ink"
                     : "bg-surface-2 text-ink-soft hover:text-ink"
                 }`}
+                title={activePackId === p.id ? "다시 누르면 모드 해제" : `${p.name} 모드 켜기`}
               >
                 {p.name}
               </button>
             ))}
           </div>
+        </div>
+        {/* Mode indicator — small, subtle, but the only visual cue that the
+            AI is now answering in a different voice. */}
+        <div className="px-3 sm:px-8 md:px-12 pb-2 -mt-1 text-[11px] text-ink-soft">
+          {activePack ? (
+            <span>
+              <span className="text-ink">{activePack.name}</span> 모드 — 같은 질문도 이 톤으로
+              답해요
+            </span>
+          ) : (
+            <span>모드 없음 — 일반 DOTS 톤</span>
+          )}
         </div>
       </header>
 
