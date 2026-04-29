@@ -49,7 +49,36 @@ const COOKING_RECIPE_KEYWORDS: Record<string, string[]> = {
   "tuna-kimchi-jjigae": ["김치찌개", "김치", "찌개", "참치", "두부"],
 };
 
-const COOKING_GENERIC = ["요리", "레시피", "음식", "cook", "recipe"];
+// Cooking-domain substrings — any single hit counts as a cooking signal.
+// Mirrors SAT_MATH_DOMAIN's role: prevents an input like "양자역학" from
+// drifting into Cooking just because the cooking pack is installed.
+//
+// Note: "국" / "밥" / "면" are very short Korean tokens and can collide
+// (e.g. "한국어" contains "국"). Kept per spec — if false positives show
+// up in production we narrow to compounds like "국밥" / "찌개국" instead.
+const COOKING_DOMAIN = [
+  "요리",
+  "레시피",
+  "음식",
+  "cook",
+  "recipe",
+  "조리",
+  "찌개",
+  "국",
+  "밥",
+  "면",
+  "반찬",
+  "디저트",
+  "재료",
+  "양념",
+  "백종원",
+];
+
+// Cooking-generic — too broad to match alone. Only counts when a
+// specific-recipe or domain keyword also fired. "맛집 추천해줘" alone
+// shouldn't surface kimchi recipes; "한식 레시피" should (domain hit
+// via "레시피").
+const COOKING_GENERIC = ["맛", "한식", "양식", "추천"];
 
 // Score thresholds:
 //   - SPECIFIC_HIT (>=3): user named a topic-specific term → content-level match
@@ -103,17 +132,35 @@ function scoreSATMath(q: string, problem: SATMathProblem): number {
 }
 
 function scoreCookingRecipe(q: string, recipe: PackRecipe): number {
-  let score = 0;
+  let specific = 0;
+  let domain = 0;
+  let generic = 0;
   for (const k of COOKING_RECIPE_KEYWORDS[recipe.id] ?? []) {
-    if (q.includes(lower(k))) score += SPECIFIC_HIT_SCORE;
-  }
-  for (const k of COOKING_GENERIC) {
     if (q.includes(lower(k))) {
-      score += 1;
+      specific += SPECIFIC_HIT_SCORE;
+      // Don't break — multiple recipe keywords reinforcing the signal
+      // (김치 + 찌개 + 백종원) is fine, but cap at one bonus per recipe
+      // to keep scoring comparable across packs.
       break;
     }
   }
-  return score;
+  for (const k of COOKING_DOMAIN) {
+    if (q.includes(lower(k))) {
+      domain = 1;
+      break;
+    }
+  }
+  for (const k of COOKING_GENERIC) {
+    if (q.includes(lower(k))) {
+      generic = 1;
+      break;
+    }
+  }
+  // Gate: same shape as scoreSATMath. Generic-only ("맛집 추천" → only
+  // "맛" + "추천" GENERIC, no DOMAIN) returns 0 so the input falls through
+  // to store search / Stage 3. "양자역학" → 0 across the board → 0.
+  if (specific === 0 && domain === 0) return 0;
+  return specific + domain + generic;
 }
 
 export function matchPackContent(
