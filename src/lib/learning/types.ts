@@ -35,4 +35,10 @@ export type LearnedResponse = {
   // How many times this entry has been served on a match. Surfaces in
   // debug listing; Phase B에서 priority와 함께 ranking 보조 키.
   usedCount: number;
+  // V4 시맨틱 매칭. 임베딩 모델 ready 상태에서 saveLearned가 자동 채운다.
+  // localStorage 직렬화 호환을 위해 Float32Array가 아니라 number[]로
+  // 보관 — 매칭 hot path에서 toFloat32로 한 번만 변환.
+  // 모델 미사용 / 임베딩 실패 → undefined. matchLearnedResponse는 그
+  // 엔트리를 정확 일치 경로로만 평가한다 (V3 fallback).
+  vector?: number[];
 };

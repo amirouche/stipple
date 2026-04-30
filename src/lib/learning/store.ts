@@ -7,6 +7,8 @@
 // Writes go through localStorage and update the cache. Module-level state
 // + listener Set, mirroring conversation-store / user-store patterns.
 
+import { embed, getEmbeddingStatus } from "@/lib/embedding";
+
 import type { LearnedResponse } from "./types";
 
 const STORAGE_KEY = "dots:learned-responses";
@@ -71,6 +73,17 @@ export async function getAllLearned(): Promise<LearnedResponse[]> {
 }
 
 export async function saveLearned(entry: LearnedResponse): Promise<void> {
+  // V4: 임베딩 모델 ready 상태면 userInput을 자동 임베딩. 호출 측이
+  // 미리 vector를 채워 보낸 경우(배치 마이그레이션 등)는 그대로 사용.
+  // 임베딩 실패는 silent — 정확 일치 매칭은 그대로 가능.
+  if (!entry.vector && getEmbeddingStatus().state === "ready") {
+    try {
+      const v = await embed(entry.userInput);
+      entry = { ...entry, vector: Array.from(v) };
+    } catch (err) {
+      console.warn("[learning] 자동 임베딩 실패, vector 없이 저장:", err);
+    }
+  }
   cache = [...cache, entry];
   persist();
   emit();

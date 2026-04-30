@@ -25,6 +25,9 @@ type LearnedSnapshotRow = {
   usedCount: number;
   rating?: "good" | "bad";
   priority: number;
+  // V4: 시맨틱 매칭 가능 여부 + 차원. 디버깅 시 어떤 모델로 임베딩됐는지
+  // 한눈에 (768d = EmbeddingGemma, 384d = MiniLM, undefined = 임베딩 X).
+  vectorDim?: number;
   createdAt: string;
 };
 
@@ -42,6 +45,7 @@ export function setupLearningDebug(): void {
         usedCount: e.usedCount,
         rating: e.rating,
         priority: e.priority,
+        vectorDim: e.vector?.length,
         createdAt: new Date(e.createdAt).toISOString(),
       })),
     clear: () => clearLearned(),

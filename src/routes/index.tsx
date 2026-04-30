@@ -275,7 +275,7 @@ function ChatPage() {
     // Casual은 학습된 인사 응답 hit이면 그대로 사용 (인사 자체를 캐싱) — V2 동작.
     const skipLearnedStep = isFollowUpIntent || (justSawSuggestion && hasFollowUpIntent(text));
     if (!skipLearnedStep) {
-      const learned = matchLearnedResponse(text);
+      const learned = await matchLearnedResponse(text);
       if (learned) {
         const userId = crypto.randomUUID();
         const asstId = crypto.randomUUID();
