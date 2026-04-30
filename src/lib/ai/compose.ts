@@ -140,7 +140,20 @@ export async function composeAnswer(args: ComposeArgs): Promise<ComposeResult> {
     }
     return { payload: attachPitch(payload, args.query), provider };
   } catch (err) {
-    console.error("[compose] LLM call failed, using fallback:", err);
+    console.error("[compose] LLM call failed:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    // 안정성 정정 (2026-04-30): Gemini 503/UNAVAILABLE 같은 외부 일시
+    // 장애일 땐 "안에서는 바로 안 잡혀…" 같은 모호한 캔드 fallback 대신
+    // 명확한 "지금 클라우드 혼잡" 메시지를 노출. 사용자에게 원인이 보이게.
+    const isOverloaded = /\b503\b|overload|UNAVAILABLE|혼잡/i.test(message);
+    if (isOverloaded) {
+      return {
+        payload: {
+          kind: "text",
+          text: "지금 클라우드 서버가 혼잡해. 잠시 후 다시 시도해줘.",
+        },
+      };
+    }
     return { payload: attachPitch(args.fallback, args.query) };
   }
 }

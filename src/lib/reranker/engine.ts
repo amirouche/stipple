@@ -14,6 +14,8 @@ let progressCb: ((p: RerankerProgress) => void) | undefined;
 function ensureWorker(): Worker {
   if (worker) return worker;
   worker = new RerankerWorker();
+  // ── DIAGNOSTIC ─ Worker 진짜 만들어지는지.
+  if (import.meta.env.DEV) console.log("[reranker-engine] worker spawned");
   worker.onmessage = (event: MessageEvent) => {
     const msg = event.data as {
       id: number;

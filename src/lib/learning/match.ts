@@ -19,7 +19,13 @@
 //   6. 정렬: priority desc → score desc → createdAt desc.
 
 import { cosineSimilarity, embed, getEmbeddingStatus, toFloat32 } from "@/lib/embedding";
-import { getRerankerStatus, LEARNED_RERANK_THRESHOLD, rerank, RERANK_TOP_N } from "@/lib/reranker";
+import { LEARNED_RERANK_THRESHOLD, RERANK_TOP_N } from "@/lib/reranker";
+
+// 안정성 정정 (2026-04-30): GTE reranker Transformers.js 호환 작업 중. V4.5
+// 단계는 통째로 skip — V4 임베딩 점수가 그대로 LEARNED_RERANK_THRESHOLD
+// 게이트를 통과해야 hit. 모델 호환 복구되면 false → getRerankerStatus()
+// === "ready" 같은 원래 가드로 복구.
+const RERANKER_ENABLED = false;
 
 import { getLearnedSnapshot } from "./store";
 import type { LearnedResponse } from "./types";
@@ -66,24 +72,25 @@ export async function matchLearnedResponse(input: string): Promise<LearnedRespon
 
   // 2) similarity desc 정렬 후 top-N. 너무 많은 후보를 reranker에 넘기면
   //    cross-encoder 호출당 50~100ms × N 비용이 커진다.
-  let pool = [...candidates.values()].sort((a, b) => b.score - a.score).slice(0, RERANK_TOP_N);
+  const pool = [...candidates.values()].sort((a, b) => b.score - a.score).slice(0, RERANK_TOP_N);
 
-  // 3) Reranker가 ready + 후보 ≥ 2면 cross-encoder로 재정렬.
-  //    score를 rerank 결과로 교체. ready X면 sim score 그대로 사용 (V4).
-  if (getRerankerStatus().state === "ready" && pool.length >= 2) {
-    try {
-      const texts = pool.map((c) => c.entry.userInput);
-      const rerankScores = await rerank(input, texts);
-      pool = pool.map((c, i) => ({ ...c, score: rerankScores[i] ?? c.score }));
-    } catch (err) {
-      console.warn("[learning] reranker 실패, 임베딩 점수 그대로 사용:", err);
-    }
+  // 3) Reranker는 안정성 정정으로 일시 비활성. V4 임베딩 점수 그대로 사용.
+  if (RERANKER_ENABLED) {
+    // (모델 호환 복구 후 활성화. 원래 분기는 git 히스토리에 보존.)
   }
 
   // 4) priority < 0 제외 + threshold 미달 제외.
   //    threshold는 LEARNED_RERANK_THRESHOLD (0.85). reranker 미사용 시
   //    임베딩 sim이 0.85 미만이면 자동 컷.
   const filtered = pool.filter((c) => c.entry.priority >= 0 && c.score >= LEARNED_RERANK_THRESHOLD);
+  if (import.meta.env.DEV) {
+    const top = pool[0];
+    console.log("[embedding-match]", {
+      similarity: top ? Number(top.score.toFixed(3)) : 0,
+      hit: filtered.length > 0,
+      poolSize: pool.length,
+    });
+  }
   if (filtered.length === 0) return null;
 
   // 5) 정렬: priority desc → score desc → createdAt desc.

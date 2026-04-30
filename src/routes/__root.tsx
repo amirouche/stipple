@@ -72,18 +72,16 @@ function RootShell({ children }: { children: React.ReactNode }) {
     checkWakeAlarms();
     registerWakeScheduler();
     void hydratePitchCache();
-    // Try to wake the WebLLM engine if a previous session left a cached
-    // model. Lazy-imported so the 6MB+ webllm runtime doesn't land in
-    // the eager root bundle — it only loads when this branch executes
-    // (client-side, post-hydration). Silent on failure.
-    void import("@/lib/webllm").then((m) => m.tryAutoReloadWebLLM());
+    // 안정성 정정 (2026-04-30): WebLLM auto-reload 비활성화. @mlc-ai/web-llm
+    // ES module 깨짐 회복 후 한 줄 import 복구하면 된다.
+    // void import("@/lib/webllm").then((m) => m.tryAutoReloadWebLLM());
     // V4: 사용자가 이전에 명시적으로 다운로드한 적 있는 임베딩 모델이
     // 있으면 캐시에서 조용히 ready로 복구. miss면 silent fail — V3
     // fallback 매칭이 그대로 작동한다.
     void import("@/lib/embedding").then((m) => m.tryAutoReloadEmbedding());
-    // V4.5: cross-encoder reranker도 같은 정책. 이전에 다운로드한 적
-    // 있으면 캐시에서 ready로. 아니면 silent — V4 임베딩만 작동.
-    void import("@/lib/reranker").then((m) => m.tryAutoReloadReranker());
+    // 안정성 정정 (2026-04-30): GTE reranker Transformers.js 호환 작업
+    // 중. auto-reload 비활성화 — V4 임베딩 매칭만 작동.
+    // void import("@/lib/reranker").then((m) => m.tryAutoReloadReranker());
     if (import.meta.env.DEV) {
       void import("@/lib/memory/debug").then((m) => m.setupDebugHandle());
     }

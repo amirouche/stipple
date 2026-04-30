@@ -1,25 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Shell } from "@/components/Shell";
 import { PACKS } from "@/lib/dots-data";
 import {
   movePack,
-  setLLMProvider,
   setPitchPrefs,
   setPreferences,
   usePreferences,
   type DefaultMode,
   type HomePriority,
-  type LLMProvider,
 } from "@/lib/preferences";
-import {
-  AVAILABLE_MODELS,
-  checkWebGPUSupport,
-  downloadAndInitModel,
-  useWebLLMStatus,
-  type ModelInfo,
-  type WebLLMModelId,
-} from "@/lib/webllm";
 import {
   AVAILABLE_EMBEDDING_MODELS,
   clearEmbeddingModel,
@@ -27,13 +17,6 @@ import {
   useEmbeddingStatus,
   type EmbeddingModelId,
 } from "@/lib/embedding";
-import {
-  AVAILABLE_RERANKER_MODELS,
-  clearRerankerModel,
-  downloadAndInitReranker,
-  useRerankerStatus,
-  type RerankerModelId,
-} from "@/lib/reranker";
 import {
   PITCH_CATEGORIES,
   getPitchCount,
@@ -543,154 +526,27 @@ function PitchSection() {
   );
 }
 
-// CONSTITUTION: 모델 다운로드는 사용자가 "다운로드 시작" 버튼을
-// 명시적으로 눌러야 트리거. 자동 다운로드 X. 자동 활성화 X.
-// 다운로드 후에도 — 사용자가 Provider를 명시적으로 변경해야 작동.
-//
-// 사용자 시점 정정 (2026-04-30): "WebLLM 우선" 옵션 폐기.
-// WebLLM↔Gemini 자동 fallback이 "양자역학 2줄 환각"·"찜부추국수" 같은
-// 가짜 음식 환각을 사용자에게 강제하던 어중간한 모드였음. 이제 두 모드만:
-//   - Gemini (기본): 정확하고 풍부한 응답
-//   - WebLLM 모드: 사적 영역 의식 사용자만 선택 — trade-off 명시
-const LLM_PROVIDER_OPTIONS: { id: LLMProvider; title: string; desc: string }[] = [
-  {
-    id: "gemini-only",
-    title: "Gemini (기본)",
-    desc: "외부 API. 정확하고 자연스러운 응답.",
-  },
-  {
-    id: "webllm-only",
-    title: "WebLLM 모드",
-    desc: "외부 호출 X. 모델 다운로드 필수. 사적 영역 의식 사용자용 — 응답 정보량은 클라우드보다 낮음.",
-  },
-];
-
-function formatElapsed(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
+// 안정성 정정 (2026-04-30): WebLLM 일시 비활성화. @mlc-ai/web-llm ES
+// module 호환 문제로 런타임 깨짐 → 모델 카드 / 다운로드 / Provider 라디오
+// 모두 제거. 단일 옵션 (gemini-only) 자동 강제. 모듈 (src/lib/webllm) 자체는
+// 살려둔다 — 추후 인프라 안정화되면 이 섹션만 복구하면 된다.
 
 function WebLLMSection() {
-  const prefs = usePreferences();
-  const status = useWebLLMStatus();
-  // null = still checking, false = unsupported, true = supported. Three
-  // states keep us from flashing the model cards before we know.
-  const [gpuOk, setGpuOk] = useState<boolean | null>(null);
-  const [gpuReason, setGpuReason] = useState<string | undefined>();
-
-  useEffect(() => {
-    let cancelled = false;
-    checkWebGPUSupport().then((res) => {
-      if (cancelled) return;
-      setGpuOk(res.supported);
-      setGpuReason(res.reason);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // A download in flight on a different model freezes other cards so the
-  // user can't kick off two big downloads in parallel (only one Worker
-  // can usefully compile at a time anyway).
-  const downloadingModel = status.state === "loading" ? status.model : undefined;
-
-  // webllm-only is only allowed once a model is actually loaded —
-  // otherwise the chat would throw on every Stage 3 input.
-  const webllmReady = status.state === "ready";
-  const providerDisabled = (id: LLMProvider): boolean => id === "webllm-only" && !webllmReady;
-
   return (
-    <section className="rounded-xl border border-border bg-card p-6">
+    <section className="rounded-xl border border-border bg-card p-6 opacity-80">
       <div className="flex items-baseline justify-between mb-1">
         <h2 className="text-[15px] font-semibold tracking-tight text-ink">온디바이스 LLM</h2>
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
-          기기 안
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+          준비 중
         </span>
       </div>
-      <p className="text-[12.5px] text-ink-soft mb-4 leading-relaxed">
-        내 기기에서 직접 실행되는 AI. 첫 다운로드 후 외부 호출 없이 작동해.
+      <p className="text-[12.5px] text-ink-soft leading-relaxed">
+        브라우저 안에서 도는 AI 모드. 외부 호출이 사라지는 대신 응답 정보량이 줄어든다. 지금은
+        안정성 작업 중이라 잠시 비활성화 — 모든 응답은 기본 모드(클라우드)로 흘러간다.
       </p>
-
-      {/* WebGPU compatibility gate */}
-      {gpuOk === null ? (
-        <p className="text-[12px] text-ink-soft">호환성 확인 중…</p>
-      ) : gpuOk === false ? (
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-[13px] text-ink mb-1">이 브라우저에서는 WebLLM을 쓸 수 없어.</p>
-          <p className="text-[12px] text-ink-soft leading-relaxed">
-            Chrome 113+ 또는 Edge 113+ 가 필요해. (이유: {gpuReason ?? "WebGPU 미지원"})
-          </p>
-          <p className="mt-2 text-[12px] text-ink-soft leading-relaxed">
-            기본 모드(Gemini)는 그대로 작동하니까 채팅은 막히지 않아. WebLLM 모드만 이 브라우저에서
-            못 켜는 거야.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="space-y-2.5">
-            {AVAILABLE_MODELS.map((m) => (
-              <ModelCard
-                key={m.id}
-                model={m}
-                downloadingModel={downloadingModel}
-                statusState={status.state}
-                statusModel={status.model}
-                statusError={status.error}
-                progressPct={status.progress?.progress ?? 0}
-                progressText={status.progress?.text ?? ""}
-                progressElapsed={status.progress?.timeElapsed ?? 0}
-              />
-            ))}
-          </div>
-          <p className="mt-3 text-[11.5px] text-ink-soft leading-relaxed">
-            이 다운로드는 1회만. IndexedDB에 저장되어 다음부터 즉시 작동해.
-          </p>
-        </>
-      )}
-
-      {/* Provider selection */}
-      <div className="mt-5 pt-5 border-t border-border">
-        <p className="text-[13px] text-ink mb-1">어떤 모드로 작동시킬지</p>
-        <p className="text-[11.5px] text-ink-soft mb-3 leading-relaxed">
-          기본은 Gemini — 정확하고 풍부한 응답. 사적 영역이 중요하면 WebLLM 모드로 — 외부 호출이
-          사라지는 대신 응답 정보량이 줄어든다.
-        </p>
-        <div className="space-y-2">
-          {LLM_PROVIDER_OPTIONS.map((opt) => {
-            const disabled = providerDisabled(opt.id);
-            const active = prefs.llmProvider === opt.id;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => !disabled && setLLMProvider(opt.id)}
-                disabled={disabled}
-                className={`w-full text-left p-4 rounded-lg border transition-colors flex items-start gap-3 ${
-                  active ? "border-strong bg-surface" : "border-border bg-card hover:border-strong"
-                } disabled:opacity-40 disabled:hover:border-border disabled:cursor-not-allowed`}
-              >
-                <span
-                  className={`mt-1 h-3.5 w-3.5 rounded-full border-2 shrink-0 transition-all ${
-                    active ? "border-primary bg-primary" : "border-border-strong"
-                  }`}
-                />
-                <span>
-                  <span className="block text-[13.5px] font-medium text-ink">{opt.title}</span>
-                  <span className="block text-[12px] text-ink-soft mt-0.5">{opt.desc}</span>
-                  {disabled && (
-                    <span className="block text-[11px] text-ink-soft/70 mt-1 font-mono uppercase tracking-[0.12em]">
-                      모델 다운로드 후 활성화
-                    </span>
-                  )}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-soft">
+        다음 단계 (베타) — 인프라 안정화 후 복구
+      </p>
     </section>
   );
 }
@@ -813,229 +669,25 @@ function EmbeddingSection() {
   );
 }
 
-// V4.5 cross-encoder reranker 섹션. EmbeddingSection 동일 패턴 — 모델 카드
-// + 진행률 + 비활성화 버튼. 안 켜도 V4 임베딩 매칭은 그대로 작동.
+// V4.5 cross-encoder reranker 섹션. 안정성 정정 (2026-04-30): GTE
+// multilingual reranker가 Transformers.js v4와 호환되지 않아 (ONNX 그래프
+// 로드 실패) 일시 비활성화. 모듈 (src/lib/reranker)은 살려두고 다운로드
+// 카드만 가린다. matcher 측에서도 reranker 단계를 건너뛰므로 V4 임베딩
+// 점수가 그대로 통과 — 모델 호환 문제 해결되면 이 섹션 복구.
 function RerankerSection() {
-  const status = useRerankerStatus();
-  const isLoading = status.state === "loading";
-  const isReady = status.state === "ready";
-  const isError = status.state === "error";
-  const progressPct = status.progress?.progress ?? 0;
-  const progressFile = status.progress?.file ?? "";
-  const progressStatus = status.progress?.status ?? "";
-
-  const recommended = AVAILABLE_RERANKER_MODELS.find((m) => m.recommended);
-
-  function handleDownload(modelId: RerankerModelId) {
-    downloadAndInitReranker(modelId).catch((err) => {
-      console.error("[reranker] 다운로드 실패:", err);
-    });
-  }
-
-  function handleDisable() {
-    void clearRerankerModel();
-  }
-
   return (
-    <section className="rounded-xl border border-border bg-card p-6">
+    <section className="rounded-xl border border-border bg-card p-6 opacity-80">
       <div className="flex items-baseline justify-between mb-1">
         <h2 className="text-[15px] font-semibold tracking-tight text-ink">정확도 향상 (V4.5)</h2>
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
-          기기 안
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+          다음 단계 (베타)
         </span>
       </div>
-      <p className="text-[12.5px] text-ink-soft mb-4 leading-relaxed">
-        Cross-encoder 재정렬 — V4 임베딩이 잡은 후보를 정밀 점검. "이거 진짜 있는 학문이야?" 같은
-        추상/대화적 변형도 매칭. 시맨틱 매칭(V4) 위에 얹히는 레이어 — V4 안 켜도 단독으로는 의미 X.
-      </p>
-
-      <div className="space-y-2.5">
-        {AVAILABLE_RERANKER_MODELS.map((m) => {
-          const isThis = status.model === m.id;
-          const thisLoading = isThis && isLoading;
-          const thisReady = isThis && isReady;
-          const thisError = isThis && isError;
-          return (
-            <article key={m.id} className="rounded-lg border border-border bg-surface p-4">
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-[14px] font-semibold tracking-tight text-ink">{m.name}</h3>
-                    {m.recommended && (
-                      <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-primary">
-                        추천
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-[11.5px] text-ink-soft leading-relaxed">
-                    {m.description}
-                  </p>
-                  <p className="mt-1 font-mono text-[10.5px] text-ink-soft">{m.size}</p>
-                </div>
-                {thisReady ? (
-                  <button
-                    type="button"
-                    onClick={handleDisable}
-                    className="px-3 h-8 rounded-md border border-border text-[12px] text-ink-soft hover:text-ink hover:bg-card shrink-0"
-                  >
-                    비활성화
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleDownload(m.id)}
-                    disabled={isLoading}
-                    className="px-3 h-8 rounded-md bg-ink text-background text-[12px] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                  >
-                    {thisLoading ? "다운로드 중…" : "다운로드"}
-                  </button>
-                )}
-              </div>
-
-              {thisLoading && (
-                <div className="mt-2">
-                  <div className="h-1 rounded-full bg-card overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-all"
-                      style={{ width: `${Math.min(100, progressPct)}%` }}
-                    />
-                  </div>
-                  <p className="mt-1.5 font-mono text-[10px] text-ink-soft">
-                    {progressStatus} {progressFile && `· ${progressFile}`}
-                  </p>
-                </div>
-              )}
-              {thisReady && (
-                <p className="mt-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-primary">
-                  ✓ 준비 완료 — 정밀 재정렬 작동 중
-                </p>
-              )}
-              {thisError && (
-                <p className="mt-2 text-[12px] text-ink leading-relaxed">
-                  실패: {status.error ?? "알 수 없는 오류"}
-                </p>
-              )}
-            </article>
-          );
-        })}
-      </div>
-
-      <p className="mt-3 text-[11.5px] text-ink-soft leading-relaxed">
-        다운로드는 1회만. IndexedDB 캐시.
-        {recommended && ` 추천: ${recommended.name} (${recommended.size}).`}
+      <p className="text-[12.5px] text-ink-soft leading-relaxed">
+        Cross-encoder 재정렬 — V4 임베딩이 잡은 후보를 한 번 더 정밀 점검. 모델 호환성 작업 중이라
+        잠시 가려둠. V4 시맨틱 매칭은 그대로 작동.
       </p>
     </section>
-  );
-}
-
-function ModelCard({
-  model,
-  downloadingModel,
-  statusState,
-  statusModel,
-  statusError,
-  progressPct,
-  progressText,
-  progressElapsed,
-}: {
-  model: ModelInfo;
-  downloadingModel?: WebLLMModelId;
-  statusState: "idle" | "loading" | "ready" | "generating" | "error";
-  statusModel?: WebLLMModelId;
-  statusError?: string;
-  progressPct: number;
-  progressText: string;
-  progressElapsed: number;
-}) {
-  const isThis = statusModel === model.id;
-  const isLoadingThis = statusState === "loading" && isThis;
-  const isReady = (statusState === "ready" || statusState === "generating") && isThis;
-  const isError = statusState === "error" && isThis;
-  // Block parallel downloads, but allow re-trying a different model after
-  // an error or kicking off the first download while idle.
-  const otherDownloading = Boolean(downloadingModel) && downloadingModel !== model.id;
-  const disabled = otherDownloading || isLoadingThis;
-
-  function start() {
-    downloadAndInitModel(model.id).catch((err) => {
-      console.error("[webllm] 다운로드 실패:", err);
-    });
-  }
-
-  return (
-    <article className="rounded-lg border border-border bg-surface p-4">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="text-[14px] font-semibold tracking-tight text-ink">{model.name}</h3>
-            {model.recommended && (
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-primary">
-                추천
-              </span>
-            )}
-            {isReady && (
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-primary">
-                사용 중
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-[12px] text-ink-soft leading-relaxed">{model.description}</p>
-          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-ink-soft">
-            <span className="font-mono">{model.size}</span>
-            <span className="text-ink-soft/40">·</span>
-            <span className="flex gap-1">
-              {model.languages.map((l) => (
-                <span key={l} className="font-mono uppercase tracking-[0.1em]">
-                  {l}
-                </span>
-              ))}
-            </span>
-          </div>
-        </div>
-        {isReady ? (
-          <span className="shrink-0 h-8 px-3 inline-flex items-center rounded-md border border-border text-[11.5px] text-ink-soft">
-            준비됨
-          </span>
-        ) : isError ? (
-          <button
-            type="button"
-            onClick={start}
-            disabled={disabled}
-            className="shrink-0 h-8 px-3 rounded-md bg-ink text-background text-[12px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
-          >
-            재시도
-          </button>
-        ) : !isLoadingThis ? (
-          <button
-            type="button"
-            onClick={start}
-            disabled={disabled}
-            className="shrink-0 h-8 px-3 rounded-md bg-ink text-background text-[12px] font-medium hover:opacity-90 disabled:opacity-40 transition-opacity"
-          >
-            다운로드 시작
-          </button>
-        ) : null}
-      </div>
-
-      {isLoadingThis && (
-        <div className="mt-3">
-          <div className="h-1.5 w-full rounded-full bg-border overflow-hidden">
-            <div
-              className="h-full bg-primary transition-[width] duration-300"
-              style={{ width: `${Math.min(100, Math.max(0, progressPct * 100))}%` }}
-            />
-          </div>
-          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-ink-soft">
-            <span className="truncate">{progressText || "준비 중…"}</span>
-            <span className="font-mono shrink-0">{formatElapsed(progressElapsed)}</span>
-          </div>
-        </div>
-      )}
-
-      {isError && statusError && (
-        <p className="mt-3 text-[11.5px] text-ink-soft leading-relaxed">에러: {statusError}</p>
-      )}
-    </article>
   );
 }
 

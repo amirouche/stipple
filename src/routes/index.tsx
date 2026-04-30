@@ -123,9 +123,10 @@ function ChatPage() {
   async function send(text: string) {
     if (!text.trim() || busy || !thread) return;
 
-    // V3 라우터: 의도 분류부터. WebLLM ready면 LLM 분류 (50~100ms 목표,
-    // 실제 500ms~1s), 아니면 규칙 fallback. 이후 모든 stage는 분류 결과를
-    // 보고 자기가 돌지 결정한다.
+    // 안정성 정정 (2026-04-30): 회귀 진단용 timing 래퍼(t())는 제거.
+    // 남기는 진단 로그는 세 줄 — [send] 입력+의도, [setThreadPack]
+    // 매칭 hit 시점, [llm-call]은 dispatch.ts에서 직접. 실 사용자
+    // 시연에서 콘솔이 너무 시끄러우면 안 된다.
     setBusy(true);
     setInput("");
     const intentResult = await classifyIntent(text);
@@ -451,7 +452,9 @@ function ChatPage() {
       history: threadHistory(thread.messages),
       onToken,
       intent,
-    }).then(({ payload, provider }) => renderPayload(payload, provider));
+    }).then(({ payload, provider }) => {
+      renderPayload(payload, provider);
+    });
   }
 
   // Suggestion buttons — invoked from rendered messages. Each option is one

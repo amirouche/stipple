@@ -119,41 +119,11 @@ export async function downloadAndInitModel(modelId: WebLLMModelId): Promise<void
 //   - An engine is already loading or ready (StrictMode double-mount,
 //     subsequent navigations)
 export async function tryAutoReloadWebLLM(): Promise<void> {
-  const current = getStatusSnapshot();
-  if (current.state === "loading" || current.state === "ready" || current.state === "generating") {
-    return;
-  }
-
-  const provider = getPreferences().llmProvider;
-  if (provider !== "webllm-only") return;
-
-  const modelId = readLastModel();
-  if (!modelId) return;
-
-  const support = await checkWebGPUSupport();
-  if (!support.supported) return;
-
-  try {
-    const cached = await hasModelInCache(modelId);
-    if (!cached) {
-      // Cache evicted or never finished. Drop the stale pointer so we
-      // don't keep checking on every load.
-      persistLastModel(null);
-      return;
-    }
-  } catch {
-    // hasModelInCache itself can throw on private-mode browsers etc.
-    // Just bail silently.
-    return;
-  }
-
-  try {
-    await downloadAndInitModel(modelId);
-  } catch (err) {
-    // downloadAndInitModel already set status to "error". The user can
-    // still chat (Gemini fallback) and re-trigger from settings.
-    console.warn("[webllm] auto-reload failed:", err);
-  }
+  // 안정성 정정 (2026-04-30): LLMProvider가 "gemini-only"로 좁혀져 분기
+  // 자체가 unreachable + 모듈 런타임이 깨져 있어 idle reload를 통째로
+  // 끈다. root.tsx에서도 호출이 빠짐. 인프라 복구되면 git 히스토리에서
+  // 원본(provider 체크 + cache 확인 + downloadAndInitModel) 복구.
+  return;
 }
 
 // Get the active engine, or null if no model has been loaded. Callers

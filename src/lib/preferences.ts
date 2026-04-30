@@ -7,19 +7,17 @@ import type { PitchCategory } from "@/lib/pitch/types";
 export type HomePriority = "memory-first" | "packs-first" | "balanced";
 export type DefaultMode = "calm" | "fast" | "deep";
 
-// 어느 LLM으로 응답을 만들지. 두 모드만 노출:
-//   "gemini-only" (default) — 외부 API. 정확하고 자연스러운 응답이 기본
-//                             값. 사용자에게 부정확한 온디바이스 응답을
-//                             강제하지 않는다.
-//   "webllm-only"           — 외부 호출 X. 모델 다운로드 필수. 사적 영역
-//                             가치를 의식적으로 선택한 사용자용.
+// 안정성 우선 정정 (2026-04-30): WebLLM 모드 일시 폐기. @mlc-ai/web-llm
+// ES module 호환 문제로 런타임 깨짐 → Gemini만 안정. webllm-only 옵션은
+// 인프라/모델이 안정화되면 다시 노출.
 //
-// 이전 "webllm-first" 옵션은 폐기. WebLLM ↔ Gemini 자동 fallback이
-// 사용자 입장에서 응답 품질을 예측 불가능하게 만들었고 ("양자역학" 2줄
-// 환각 vs 풍부한 설명이 무작위로 섞임), 헌법 "사용자 명시 X 자동 작동"
-// 룰에도 어긋났다. hydrate 시 stale "webllm-first" 값은 "gemini-only"로
-// 마이그레이션.
-export type LLMProvider = "gemini-only" | "webllm-only";
+// 현 시점 LLMProvider는 단일 값이지만 type을 union으로 유지해 미래에 옵션
+// 추가가 type-level 변경 없이 가능하게.
+//
+// hydrate 시 이전에 "webllm-first" 또는 "webllm-only"가 박혀 있었으면
+// 모두 "gemini-only"로 마이그레이션 — 사용자가 깨진 설정으로 응답을
+// 못 받는 회귀 차단.
+export type LLMProvider = "gemini-only";
 
 export type PitchPrefs = {
   enabled: boolean;
@@ -86,12 +84,9 @@ export function hydratePreferences(): void {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as Partial<Preferences> & { llmProvider?: string };
-    // 마이그레이션: stale "webllm-first" 값(또는 알 수 없는 값)은 새 기본값
-    // "gemini-only"로 강제. 사용자가 부정확한 응답을 의식 없이 받지 않게.
-    let llmProvider: LLMProvider = DEFAULTS.llmProvider;
-    if (parsed.llmProvider === "gemini-only" || parsed.llmProvider === "webllm-only") {
-      llmProvider = parsed.llmProvider;
-    }
+    // 마이그레이션: 어떤 stale 값(webllm-first / webllm-only)이든 모두
+    // gemini-only로 강제. WebLLM 일시 비활성화.
+    const llmProvider: LLMProvider = "gemini-only";
     const migrated = parsed.llmProvider !== undefined && parsed.llmProvider !== llmProvider;
     // Merge so newly-added preference fields fall through to defaults for
     // returning users.

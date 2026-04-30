@@ -18,7 +18,9 @@
 
 import type { Pack } from "@/lib/dots-data";
 import type { Intent } from "@/lib/packs/intent";
-import { getPreferences, type LLMProvider } from "@/lib/preferences";
+// WebLLM 분기는 일시 비활성화 (2026-04-30). 모듈은 살려두고 imports만
+// 정리. callWebLLM / isWebLLMReady 같은 dead helper도 미래 재활성화를
+// 위해 그대로 둔다 (ESLint unused-vars off — CLAUDE.md 룰).
 import { generateWithWebLLM, getWebLLMStatus, type WebLLMStatus } from "@/lib/webllm";
 import { askGemini, type GeminiHistoryTurn } from "./gemini";
 
@@ -181,9 +183,11 @@ async function callWebLLM(
 
 export async function dispatchLLMCall(
   input: DispatchInput,
+  // onToken은 WebLLM 스트리밍용. WebLLM 일시 비활성화 상태에서는 호출
+  // 안 되지만 시그니처 그대로 유지해 추후 재활성화 시 호출 측 변경 X.
+  // (CLAUDE.md: @typescript-eslint/no-unused-vars off — 별도 disable 불필요.)
   onToken: (delta: string, sofar: string) => void = () => {},
 ): Promise<DispatchResult> {
-  const provider: LLMProvider = getPreferences().llmProvider;
   const systemPrompt = buildSystemPrompt(
     input.userMessage,
     input.systemPrompt,
@@ -192,13 +196,29 @@ export async function dispatchLLMCall(
   );
   const history = trimHistory(input.history);
 
-  if (provider === "webllm-only") {
-    const webllmReady = isWebLLMReady(getWebLLMStatus());
-    if (!webllmReady) {
-      throw new Error("WebLLM 모델이 아직 로드되지 않았어. 설정에서 모델을 다운로드해.");
+  // 안정성 정정 (2026-04-30): WebLLM 분기 제거. @mlc-ai/web-llm ES module
+  // 호환 문제로 런타임 깨짐 → 모든 응답을 Gemini로. WebLLM 인프라 안정화
+  // 후 분기 복구.
+  if (import.meta.env.DEV) {
+    const tStart = performance.now();
+    try {
+      const result = await callGemini(input, systemPrompt, history);
+      console.log("[llm-call]", {
+        provider: "gemini",
+        success: true,
+        ms: (performance.now() - tStart).toFixed(0),
+        textLen: result.text.length,
+      });
+      return result;
+    } catch (err) {
+      console.warn("[llm-call]", {
+        provider: "gemini",
+        success: false,
+        ms: (performance.now() - tStart).toFixed(0),
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
     }
-    return callWebLLM(input, systemPrompt, history, onToken);
   }
-  // gemini-only (기본): 모든 LLM 호출은 Gemini로. WebLLM은 옵션 모드에서만.
   return callGemini(input, systemPrompt, history);
 }

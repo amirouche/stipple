@@ -18,6 +18,10 @@ let progressCb: ((p: EmbeddingProgress) => void) | undefined;
 function ensureWorker(): Worker {
   if (worker) return worker;
   worker = new EmbeddingWorker();
+  // ── DIAGNOSTIC ─ Worker 진짜 만들어지는지. 메인 스레드에 떨어지면
+  // 여기 안 찍히고 (대신 import.meta.url 같은 SSR 에러), 워커 작동하면
+  // 한 번만 찍힘.
+  if (import.meta.env.DEV) console.log("[embedding-engine] worker spawned");
   worker.onmessage = (event: MessageEvent) => {
     const msg = event.data as {
       id: number;
