@@ -7,6 +7,7 @@ const NAV = [
   { to: "/store", label: "팩스토어", glyph: "03" },
   { to: "/memory", label: "기억", glyph: "04" },
   { to: "/settings", label: "설정", glyph: "05" },
+  { to: "/demo", label: "데모 측정", glyph: "06" },
 ] as const;
 
 function relTime(ts: number): string {

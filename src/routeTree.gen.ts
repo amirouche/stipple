@@ -14,6 +14,7 @@ import { Route as StoreRouteImport } from './routes/store'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PacksRouteImport } from './routes/packs'
 import { Route as MemoryRouteImport } from './routes/memory'
+import { Route as DemoRouteImport } from './routes/demo'
 import { Route as IndexRouteImport } from './routes/index'
 
 const StudyRoute = StudyRouteImport.update({
@@ -41,6 +42,11 @@ const MemoryRoute = MemoryRouteImport.update({
   path: '/memory',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DemoRoute = DemoRouteImport.update({
+  id: '/demo',
+  path: '/demo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -49,6 +55,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/demo': typeof DemoRoute
   '/memory': typeof MemoryRoute
   '/packs': typeof PacksRoute
   '/settings': typeof SettingsRoute
@@ -57,6 +64,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/demo': typeof DemoRoute
   '/memory': typeof MemoryRoute
   '/packs': typeof PacksRoute
   '/settings': typeof SettingsRoute
@@ -66,6 +74,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/demo': typeof DemoRoute
   '/memory': typeof MemoryRoute
   '/packs': typeof PacksRoute
   '/settings': typeof SettingsRoute
@@ -74,12 +83,20 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/memory' | '/packs' | '/settings' | '/store' | '/study'
+  fullPaths:
+    | '/'
+    | '/demo'
+    | '/memory'
+    | '/packs'
+    | '/settings'
+    | '/store'
+    | '/study'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/memory' | '/packs' | '/settings' | '/store' | '/study'
+  to: '/' | '/demo' | '/memory' | '/packs' | '/settings' | '/store' | '/study'
   id:
     | '__root__'
     | '/'
+    | '/demo'
     | '/memory'
     | '/packs'
     | '/settings'
@@ -89,6 +106,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DemoRoute: typeof DemoRoute
   MemoryRoute: typeof MemoryRoute
   PacksRoute: typeof PacksRoute
   SettingsRoute: typeof SettingsRoute
@@ -133,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MemoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/demo': {
+      id: '/demo'
+      path: '/demo'
+      fullPath: '/demo'
+      preLoaderRoute: typeof DemoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -145,6 +170,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DemoRoute: DemoRoute,
   MemoryRoute: MemoryRoute,
   PacksRoute: PacksRoute,
   SettingsRoute: SettingsRoute,
