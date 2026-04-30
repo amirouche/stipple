@@ -24,9 +24,12 @@ const SAT_MATH_KEYWORDS: Record<string, string[]> = {
   "sat-m-005": ["삼각비", "삼각함수", "sin", "cos", "tan", "trig"],
 };
 
-// SAT 수학 도메인 키워드. 이 중 하나라도 hit하면 팩 매칭이 성립한다 —
-// "수학" 단독이면 5문제 전부 약하게 매치되고 pack-level로 분류된다.
-const SAT_MATH_DOMAIN = [
+// Study 팩 도메인 키워드. SAT 수학 전용("수학", "방정식")부터 학습 전반
+// ("공부", "설명")까지 묶음. 이 중 한 단어 hit이면 팩 매칭이 성립 —
+// "수학" 단독이면 5문제 전부 약하게 매치되어 pack-level로 분류된다.
+// "공부"/"설명"이 빠져 있어 inferDomainPack soft에서 cooking이 잘못
+// 잡히던 버그(회귀 진단 BUG #2) 수정 차원에서 보강.
+const STUDY_DOMAIN = [
   "수학",
   "math",
   "sat",
@@ -37,12 +40,16 @@ const SAT_MATH_DOMAIN = [
   "삼각",
   "통계",
   "대수",
+  "공부",
+  "study",
+  "homework",
+  "설명",
 ];
 
 // 일반 학습 키워드. 단독으로는 매칭 X — DOMAIN 또는 specific 키워드와
 // 함께 있어야 점수에 가산된다. 이 게이트가 "사회문제" / "국어 문제"
 // 같은 입력이 SAT 수학으로 잘못 잡히던 버그를 막는다.
-const SAT_MATH_GENERIC = ["문제", "퀴즈", "테스트", "problem", "quiz", "test"];
+const STUDY_GENERIC = ["문제", "퀴즈", "테스트", "problem", "quiz", "test"];
 
 const COOKING_RECIPE_KEYWORDS: Record<string, string[]> = {
   "baek-kimchi-jjigae": ["김치찌개", "김치", "찌개", "백종원", "돼지"],
@@ -50,7 +57,7 @@ const COOKING_RECIPE_KEYWORDS: Record<string, string[]> = {
 };
 
 // Cooking-domain substrings — any single hit counts as a cooking signal.
-// Mirrors SAT_MATH_DOMAIN's role: prevents an input like "양자역학" from
+// Mirrors STUDY_DOMAIN's role: prevents an input like "양자역학" from
 // drifting into Cooking just because the cooking pack is installed.
 //
 // Note: "국" / "밥" / "면" are very short Korean tokens and can collide
@@ -81,17 +88,19 @@ const COOKING_DOMAIN = [
 const COOKING_GENERIC = ["맛", "한식", "양식", "추천"];
 
 // Score weights — rescaled so we can apply a "must be confident" threshold
-// before forcing the user into a local match. The previous 1/1/3 scale
-// made every domain or generic word above 0, so "메뉴 추천" still surfaced
-// kimchi cards. With these weights:
-//   "김치찌개"        → specific(60) + domain(20) = 80   → match
-//   "한식 레시피"     → domain(20)   + generic(5)  = 25   → below → LLM
+// before forcing the user into a local match. With these weights:
+//   "김치찌개"        → specific(60) + domain(30) = 90   → match
+//   "한식 레시피"     → domain(30)   + generic(5)  = 35   → match (pack-level)
+//   "수학"            → domain(30)                 = 30   → match (pack-level)
 //   "메뉴 추천"       → only generic, gated to 0           → LLM
-//   "수학"            → only domain  = 20                 → below → LLM
+//   "양자역학"        → no hit                     = 0    → LLM
+// 회귀 진단 BUG #1: domain alone(20)이 MATCH_THRESHOLD(30) 미만이라 "수학"
+// 단독 입력이 카드로 안 떴다. 30으로 올려 domain hit만으로도 pack-level
+// 매칭이 성립하게.
 // V2 헌법: 자연스러움 우선. 점수 낮으면 억지로 카드 띄우지 말고 LLM이
 // 자연스러운 톤으로 답하게.
 const SPECIFIC_HIT_SCORE = 60;
-const DOMAIN_HIT_SCORE = 20;
+const DOMAIN_HIT_SCORE = 30;
 const GENERIC_HIT_SCORE = 5;
 
 // Below this, matchPackContent returns null even though we found a
@@ -136,13 +145,13 @@ function scoreSATMath(q: string, problem: SATMathProblem, mode: ScoreMode): numb
       break;
     }
   }
-  for (const k of SAT_MATH_DOMAIN) {
+  for (const k of STUDY_DOMAIN) {
     if (q.includes(lower(k))) {
       domain = DOMAIN_HIT_SCORE;
       break;
     }
   }
-  for (const k of SAT_MATH_GENERIC) {
+  for (const k of STUDY_GENERIC) {
     if (q.includes(lower(k))) {
       generic = GENERIC_HIT_SCORE;
       break;
