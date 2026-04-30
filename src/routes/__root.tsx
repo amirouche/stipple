@@ -8,6 +8,7 @@ import { hydratePitchCache } from "@/lib/pitch";
 import { hydratePreferences } from "@/lib/preferences";
 import { hydrateUserSATProblems } from "@/lib/packs/study/user-store";
 import { hydrateLearned, setupLearningDebug } from "@/lib/learning";
+import { hydrateDemoTraces } from "@/lib/demo/trace";
 
 function NotFoundComponent() {
   return (
@@ -63,6 +64,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
     hydratePreferences();
     hydrateUserSATProblems();
     hydrateLearned();
+    hydrateDemoTraces();
     if (import.meta.env.DEV) setupLearningDebug();
     void hydrateMemoryStore().then(() => {
       tickScheduler();
