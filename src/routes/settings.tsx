@@ -21,6 +21,13 @@ import {
   type WebLLMModelId,
 } from "@/lib/webllm";
 import {
+  AVAILABLE_EMBEDDING_MODELS,
+  clearEmbeddingModel,
+  downloadAndInitEmbedding,
+  useEmbeddingStatus,
+  type EmbeddingModelId,
+} from "@/lib/embedding";
+import {
   PITCH_CATEGORIES,
   getPitchCount,
   getPitches,
@@ -156,6 +163,9 @@ function SettingsPage() {
 
           {/* On-device LLM (WebLLM) */}
           <WebLLMSection />
+
+          {/* V4 시맨틱 매칭 (EmbeddingGemma) */}
+          <EmbeddingSection />
 
           {/* Wake / proactive greetings */}
           <section className="rounded-xl border border-border bg-card p-6">
@@ -671,6 +681,124 @@ function WebLLMSection() {
           })}
         </div>
       </div>
+    </section>
+  );
+}
+
+// V4 시맨틱 매칭 섹션. EmbeddingGemma 다운로드 토글 + 상태 표시.
+// 헌법: 사용자 명시 클릭에서만 다운로드. 활성화 안 하면 V3 매칭(정확
+// 일치 + 키워드)이 그대로 작동 — 시맨틱은 옵트인 진화.
+function EmbeddingSection() {
+  const status = useEmbeddingStatus();
+  const isLoading = status.state === "loading";
+  const isReady = status.state === "ready";
+  const isError = status.state === "error";
+  const progressPct = status.progress?.progress ?? 0;
+  const progressFile = status.progress?.file ?? "";
+  const progressStatus = status.progress?.status ?? "";
+
+  const recommended = AVAILABLE_EMBEDDING_MODELS.find((m) => m.recommended);
+
+  function handleDownload(modelId: EmbeddingModelId) {
+    downloadAndInitEmbedding(modelId).catch((err) => {
+      console.error("[embedding] 다운로드 실패:", err);
+    });
+  }
+
+  function handleDisable() {
+    void clearEmbeddingModel();
+  }
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-6">
+      <div className="flex items-baseline justify-between mb-1">
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">시맨틱 매칭 (V4)</h2>
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
+          기기 안
+        </span>
+      </div>
+      <p className="text-[12.5px] text-ink-soft mb-4 leading-relaxed">
+        의미 기반 매칭 — "양자역학" / "양자역학에 대해" / "양자역학이 뭐야"가 같은 응답으로 묶인다.
+        모델이 다운로드된 뒤부터 작동. 안 켜도 V3 정확-일치 매칭은 그대로.
+      </p>
+
+      <div className="space-y-2.5">
+        {AVAILABLE_EMBEDDING_MODELS.map((m) => {
+          const isThis = status.model === m.id;
+          const thisLoading = isThis && isLoading;
+          const thisReady = isThis && isReady;
+          const thisError = isThis && isError;
+          return (
+            <article key={m.id} className="rounded-lg border border-border bg-surface p-4">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[14px] font-semibold tracking-tight text-ink">{m.name}</h3>
+                    {m.recommended && (
+                      <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-primary">
+                        추천
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-[11.5px] text-ink-soft leading-relaxed">
+                    {m.description}
+                  </p>
+                  <p className="mt-1 font-mono text-[10.5px] text-ink-soft">
+                    {m.size} · {m.dim}d
+                  </p>
+                </div>
+                {thisReady ? (
+                  <button
+                    type="button"
+                    onClick={handleDisable}
+                    className="px-3 h-8 rounded-md border border-border text-[12px] text-ink-soft hover:text-ink hover:bg-card shrink-0"
+                  >
+                    비활성화
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(m.id)}
+                    disabled={isLoading}
+                    className="px-3 h-8 rounded-md bg-ink text-background text-[12px] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  >
+                    {thisLoading ? "다운로드 중…" : "다운로드"}
+                  </button>
+                )}
+              </div>
+
+              {thisLoading && (
+                <div className="mt-2">
+                  <div className="h-1 rounded-full bg-card overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${Math.min(100, progressPct)}%` }}
+                    />
+                  </div>
+                  <p className="mt-1.5 font-mono text-[10px] text-ink-soft">
+                    {progressStatus} {progressFile && `· ${progressFile}`}
+                  </p>
+                </div>
+              )}
+              {thisReady && (
+                <p className="mt-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-primary">
+                  ✓ 준비 완료 — 시맨틱 매칭 작동 중
+                </p>
+              )}
+              {thisError && (
+                <p className="mt-2 text-[12px] text-ink leading-relaxed">
+                  실패: {status.error ?? "알 수 없는 오류"}
+                </p>
+              )}
+            </article>
+          );
+        })}
+      </div>
+
+      <p className="mt-3 text-[11.5px] text-ink-soft leading-relaxed">
+        다운로드는 1회만. IndexedDB에 저장되어 다음부터 즉시 작동.
+        {recommended && ` 추천: ${recommended.name} (${recommended.size}).`}
+      </p>
     </section>
   );
 }

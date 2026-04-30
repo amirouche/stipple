@@ -77,6 +77,10 @@ function RootShell({ children }: { children: React.ReactNode }) {
     // the eager root bundle — it only loads when this branch executes
     // (client-side, post-hydration). Silent on failure.
     void import("@/lib/webllm").then((m) => m.tryAutoReloadWebLLM());
+    // V4: 사용자가 이전에 명시적으로 다운로드한 적 있는 임베딩 모델이
+    // 있으면 캐시에서 조용히 ready로 복구. miss면 silent fail — V3
+    // fallback 매칭이 그대로 작동한다.
+    void import("@/lib/embedding").then((m) => m.tryAutoReloadEmbedding());
     if (import.meta.env.DEV) {
       void import("@/lib/memory/debug").then((m) => m.setupDebugHandle());
     }
