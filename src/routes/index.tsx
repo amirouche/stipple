@@ -33,6 +33,7 @@ import {
   inferDomainPack,
   hasDefinitionIntent,
 } from "@/lib/packs/match";
+import { classifyIntent } from "@/lib/packs/intent";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import { incrementUsedCount, matchLearnedResponse, saveLearned } from "@/lib/learning";
 import { addUserSATProblem, getUserSATProblems } from "@/lib/packs/study/user-store";
@@ -113,13 +114,24 @@ function ChatPage() {
   // The LLM is otherwise only invoked from onSuggestionAction("llm-call"),
   // which fires from an explicit user button click. If you're touching
   // this function: keep the early-returns, never let stages cascade.
-  function send(text: string) {
+  async function send(text: string) {
     if (!text.trim() || busy || !thread) return;
 
+    // V3 라우터: 의도 분류부터. WebLLM ready면 LLM 분류 (50~100ms 목표,
+    // 실제 500ms~1s), 아니면 규칙 fallback. 이후 모든 stage는 분류 결과를
+    // 보고 자기가 돌지 결정한다.
+    setBusy(true);
+    setInput("");
+    const intentResult = await classifyIntent(text);
+    const intent = intentResult.intent;
+
     if (import.meta.env.DEV) {
-      // Quick eyeball during V2 development — confirms lastPackId stops
-      // leaking into Stage 3 voice/tone for off-topic queries.
-      console.log("[send]", { input: text, lastPackId: thread.lastPackId });
+      console.log("[send]", {
+        input: text,
+        intent,
+        confidence: intentResult.confidence,
+        lastPackId: thread.lastPackId,
+      });
     }
 
     // No `activePack` lookup: there's no "active mode" anymore.
@@ -149,13 +161,19 @@ function ChatPage() {
       .find((m): m is Extract<ThreadMsg, { role: "assistant" }> => m.role === "assistant");
     const justSawSuggestion = Boolean(lastAsst?.suggestion);
 
-    // 정의 요청("찜부추국수는 뭐야?")일 때는 매칭/스토어 단계를 건너뛴다.
-    // 도메인 키워드가 hit이어도 사용자가 원하는 건 카드가 아니라 설명이다.
-    // Stage 2.5(학습 캐시)와 Stage 3(LLM + inferDomainPack voice/tone)는
-    // 그대로 흘러간다.
-    const definitionIntent = hasDefinitionIntent(text);
+    // V3: 의도 기반 게이트. definition / follow-up / casual은 매칭 카드가
+    // 의도와 어긋나므로 Stage 1+2를 건너뛴다. search / recommend / unknown은
+    // 매칭 시도. (V2의 hasDefinitionIntent는 V3 분류기 fallback 안에서 똑같이
+    // 작동하므로 별도 호출은 필요 없지만, 분류기 자체가 미사용/실패한
+    // 극단 환경에서도 정의 요청 회귀를 막기 위해 OR로 살려둔다.)
+    const isExplanatoryIntent = intent === "definition" || intent === "casual";
+    const isFollowUpIntent = intent === "follow-up";
 
-    const skipMatchStep = definitionIntent || (justSawSuggestion && hasFollowUpIntent(text));
+    const skipMatchStep =
+      isExplanatoryIntent ||
+      isFollowUpIntent ||
+      hasDefinitionIntent(text) ||
+      (justSawSuggestion && hasFollowUpIntent(text));
     const matched = skipMatchStep ? null : matchPackContent(text, installed, undefined);
     if (matched) {
       const userId = crypto.randomUUID();
@@ -188,7 +206,7 @@ function ChatPage() {
       // No setThreadPack here — typing "수학" in a cooking thread should
       // surface the Study match without flipping the thread's mode out
       // from under the user.
-      setInput("");
+      setBusy(false);
       scrollDown();
       return;
     }
@@ -198,7 +216,7 @@ function ChatPage() {
     // marketplace. If a domain is detected (with or without store hits),
     // we render a store-suggestion bubble instead of dropping straight
     // to the LLM. Skipped on follow-up intent so we don't loop. ----
-    const skipStoreStep = definitionIntent || (justSawSuggestion && hasFollowUpIntent(text));
+    const skipStoreStep = skipMatchStep;
     if (!skipStoreStep) {
       const storeResult = searchStoreForQuery(text);
       if (storeResult) {
@@ -227,7 +245,7 @@ function ChatPage() {
           text: sugText,
           suggestion: sugData,
         });
-        setInput("");
+        setBusy(false);
         scrollDown();
         return;
       }
@@ -237,8 +255,10 @@ function ChatPage() {
     // (점진적 온디바이스 진화). Phase A: exact-match (lower+trim) on
     // userInput. Hit → render the cached response directly, no LLM call,
     // bump usedCount. Skipped on follow-up intent so "다른거" goes to a
-    // fresh LLM turn instead of replaying the previous cached one. ----
-    if (!justSawSuggestion || !hasFollowUpIntent(text)) {
+    // fresh LLM turn instead of replaying the previous cached one.
+    // Casual은 학습된 인사 응답 hit이면 그대로 사용 (인사 자체를 캐싱) — V2 동작.
+    const skipLearnedStep = isFollowUpIntent || (justSawSuggestion && hasFollowUpIntent(text));
+    if (!skipLearnedStep) {
       const learned = matchLearnedResponse(text);
       if (learned) {
         const userId = crypto.randomUUID();
@@ -257,7 +277,7 @@ function ChatPage() {
           provider: "learned",
         });
         void incrementUsedCount(learned.id);
-        setInput("");
+        setBusy(false);
         scrollDown();
         return;
       }
@@ -300,8 +320,8 @@ function ChatPage() {
     // Falls back to undefined for fully off-topic input ("양자역학").
     const composePack = result.pack ?? inferDomainPack(text, installed);
 
-    setInput("");
-    setBusy(true);
+    // setBusy(true)/setInput("") are now done at the top of send() before
+    // classifyIntent — by the time we get to Stage 3 they're already set.
 
     const renderPayload = (payload: AnswerPayload, provider?: "webllm" | "gemini") => {
       let body = "";
@@ -367,7 +387,10 @@ function ChatPage() {
       }
     };
 
-    if (result.state === "greeting") {
+    // Greeting short-circuit: V3 casual intent은 LLM(짧은 응답)으로 흘려야
+    // 하므로 캔드 응답 분기를 건너뛴다. 분류기가 unknown으로 떨어졌어도
+    // engine이 "안녕"을 greeting으로 잡으면 이전처럼 캔드 사용.
+    if (result.state === "greeting" && intent !== "casual") {
       setTimeout(() => renderPayload(result.payload), 500);
       return;
     }
@@ -389,6 +412,7 @@ function ChatPage() {
       fallback: result.payload,
       history: threadHistory(thread.messages),
       onToken,
+      intent,
     }).then(({ payload, provider }) => renderPayload(payload, provider));
   }
 

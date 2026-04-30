@@ -11,6 +11,7 @@ import type { AnswerPayload, Pack } from "@/lib/dots-data";
 import type { LookupResult } from "@/lib/memory";
 // Direct path avoids a cycle: memory/index.ts ↔ dots-data via topics.ts.
 import { extractTopics } from "@/lib/memory/topics";
+import type { Intent } from "@/lib/packs/intent";
 import { matchPitch } from "@/lib/pitch";
 import { getPreferences } from "@/lib/preferences";
 import { dispatchLLMCall, type DispatchTurn } from "./dispatch";
@@ -27,6 +28,9 @@ export type ComposeArgs = {
   // partial text so far. Gemini answers in one go (single onToken call
   // with the full text); WebLLM streams incrementally. Default no-op.
   onToken?: (delta: string, sofar: string) => void;
+  // V3 라우터에서 분류된 의도. dispatch까지 그대로 전달 — casual일 땐
+  // CASUAL_DISCIPLINE이 끼어 1 문장 인사로 응답 강제.
+  intent?: Intent;
 };
 
 export type ComposeResult = {
@@ -117,6 +121,7 @@ export async function composeAnswer(args: ComposeArgs): Promise<ComposeResult> {
         systemPrompt,
         history: args.history,
         pack: args.pack,
+        intent: args.intent,
       },
       args.onToken,
     );

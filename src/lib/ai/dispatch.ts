@@ -17,6 +17,7 @@
 //                            the caller can surface a "다운로드 필요" UI.
 
 import type { Pack } from "@/lib/dots-data";
+import type { Intent } from "@/lib/packs/intent";
 import { getPreferences, type LLMProvider } from "@/lib/preferences";
 import { generateWithWebLLM, getWebLLMStatus, type WebLLMStatus } from "@/lib/webllm";
 import { askGemini, type GeminiHistoryTurn } from "./gemini";
@@ -36,6 +37,10 @@ export type DispatchInput = {
   // model takes on the pack's persona. The prompt itself stays as-is for
   // call sites (SAT 출제 등) that already crafted a complete prompt.
   pack?: Pack;
+  // V3 라우터에서 분류된 사용자 의도. casual일 때만 시스템 프롬프트에
+  // 짧은 인사 디시플린을 더한다 — definition/search/recommend는
+  // 기존 프롬프트로 충분.
+  intent?: Intent;
 };
 
 export type DispatchResult = {
@@ -90,6 +95,15 @@ const RECOMMENDATION_DISCIPLINE = [
   "- 카탈로그 / 옵션 나열 X. 친구처럼 자연스럽게.",
 ].join("\n");
 
+// V3 casual 인텐트 전용. "안녕"·"고마워"에 대해서는 정의 설명/메모리 인용
+// 없이 1 문장 인사로만 답하게 강제. BASE_DISCIPLINE의 "단어 한 개 입력 시
+// → 그 단어의 정의" 룰을 덮어쓰는 역할.
+const CASUAL_DISCIPLINE = [
+  "사용자가 인사 또는 감사 표현을 했어. 다음을 지키세요:",
+  "- 1 문장으로 짧고 친근하게 응답. 예: '안녕!', '천만에!', '잘 지내?'",
+  "- 정의 설명 / 도움 제안 / 추가 질문 X. 인사로만 답해.",
+].join("\n");
+
 function hasRecommendationIntent(userMessage: string): boolean {
   const q = userMessage.toLowerCase();
   return RECOMMENDATION_HINTS.some((h) => q.includes(h));
@@ -102,16 +116,20 @@ function buildSystemPrompt(
   userMessage: string,
   systemPrompt: string | undefined,
   pack: Pack | undefined,
+  intent: Intent | undefined,
 ): string {
   const sections: string[] = [BASE_DISCIPLINE];
   if (pack?.voice && pack.tone) {
     sections.push([`너는 "${pack.voice}"로서 사용자에게 답한다.`, `톤: ${pack.tone}`].join("\n"));
   }
-  // Recommendation discipline applies whenever the intent is detected,
-  // pack or not — "도시 추천" without a matching pack still benefits
-  // from "한 가지 구체적 제안 + 짧은 이유" framing. Voice/tone (above)
-  // is what changes when a pack is around; the discipline is universal.
-  if (hasRecommendationIntent(userMessage)) {
+  // V3: casual이 가장 우선. 다른 디시플린(추천 등)과 충돌해도 인사 응답이
+  // 우선이어야 자연스럽다 ("안녕"에 메뉴 추천 늘어놓으면 깬다).
+  if (intent === "casual") {
+    sections.push(CASUAL_DISCIPLINE);
+  } else if (intent === "recommend" || hasRecommendationIntent(userMessage)) {
+    // Recommendation discipline: V3 의도 분류가 "recommend"면 곧장 적용.
+    // 분류기 없는 fallback 환경에서도 키워드 기반 hasRecommendationIntent가
+    // 그대로 살아 있다.
     sections.push(RECOMMENDATION_DISCIPLINE);
   }
   if (systemPrompt) {
@@ -166,7 +184,12 @@ export async function dispatchLLMCall(
   onToken: (delta: string, sofar: string) => void = () => {},
 ): Promise<DispatchResult> {
   const provider: LLMProvider = getPreferences().llmProvider;
-  const systemPrompt = buildSystemPrompt(input.userMessage, input.systemPrompt, input.pack);
+  const systemPrompt = buildSystemPrompt(
+    input.userMessage,
+    input.systemPrompt,
+    input.pack,
+    input.intent,
+  );
   const history = trimHistory(input.history);
 
   if (provider === "gemini-only") {
