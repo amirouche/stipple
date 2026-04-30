@@ -203,9 +203,19 @@ function ChatPage() {
         text: sugText,
         suggestion: sugData,
       });
-      // No setThreadPack here — typing "수학" in a cooking thread should
-      // surface the Study match without flipping the thread's mode out
-      // from under the user.
+      // V3 lastPackId 정책: 명시적 매칭 hit일 때만 lastPackId 갱신.
+      // skipMatchStep 게이트가 definition/casual/follow-up을 이미 막았으므로
+      // 여기 도달했다 = intent ∈ {search, recommend, unknown} + matchPackContent
+      // hit. routeQuery의 loose trigger matching("뭐야" → study) 같은 추정으로
+      // 박지 않는다.
+      if (import.meta.env.DEV) {
+        console.log("[setThreadPack]", {
+          from: "stage1-match",
+          packId: matched.pack.id,
+          intent,
+        });
+      }
+      setThreadPack(thread.id, matched.pack.id);
       setBusy(false);
       scrollDown();
       return;
@@ -310,7 +320,20 @@ function ChatPage() {
       pending: true,
     });
 
-    if (result.pack) setThreadPack(thread.id, result.pack.id);
+    // V3: Stage 3 진입 = matchPackContent miss = lastPackId 변경 X.
+    // routeQuery의 trigger 기반 pack 추정은 너무 loose하다 — Study가
+    // "뭐야"를 trigger로 가지고 있어서 모든 정의 질문이 study-companion
+    // 누수를 일으켰던 회귀 (Tei 검증 2026-04-30). Stage 1에서 명시적
+    // 매칭 hit일 때만 setThreadPack을 부른다. result.pack은 voice/tone용
+    // composePack 계산에만 그대로 쓰인다.
+    if (import.meta.env.DEV && result.pack) {
+      console.log("[lastPackId-skip]", {
+        from: "stage3-routeQuery",
+        candidatePackId: result.pack.id,
+        intent,
+        reason: "match miss — routeQuery trigger 추정으로는 박지 않음",
+      });
+    }
 
     // V2 voice/tone inference: when matchPackContent returned null due to
     // the threshold (or routeQuery couldn't pin a pack), there may still
