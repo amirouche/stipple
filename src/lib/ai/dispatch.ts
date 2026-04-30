@@ -7,14 +7,14 @@
 // LLM 호출 자체가 사용자가 명시적으로 선택한 결과여야 한다는 헌법.
 // dispatch는 Stage 3 + onSuggestionAction llm-call에서만.
 //
-// Provider semantics:
-//   webllm-first (default) — try WebLLM if loaded, fall back to Gemini.
-//                            If WebLLM fails mid-generation we still fall
-//                            through; the user gets an answer.
-//   gemini-only            — never touch WebLLM. Lets users skip the
-//                            1.8GB download entirely.
-//   webllm-only            — no cloud. Throws if WebLLM isn't loaded so
-//                            the caller can surface a "다운로드 필요" UI.
+// Provider semantics (사용자 시점 정정 후):
+//   gemini-only (default) — 외부 API. 정확하고 자연스러운 응답. 일반
+//                           사용자가 첫 설치 후 그대로 작동.
+//   webllm-only           — 외부 호출 X. WebLLM 미로드 시 throw — 호출
+//                           쪽이 "다운로드 필요" UI를 띄우게 한다.
+// 폐기된 "webllm-first": WebLLM↔Gemini 자동 fallback이 응답 품질을
+// 예측 불가능하게 만들고 ("양자역학" 2줄 환각 vs 풍부한 답이 무작위로
+// 섞임), 사용자에게 부정확한 응답을 강제하던 어중간한 모드.
 
 import type { Pack } from "@/lib/dots-data";
 import type { Intent } from "@/lib/packs/intent";
@@ -192,26 +192,13 @@ export async function dispatchLLMCall(
   );
   const history = trimHistory(input.history);
 
-  if (provider === "gemini-only") {
-    return callGemini(input, systemPrompt, history);
-  }
-
-  const webllmReady = isWebLLMReady(getWebLLMStatus());
-
   if (provider === "webllm-only") {
+    const webllmReady = isWebLLMReady(getWebLLMStatus());
     if (!webllmReady) {
       throw new Error("WebLLM 모델이 아직 로드되지 않았어. 설정에서 모델을 다운로드해.");
     }
     return callWebLLM(input, systemPrompt, history, onToken);
   }
-
-  // webllm-first
-  if (webllmReady) {
-    try {
-      return await callWebLLM(input, systemPrompt, history, onToken);
-    } catch (err) {
-      console.warn("[dispatch] WebLLM 호출 실패, Gemini로 fallback:", err);
-    }
-  }
+  // gemini-only (기본): 모든 LLM 호출은 Gemini로. WebLLM은 옵션 모드에서만.
   return callGemini(input, systemPrompt, history);
 }

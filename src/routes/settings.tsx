@@ -526,21 +526,22 @@ function PitchSection() {
 // CONSTITUTION: 모델 다운로드는 사용자가 "다운로드 시작" 버튼을
 // 명시적으로 눌러야 트리거. 자동 다운로드 X. 자동 활성화 X.
 // 다운로드 후에도 — 사용자가 Provider를 명시적으로 변경해야 작동.
+//
+// 사용자 시점 정정 (2026-04-30): "WebLLM 우선" 옵션 폐기.
+// WebLLM↔Gemini 자동 fallback이 "양자역학 2줄 환각"·"찜부추국수" 같은
+// 가짜 음식 환각을 사용자에게 강제하던 어중간한 모드였음. 이제 두 모드만:
+//   - Gemini (기본): 정확하고 풍부한 응답
+//   - WebLLM 모드: 사적 영역 의식 사용자만 선택 — trade-off 명시
 const LLM_PROVIDER_OPTIONS: { id: LLMProvider; title: string; desc: string }[] = [
   {
-    id: "webllm-first",
-    title: "WebLLM 우선 (추천)",
-    desc: "내 기기에서 먼저 시도, 안 되면 클라우드.",
-  },
-  {
     id: "gemini-only",
-    title: "Gemini만",
-    desc: "외부 API 사용. 모델 다운로드 안 해도 됨.",
+    title: "Gemini (기본)",
+    desc: "외부 API. 정확하고 자연스러운 응답.",
   },
   {
     id: "webllm-only",
-    title: "WebLLM만",
-    desc: "외부 호출 X. 모델 다운로드 필수.",
+    title: "WebLLM 모드",
+    desc: "외부 호출 X. 모델 다운로드 필수. 사적 영역 의식 사용자용 — 응답 정보량은 클라우드보다 낮음.",
   },
 ];
 
@@ -603,7 +604,8 @@ function WebLLMSection() {
             Chrome 113+ 또는 Edge 113+ 가 필요해. (이유: {gpuReason ?? "WebGPU 미지원"})
           </p>
           <p className="mt-2 text-[12px] text-ink-soft leading-relaxed">
-            WebGPU가 없는 동안엔 Gemini로 자동 fallback 돼서 — 채팅은 그대로 작동해.
+            기본 모드(Gemini)는 그대로 작동하니까 채팅은 막히지 않아. WebLLM 모드만 이 브라우저에서
+            못 켜는 거야.
           </p>
         </div>
       ) : (
@@ -631,9 +633,10 @@ function WebLLMSection() {
 
       {/* Provider selection */}
       <div className="mt-5 pt-5 border-t border-border">
-        <p className="text-[13px] text-ink mb-1">LLM 우선순위</p>
+        <p className="text-[13px] text-ink mb-1">어떤 모드로 작동시킬지</p>
         <p className="text-[11.5px] text-ink-soft mb-3 leading-relaxed">
-          어떤 LLM을 먼저 쓸지. 다운로드 안 해도 — 기본값으로 그대로 작동해.
+          기본은 Gemini — 정확하고 풍부한 응답. 사적 영역이 중요하면 WebLLM 모드로 — 외부 호출이
+          사라지는 대신 응답 정보량이 줄어든다.
         </p>
         <div className="space-y-2">
           {LLM_PROVIDER_OPTIONS.map((opt) => {

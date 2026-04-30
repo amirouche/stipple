@@ -106,11 +106,13 @@ export async function downloadAndInitModel(modelId: WebLLMModelId): Promise<void
 }
 
 // Quietly reload the last-used model on page mount when the cache is
-// still warm. Failures are silent — the user lands in idle and the
-// existing webllm-first → Gemini fallback keeps the chat working.
+// still warm. Failures are silent — gemini-only is the default so chat
+// keeps working without WebLLM.
 //
 // Skipped when:
-//   - LLMProvider is "gemini-only" (user opted out of WebLLM)
+//   - LLMProvider !== "webllm-only" (사용자 시점 정정: gemini-only가
+//     기본값. webllm-only를 명시적으로 선택한 사용자만 자동 reload —
+//     일반 사용자에게 1.8GB 모델을 idle에 끌어오지 않는다.)
 //   - WebGPU is unavailable (no point reloading)
 //   - No previous model id stored (this is a first-time visitor)
 //   - hasModelInCache returns false (user cleared site data)
@@ -123,7 +125,7 @@ export async function tryAutoReloadWebLLM(): Promise<void> {
   }
 
   const provider = getPreferences().llmProvider;
-  if (provider === "gemini-only") return;
+  if (provider !== "webllm-only") return;
 
   const modelId = readLastModel();
   if (!modelId) return;
