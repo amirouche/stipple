@@ -44,6 +44,7 @@ import {
 } from "@/lib/learning";
 import { addUserSATProblem, getUserSATProblems } from "@/lib/packs/study/user-store";
 import { buildSATMathDummy, buildSATMathFromLLM } from "@/lib/packs/study/parse-llm";
+import { addDemoTrace } from "@/lib/demo/trace";
 import type { AnswerPayload } from "@/lib/dots-data";
 
 // Words that mean "give me another / something else / please do it" — when
@@ -127,6 +128,12 @@ function ChatPage() {
     // 남기는 진단 로그는 세 줄 — [send] 입력+의도, [setThreadPack]
     // 매칭 hit 시점, [llm-call]은 dispatch.ts에서 직접. 실 사용자
     // 시연에서 콘솔이 너무 시끄러우면 안 된다.
+    //
+    // V0 데모 측정 (2026-04-30): startTime은 사용자 입력 받은 시점부터
+    // 라우팅이 끝날 때까지의 wall-clock latency를 재기 위함. 각 stage가
+    // 자기 시점에서 trace를 박는다 — pack/learned는 매칭 끝나는 즉시,
+    // cloud는 composeAnswer.then 안에서.
+    const startTime = Date.now();
     setBusy(true);
     setInput("");
     const intentResult = await classifyIntent(text);
@@ -223,6 +230,19 @@ function ChatPage() {
         });
       }
       setThreadPack(thread.id, matched.pack.id);
+      addDemoTrace({
+        input: text,
+        intent,
+        route: "pack",
+        externalCall: false,
+        provider: "pack",
+        packId: matched.pack.id,
+        packName: matched.pack.name,
+        latencyMs: Date.now() - startTime,
+        reason: matched.packLevel
+          ? `pack-level 매칭 — ${matched.matches.length}개 후보`
+          : `content-level 매칭 — score ${matched.matches[0]?.score.toFixed(0) ?? "?"}`,
+      });
       setBusy(false);
       scrollDown();
       return;
@@ -262,6 +282,15 @@ function ChatPage() {
           text: sugText,
           suggestion: sugData,
         });
+        addDemoTrace({
+          input: text,
+          intent,
+          route: "store",
+          externalCall: false,
+          provider: "none",
+          latencyMs: Date.now() - startTime,
+          reason: "팩스토어 매칭 — 새 팩 제안",
+        });
         setBusy(false);
         scrollDown();
         return;
@@ -298,6 +327,17 @@ function ChatPage() {
           learnedId: learned.id,
         });
         void incrementUsedCount(learned.id);
+        addDemoTrace({
+          input: text,
+          intent,
+          route: "learned",
+          externalCall: false,
+          provider: "learned",
+          packId: learned.packId,
+          packName: learned.packName,
+          latencyMs: Date.now() - startTime,
+          reason: `학습 캐시 hit — 사용 ${learned.usedCount + 1}회 (priority ${learned.priority})`,
+        });
         setBusy(false);
         scrollDown();
         return;
@@ -431,6 +471,17 @@ function ChatPage() {
     // engine이 "안녕"을 greeting으로 잡으면 이전처럼 캔드 사용.
     if (result.state === "greeting" && intent !== "casual") {
       setTimeout(() => renderPayload(result.payload), 500);
+      addDemoTrace({
+        input: text,
+        intent,
+        route: "local",
+        externalCall: false,
+        provider: "none",
+        packId: composePack?.id,
+        packName: composePack?.name,
+        latencyMs: Date.now() - startTime,
+        reason: "캔드 인사 응답 (engine greeting)",
+      });
       return;
     }
 
@@ -454,6 +505,22 @@ function ChatPage() {
       intent,
     }).then(({ payload, provider }) => {
       renderPayload(payload, provider);
+      // Stage 3 trace는 composeAnswer 결과가 돌아온 시점에. provider가
+      // 박혔으면 클라우드 호출 성공, 없으면 catch path (캔드 fallback)인데
+      // 둘 다 외부 호출은 시도된 것이라 externalCall: true로 통일.
+      // payload.kind가 pack-suggestion인 비정상 경로는 발생할 일이 없지만
+      // route는 "cloud"로 둔다 — Stage 3 흐름임을 보존.
+      addDemoTrace({
+        input: text,
+        intent,
+        route: "cloud",
+        externalCall: true,
+        provider: provider ?? "none",
+        packId: composePack?.id,
+        packName: composePack?.name,
+        latencyMs: Date.now() - startTime,
+        reason: provider ? `클라우드 LLM (${provider})` : "클라우드 LLM 실패 → 캔드 fallback",
+      });
     });
   }
 
@@ -503,6 +570,7 @@ function ChatPage() {
     }
     if (option.kind === "llm-call") {
       const id = crypto.randomUUID();
+      const clickStart = Date.now();
       appendMessage(thread.id, {
         id,
         role: "assistant",
@@ -606,6 +674,18 @@ function ChatPage() {
             } else {
               onDoneTextWithProvider(res.text, res.provider);
             }
+            addDemoTrace({
+              input: option.label,
+              intent: "follow-up",
+              route: "cloud",
+              externalCall: true,
+              provider: res.provider,
+              packName: matchedPack?.name,
+              latencyMs: Date.now() - clickStart,
+              reason: postAction
+                ? `선택지 클릭 — 클라우드 LLM (postAction: ${postAction})`
+                : "선택지 클릭 — 클라우드 LLM (custom systemPrompt)",
+            });
           })
           .catch(onFail);
       } else {
@@ -616,9 +696,22 @@ function ChatPage() {
           history: threadHistory(thread.messages),
           onToken: streamToken,
         })
-          .then(({ payload, provider }) =>
-            onDoneTextWithProvider(payload.kind === "text" ? payload.text : "", provider),
-          )
+          .then(({ payload, provider }) => {
+            onDoneTextWithProvider(payload.kind === "text" ? payload.text : "", provider);
+            addDemoTrace({
+              input: option.label,
+              intent: "follow-up",
+              route: "cloud",
+              externalCall: true,
+              provider: provider ?? "none",
+              packId: matchedPack?.id,
+              packName: matchedPack?.name,
+              latencyMs: Date.now() - clickStart,
+              reason: provider
+                ? `선택지 클릭 — 클라우드 LLM (${provider})`
+                : "선택지 클릭 — 클라우드 LLM 실패",
+            });
+          })
           .catch(onFail);
       }
     }
