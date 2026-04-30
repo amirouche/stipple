@@ -7,7 +7,6 @@ import {
   routeQuery,
   answerFor,
   recallFromMemory,
-  COOKING_RECIPES,
   type Pack,
   type AnswerPayload,
 } from "@/lib/dots-data";
@@ -105,25 +104,6 @@ function nonRepeating(
   return payload;
 }
 
-// Pick the next cooking recipe that hasn't been served in this thread yet.
-function nextCookingRecipe(servedIds: string[] = []): {
-  recipeId: string;
-  intro: string;
-} | null {
-  const remaining = COOKING_RECIPES.filter((r) => !servedIds.includes(r.id));
-  if (remaining.length === 0) return null;
-  const pick = remaining[0];
-  const intros = [
-    "그럼 다른 쪽으로 — 이건 어때.",
-    "이것도 같은 결인데, 살짝 다른 버전.",
-    "응, 한 가지 더 있어.",
-  ];
-  return {
-    recipeId: pick.id,
-    intro: intros[Math.floor(Math.random() * intros.length)],
-  };
-}
-
 export function step(
   query: string,
   installed: Pack[] = PACKS.filter((p) => p.installed),
@@ -136,55 +116,17 @@ export function step(
     return { intent, state: "greeting", payload, reason: "" };
   }
 
-  // ---- Follow-up: stay in the current pack if there is one ----
-  if (intent === "follow_up" && ctx.contextPackId) {
-    const pack = installed.find((p) => p.id === ctx.contextPackId);
-    if (pack?.id === "cooking-essentials") {
-      const next = nextCookingRecipe(ctx.servedRecipeIds);
-      if (next) {
-        const payload: AnswerPayload = {
-          kind: "recipe",
-          recipeId: next.recipeId,
-          intro: next.intro,
-        };
-        rememberLine(payloadLine(payload));
-        return {
-          intent,
-          state: "found_local",
-          pack,
-          payload,
-          reason: "",
-        };
-      }
-      // Out of cooking recipes — soft handoff but stay in pack tone.
-      return {
-        intent,
-        state: "checking_external",
-        pack,
-        payload: {
-          kind: "text",
-          text: "안에 있는 두 개는 다 보여줬어. 더 찾아볼까?",
-        },
-        reason: "안에 있는 건 다 봤어.",
-      };
-    }
-    if (pack?.id === "study-companion") {
-      const payload: AnswerPayload = {
-        kind: "text",
-        text: "그럼 다른 각도로 풀어볼게. 어디가 헷갈렸어?",
-      };
-      rememberLine(payloadLine(payload));
-      return { intent, state: "found_local", pack, payload, reason: "" };
-    }
-    if (pack?.id === "morning-routine") {
-      const payload: AnswerPayload = {
-        kind: "text",
-        text: "오후 일정도 같이 볼까?",
-      };
-      rememberLine(payloadLine(payload));
-      return { intent, state: "found_local", pack, payload, reason: "" };
-    }
-  }
+  // V2 (자연스러움 우선): the engine no longer fabricates pack-themed
+  // payloads or claims a pack from ctx.contextPackId on its own.
+  // Two old branches lived here:
+  //   - follow_up + cooking → auto-rotate kimchi recipe
+  //   - external/unknown + ctx.contextPackId → answerFor(query, ctxPack)
+  // Both turned bare follow-ups like "더 자세히" into cooking content
+  // even when the thread topic had moved on. Removed: the LLM (with
+  // threadHistory) handles follow-ups naturally; inferDomainPack at the
+  // call site adds voice/tone only when the new input itself signals a
+  // domain. ctx.contextPackId is still tracked for future use but is no
+  // longer load-bearing in the engine.
 
   const decision = routeQuery(query, installed);
 
@@ -216,23 +158,6 @@ export function step(
       reason: decision.reason,
       lookup: decision.lookup,
     };
-  }
-
-  // External / unknown — but if a thread is sitting in a pack and the query
-  // is ambiguous, prefer the pack rather than jumping straight to deep.
-  if (!decision.pack && ctx.contextPackId) {
-    const ctxPack = installed.find((p) => p.id === ctx.contextPackId);
-    if (ctxPack) {
-      const payload = nonRepeating(query, ctxPack, "local");
-      return {
-        intent,
-        state: "found_local",
-        pack: ctxPack,
-        payload,
-        reason: "",
-        lookup: decision.lookup,
-      };
-    }
   }
 
   const sstate: ConversationState = decision.route === "deep" ? "checking_external" : "found_local";

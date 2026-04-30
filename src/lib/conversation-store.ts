@@ -68,12 +68,15 @@ export type Thread = {
 
 const now = Date.now();
 
+// V2: seed threads carry no lastPackId. Pre-baking a pack here used to
+// leak cooking voice/tone into off-topic queries on cold start ("양자역학"
+// in thread-recent-1 was getting cooking systemPrompt). lastPackId is now
+// only set when the engine actually detects a pack signal in user input.
 const seedThreads: Thread[] = [
   {
     id: "thread-recent-1",
     title: "점심 메뉴 골라줘",
     theme: "cooking",
-    lastPackId: "cooking-essentials",
     servedRecipeIds: [],
     messages: [],
     updatedAt: now - 1000 * 60 * 60 * 3,
@@ -82,7 +85,6 @@ const seedThreads: Thread[] = [
     id: "thread-recent-2",
     title: "어텐션 다시 설명",
     theme: "study",
-    lastPackId: "study-companion",
     servedRecipeIds: [],
     messages: [],
     updatedAt: now - 1000 * 60 * 60 * 12,

@@ -111,6 +111,12 @@ function ChatPage() {
   function send(text: string) {
     if (!text.trim() || busy || !thread) return;
 
+    if (import.meta.env.DEV) {
+      // Quick eyeball during V2 development — confirms lastPackId stops
+      // leaking into Stage 3 voice/tone for off-topic queries.
+      console.log("[send]", { input: text, lastPackId: thread.lastPackId });
+    }
+
     // No `activePack` lookup: there's no "active mode" anymore.
     // matchPackContent (Stage 1) handles routing to the right pack;
     // when nothing matches, Stage 3 calls the LLM with default voice.
