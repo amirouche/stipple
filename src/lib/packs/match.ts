@@ -20,6 +20,7 @@ import {
 import { getSATMathProblem } from "@/lib/packs/study/sat-math";
 import type { SATMathProblem } from "@/lib/packs/study/types";
 import { getUserSATProblems } from "@/lib/packs/study/user-store";
+import { getRerankerStatus, PACK_RERANK_THRESHOLD, rerank, RERANK_TOP_N } from "@/lib/reranker";
 
 // 문제별 키워드 — 특정 문제를 정확히 가리키는 단어들. "삼각비" 같은 입력이
 // 들어오면 sat-m-005만 점수 받음.
@@ -386,12 +387,45 @@ export async function matchPackContent(
   const candidates = scoreCandidates(query, installedPacks, activePackId, "strict", queryVec);
   if (candidates.length === 0) return null;
 
-  const winner = candidates[0];
+  let winner = candidates[0];
   // V2: 점수가 임계값 미만이면 매칭 자체를 포기한다. "메뉴 추천"·"수학"
   // 같은 모호한 입력은 SuggestionBlock 강제 X, Stage 3 LLM이 자연스럽게.
   if (winner.bestScore < MATCH_THRESHOLD) return null;
 
-  const packLevel = winner.bestScore < SPECIFIC_HIT_SCORE;
+  let packLevel = winner.bestScore < SPECIFIC_HIT_SCORE;
+
+  // V4.5: content-level 매치(winner.bestScore ≥ 60) + reranker ready +
+  // 후보 ≥ 2면 cross-encoder로 재정렬. pack-level("수학" → 5문제 있어)은
+  // 의도적으로 vague-input UX를 유지하므로 reranker skip.
+  if (!packLevel && winner.matches.length >= 2 && getRerankerStatus().state === "ready") {
+    try {
+      const top = winner.matches.slice(0, RERANK_TOP_N);
+      const texts = top.map((m) =>
+        m.kind === "sat-math" ? getSATMatchText(m.problem) : getRecipeMatchText(m.recipe),
+      );
+      const rerankScores = await rerank(query, texts);
+      // sigmoid score [0, 1]을 점수 100 스케일로 변환해 V4 score와 같은
+      // 단위로 둠. PACK_RERANK_THRESHOLD(0.75) 미만은 제외 — reranker가
+      // 무관하다고 판정한 경우 카드 자체를 띄우지 않는다.
+      const reranked: ContentMatch[] = top
+        .map((m, i) => ({ ...m, score: (rerankScores[i] ?? 0) * 100 }))
+        .filter((m) => m.score >= PACK_RERANK_THRESHOLD * 100)
+        .sort((a, b) => b.score - a.score);
+      if (reranked.length === 0) return null;
+      winner = {
+        pack: winner.pack,
+        isActive: winner.isActive,
+        matches: reranked,
+        bestScore: reranked[0].score,
+      };
+      // reranker가 통과시킨 후보들은 모두 content-level — 신뢰도가
+      // 충분히 높다고 판정한 결과. 시연 시 카드가 점점 좁혀지는 효과.
+      packLevel = false;
+    } catch (err) {
+      console.warn("[packs] reranker 실패, V4 점수 그대로 사용:", err);
+    }
+  }
+
   // Pack-level match → keep all matches (used for "5문제 있어"). Content-
   // level → keep only the items that tie at the top score, capped at 2.
   const matches = packLevel

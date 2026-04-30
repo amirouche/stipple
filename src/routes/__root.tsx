@@ -81,6 +81,9 @@ function RootShell({ children }: { children: React.ReactNode }) {
     // 있으면 캐시에서 조용히 ready로 복구. miss면 silent fail — V3
     // fallback 매칭이 그대로 작동한다.
     void import("@/lib/embedding").then((m) => m.tryAutoReloadEmbedding());
+    // V4.5: cross-encoder reranker도 같은 정책. 이전에 다운로드한 적
+    // 있으면 캐시에서 ready로. 아니면 silent — V4 임베딩만 작동.
+    void import("@/lib/reranker").then((m) => m.tryAutoReloadReranker());
     if (import.meta.env.DEV) {
       void import("@/lib/memory/debug").then((m) => m.setupDebugHandle());
     }

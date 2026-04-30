@@ -28,6 +28,13 @@ import {
   type EmbeddingModelId,
 } from "@/lib/embedding";
 import {
+  AVAILABLE_RERANKER_MODELS,
+  clearRerankerModel,
+  downloadAndInitReranker,
+  useRerankerStatus,
+  type RerankerModelId,
+} from "@/lib/reranker";
+import {
   PITCH_CATEGORIES,
   getPitchCount,
   getPitches,
@@ -166,6 +173,9 @@ function SettingsPage() {
 
           {/* V4 시맨틱 매칭 (EmbeddingGemma) */}
           <EmbeddingSection />
+
+          {/* V4.5 정확도 향상 (Cross-encoder reranker) */}
+          <RerankerSection />
 
           {/* Wake / proactive greetings */}
           <section className="rounded-xl border border-border bg-card p-6">
@@ -797,6 +807,121 @@ function EmbeddingSection() {
 
       <p className="mt-3 text-[11.5px] text-ink-soft leading-relaxed">
         다운로드는 1회만. IndexedDB에 저장되어 다음부터 즉시 작동.
+        {recommended && ` 추천: ${recommended.name} (${recommended.size}).`}
+      </p>
+    </section>
+  );
+}
+
+// V4.5 cross-encoder reranker 섹션. EmbeddingSection 동일 패턴 — 모델 카드
+// + 진행률 + 비활성화 버튼. 안 켜도 V4 임베딩 매칭은 그대로 작동.
+function RerankerSection() {
+  const status = useRerankerStatus();
+  const isLoading = status.state === "loading";
+  const isReady = status.state === "ready";
+  const isError = status.state === "error";
+  const progressPct = status.progress?.progress ?? 0;
+  const progressFile = status.progress?.file ?? "";
+  const progressStatus = status.progress?.status ?? "";
+
+  const recommended = AVAILABLE_RERANKER_MODELS.find((m) => m.recommended);
+
+  function handleDownload(modelId: RerankerModelId) {
+    downloadAndInitReranker(modelId).catch((err) => {
+      console.error("[reranker] 다운로드 실패:", err);
+    });
+  }
+
+  function handleDisable() {
+    void clearRerankerModel();
+  }
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-6">
+      <div className="flex items-baseline justify-between mb-1">
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">정확도 향상 (V4.5)</h2>
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
+          기기 안
+        </span>
+      </div>
+      <p className="text-[12.5px] text-ink-soft mb-4 leading-relaxed">
+        Cross-encoder 재정렬 — V4 임베딩이 잡은 후보를 정밀 점검. "이거 진짜 있는 학문이야?" 같은
+        추상/대화적 변형도 매칭. 시맨틱 매칭(V4) 위에 얹히는 레이어 — V4 안 켜도 단독으로는 의미 X.
+      </p>
+
+      <div className="space-y-2.5">
+        {AVAILABLE_RERANKER_MODELS.map((m) => {
+          const isThis = status.model === m.id;
+          const thisLoading = isThis && isLoading;
+          const thisReady = isThis && isReady;
+          const thisError = isThis && isError;
+          return (
+            <article key={m.id} className="rounded-lg border border-border bg-surface p-4">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[14px] font-semibold tracking-tight text-ink">{m.name}</h3>
+                    {m.recommended && (
+                      <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-primary">
+                        추천
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-[11.5px] text-ink-soft leading-relaxed">
+                    {m.description}
+                  </p>
+                  <p className="mt-1 font-mono text-[10.5px] text-ink-soft">{m.size}</p>
+                </div>
+                {thisReady ? (
+                  <button
+                    type="button"
+                    onClick={handleDisable}
+                    className="px-3 h-8 rounded-md border border-border text-[12px] text-ink-soft hover:text-ink hover:bg-card shrink-0"
+                  >
+                    비활성화
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(m.id)}
+                    disabled={isLoading}
+                    className="px-3 h-8 rounded-md bg-ink text-background text-[12px] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  >
+                    {thisLoading ? "다운로드 중…" : "다운로드"}
+                  </button>
+                )}
+              </div>
+
+              {thisLoading && (
+                <div className="mt-2">
+                  <div className="h-1 rounded-full bg-card overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${Math.min(100, progressPct)}%` }}
+                    />
+                  </div>
+                  <p className="mt-1.5 font-mono text-[10px] text-ink-soft">
+                    {progressStatus} {progressFile && `· ${progressFile}`}
+                  </p>
+                </div>
+              )}
+              {thisReady && (
+                <p className="mt-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-primary">
+                  ✓ 준비 완료 — 정밀 재정렬 작동 중
+                </p>
+              )}
+              {thisError && (
+                <p className="mt-2 text-[12px] text-ink leading-relaxed">
+                  실패: {status.error ?? "알 수 없는 오류"}
+                </p>
+              )}
+            </article>
+          );
+        })}
+      </div>
+
+      <p className="mt-3 text-[11.5px] text-ink-soft leading-relaxed">
+        다운로드는 1회만. IndexedDB 캐시.
         {recommended && ` 추천: ${recommended.name} (${recommended.size}).`}
       </p>
     </section>

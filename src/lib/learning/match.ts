@@ -1,29 +1,25 @@
-// 학습 매칭 — V3 정확 일치 + V4 시맨틱 매칭 통합.
+// 학습 매칭 — V3 정확 일치 + V4 시맨틱 매칭 + V4.5 cross-encoder 재정렬.
 //
 // V3 (commit cd3ee01): exact equality after lower + trim.
-// V4 (이번 commit): 임베딩 모델 ready면 코사인 유사도로 시맨틱 매칭.
-//   - "양자역학" / "양자역학에 대해" / "양자역학이 뭐야" 같은 변형
-//     입력이 같은 응답으로 묶인다.
-//   - 임계값 0.85 (LEARNED_SIMILARITY_THRESHOLD) — 보수적으로 잡아
-//     관계 약한 응답이 잘못 hit하지 않게.
+// V4 (commit 7d07c83): 임베딩 모델 ready면 코사인 유사도로 시맨틱 매칭.
+//   "양자역학" / "양자역학에 대해" / "양자역학이 뭐야" 같은 변형 입력이
+//   같은 응답으로 묶임.
+// V4.5 (이번 commit): reranker ready + 후보 ≥ 2면 cross-encoder로 재정렬.
+//   bi-encoder가 못 잡는 추상적/대화적 변형("이거 진짜 있는 학문이야?")
+//   이 attention 기반 점수로 hit하게 됨. MS MARCO benchmark 기준 NDCG
+//   15~25% ↑.
 //
-// 통합 전략:
-//   1. 정확 일치 후보 (similarity = 1.0 부여) — 모델 미사용 시도 작동.
-//   2. 시맨틱 후보 (vector가 있는 엔트리만) — similarity ≥ 0.85.
-//   3. id로 dedupe, priority < 0 (사용자 "다른 거") 제외.
-//   4. 정렬: priority desc → similarity desc → createdAt desc.
-//
-// = 모델 미사용 → V3 그대로 (정확 일치만)
-// = 모델 사용 → V4 (변형 입력 처리 + V3 정확 일치 superset)
-// = 사용자 큐레이션 (Phase B)이 항상 우선
+// 통합 전략 (V4.5):
+//   1. 정확 일치 후보 + 시맨틱 후보 (sim > 0인 모든 vector 엔트리) 모음.
+//   2. similarity desc 정렬 후 top-N(=10) 추출.
+//   3. reranker ready + N ≥ 2면 rerank → similarity 자리에 rerank score
+//      [0, 1] 박음. ready X면 V4 similarity 그대로.
+//   4. priority < 0 (사용자 "다른 거") 제외.
+//   5. score ≥ 0.85 (LEARNED_RERANK_THRESHOLD) 미달이면 null.
+//   6. 정렬: priority desc → score desc → createdAt desc.
 
-import {
-  cosineSimilarity,
-  embed,
-  getEmbeddingStatus,
-  LEARNED_SIMILARITY_THRESHOLD,
-  toFloat32,
-} from "@/lib/embedding";
+import { cosineSimilarity, embed, getEmbeddingStatus, toFloat32 } from "@/lib/embedding";
+import { getRerankerStatus, LEARNED_RERANK_THRESHOLD, rerank, RERANK_TOP_N } from "@/lib/reranker";
 
 import { getLearnedSnapshot } from "./store";
 import type { LearnedResponse } from "./types";
@@ -32,7 +28,7 @@ function normalize(s: string): string {
   return s.trim().toLowerCase();
 }
 
-type Candidate = { entry: LearnedResponse; similarity: number };
+type Candidate = { entry: LearnedResponse; score: number };
 
 export async function matchLearnedResponse(input: string): Promise<LearnedResponse | null> {
   const target = normalize(input);
@@ -40,47 +36,61 @@ export async function matchLearnedResponse(input: string): Promise<LearnedRespon
   const all = getLearnedSnapshot();
   if (all.length === 0) return null;
 
-  // 1) 정확 일치 후보 — V3 fallback. 모델 미사용 환경에서도 그대로 작동.
+  // 1) 후보 모으기: 정확 일치(score=1.0) + 시맨틱(vector + sim>0).
+  //    V4의 0.85 게이트는 여기서 적용 안 함 — top-N 추출 + rerank가
+  //    더 정확하게 걸러낸다.
   const candidates = new Map<string, Candidate>();
   for (const e of all) {
     if (normalize(e.userInput) === target) {
-      candidates.set(e.id, { entry: e, similarity: 1.0 });
+      candidates.set(e.id, { entry: e, score: 1.0 });
     }
   }
-
-  // 2) 시맨틱 후보 — 모델 ready + 엔트리에 vector가 있을 때만.
   if (getEmbeddingStatus().state === "ready") {
     try {
       const queryVec = await embed(input);
       for (const e of all) {
         if (!e.vector) continue;
         const stored = toFloat32(e.vector);
-        // 차원이 다르면 0 — 사용자가 모델을 바꾼 경우(768d ↔ 384d 사이).
-        // cosineSimilarity가 length 체크로 0을 반환하므로 자동 skip.
         const sim = cosineSimilarity(queryVec, stored);
-        if (sim < LEARNED_SIMILARITY_THRESHOLD) continue;
-        // 같은 id의 정확 일치 후보가 이미 있으면 더 큰 similarity로 갱신.
+        if (sim <= 0) continue;
         const existing = candidates.get(e.id);
-        if (!existing || sim > existing.similarity) {
-          candidates.set(e.id, { entry: e, similarity: sim });
+        if (!existing || sim > existing.score) {
+          candidates.set(e.id, { entry: e, score: sim });
         }
       }
     } catch (err) {
-      // 임베딩 실패 → 정확 일치 후보만 사용. 시연 끊김 방지.
       console.warn("[learning] 시맨틱 매칭 실패, 정확 일치만 사용:", err);
     }
   }
+  if (candidates.size === 0) return null;
 
-  // 3) priority < 0 (사용자가 "다른 거" 클릭) 제외.
-  const filtered = [...candidates.values()].filter((c) => c.entry.priority >= 0);
+  // 2) similarity desc 정렬 후 top-N. 너무 많은 후보를 reranker에 넘기면
+  //    cross-encoder 호출당 50~100ms × N 비용이 커진다.
+  let pool = [...candidates.values()].sort((a, b) => b.score - a.score).slice(0, RERANK_TOP_N);
+
+  // 3) Reranker가 ready + 후보 ≥ 2면 cross-encoder로 재정렬.
+  //    score를 rerank 결과로 교체. ready X면 sim score 그대로 사용 (V4).
+  if (getRerankerStatus().state === "ready" && pool.length >= 2) {
+    try {
+      const texts = pool.map((c) => c.entry.userInput);
+      const rerankScores = await rerank(input, texts);
+      pool = pool.map((c, i) => ({ ...c, score: rerankScores[i] ?? c.score }));
+    } catch (err) {
+      console.warn("[learning] reranker 실패, 임베딩 점수 그대로 사용:", err);
+    }
+  }
+
+  // 4) priority < 0 제외 + threshold 미달 제외.
+  //    threshold는 LEARNED_RERANK_THRESHOLD (0.85). reranker 미사용 시
+  //    임베딩 sim이 0.85 미만이면 자동 컷.
+  const filtered = pool.filter((c) => c.entry.priority >= 0 && c.score >= LEARNED_RERANK_THRESHOLD);
   if (filtered.length === 0) return null;
 
-  // 4) 정렬: priority desc → similarity desc → createdAt desc.
-  //    good 평가 받은 응답이 항상 우선, 동급이면 더 가까운 의미, 더 최근.
+  // 5) 정렬: priority desc → score desc → createdAt desc.
   filtered.sort(
     (a, b) =>
       b.entry.priority - a.entry.priority ||
-      b.similarity - a.similarity ||
+      b.score - a.score ||
       b.entry.createdAt - a.entry.createdAt,
   );
 
