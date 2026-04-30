@@ -27,7 +27,12 @@ import { usePreferences } from "@/lib/preferences";
 import { buildContinuations, type ContinueCard } from "@/lib/continuations";
 import { composeAnswer } from "@/lib/ai/compose";
 import { dispatchLLMCall, type DispatchTurn } from "@/lib/ai/dispatch";
-import { matchPackContent, buildPackSuggestion, inferDomainPack } from "@/lib/packs/match";
+import {
+  matchPackContent,
+  buildPackSuggestion,
+  inferDomainPack,
+  hasDefinitionIntent,
+} from "@/lib/packs/match";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import { incrementUsedCount, matchLearnedResponse, saveLearned } from "@/lib/learning";
 import { addUserSATProblem, getUserSATProblems } from "@/lib/packs/study/user-store";
@@ -143,10 +148,15 @@ function ChatPage() {
       .reverse()
       .find((m): m is Extract<ThreadMsg, { role: "assistant" }> => m.role === "assistant");
     const justSawSuggestion = Boolean(lastAsst?.suggestion);
-    const matched =
-      justSawSuggestion && hasFollowUpIntent(text)
-        ? null
-        : matchPackContent(text, installed, undefined);
+
+    // 정의 요청("찜부추국수는 뭐야?")일 때는 매칭/스토어 단계를 건너뛴다.
+    // 도메인 키워드가 hit이어도 사용자가 원하는 건 카드가 아니라 설명이다.
+    // Stage 2.5(학습 캐시)와 Stage 3(LLM + inferDomainPack voice/tone)는
+    // 그대로 흘러간다.
+    const definitionIntent = hasDefinitionIntent(text);
+
+    const skipMatchStep = definitionIntent || (justSawSuggestion && hasFollowUpIntent(text));
+    const matched = skipMatchStep ? null : matchPackContent(text, installed, undefined);
     if (matched) {
       const userId = crypto.randomUUID();
       const asstId = crypto.randomUUID();
@@ -188,7 +198,7 @@ function ChatPage() {
     // marketplace. If a domain is detected (with or without store hits),
     // we render a store-suggestion bubble instead of dropping straight
     // to the LLM. Skipped on follow-up intent so we don't loop. ----
-    const skipStoreStep = justSawSuggestion && hasFollowUpIntent(text);
+    const skipStoreStep = definitionIntent || (justSawSuggestion && hasFollowUpIntent(text));
     if (!skipStoreStep) {
       const storeResult = searchStoreForQuery(text);
       if (storeResult) {

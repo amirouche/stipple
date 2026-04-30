@@ -305,6 +305,59 @@ export function inferDomainPack(
 }
 
 // ---------------------------------------------------------------------------
+// Intent: definition / explanation request
+// ---------------------------------------------------------------------------
+//
+// V2 라우터 진화. "찜부추국수는 뭐야?" 같은 입력은 음식 도메인 키워드는
+// hit이지만 사용자 의도는 카드(레시피/스토어 추천)가 아니라 *설명*이다.
+// 도메인 매칭만 보고 카드를 띄우면 의도와 어긋난 응답이 된다.
+//
+// 이 함수가 true면 send()는 Stage 1(matchPackContent)과 Stage 2
+// (searchStoreForQuery)를 skip하고 Stage 2.5(학습 캐시) → Stage 3(LLM)
+// 으로 흘려보낸다. inferDomainPack은 그대로 호출되므로 voice/tone은
+// 도메인에 맞춰 따라간다 — 단지 카드가 안 뜰 뿐.
+//
+// 키워드 선정 노트:
+//   - "뭐야"·"뭐지"·"뭐예요"는 명백한 WHAT-IS 질문. "뭐" 단독은
+//     "뭐든 추천" 같은 비-정의 표현과 충돌하므로 **포함하지 않는다**.
+//   - "?" 단독은 신호로 안 친다. "김치찌개 만드는 법?"이 정의 요청으로
+//     오인되어 레시피 카드가 사라지면 회귀.
+//   - 키워드 hit이 없으면 false → 기존 매칭 흐름 그대로.
+const DEFINITION_PATTERNS = [
+  // WHAT-IS 형 질문
+  "뭐야",
+  "뭐지",
+  "뭐예요",
+  "뭔데",
+  "무엇",
+  // 명시적 설명 요청
+  "설명해",
+  "설명 해",
+  "설명해줘",
+  // 미지(unfamiliarity) 표현
+  "처음 들어",
+  "들어봐",
+  "처음이야",
+  "모르는데",
+  "모르겠어",
+  "잘 모르",
+  // 어떤 것 / which-is 형
+  "어떤 거",
+  "어떤 것",
+  // 영어
+  "what is",
+  "what's",
+  "explain",
+  "never heard",
+  "don't know",
+];
+
+export function hasDefinitionIntent(text: string): boolean {
+  const q = lower(text);
+  return DEFINITION_PATTERNS.some((p) => q.includes(p));
+}
+
+// ---------------------------------------------------------------------------
 // Suggestion text + button options
 // ---------------------------------------------------------------------------
 
