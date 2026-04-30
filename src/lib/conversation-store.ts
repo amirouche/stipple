@@ -47,6 +47,11 @@ export type ThreadMsg =
       //   learned → 빨강 (학습 캐시 — V2 Phase 2)
       // Absent for canned/local replies that never went through dispatch.
       provider?: "webllm" | "gemini" | "learned";
+      // Phase B: 이 메시지가 가리키는 LearnedResponse id. 사용자가 "좋아"·
+      // "다른 거"를 누를 때 어떤 학습 엔트리를 평가할지 알아내는 핸들.
+      // 채팅이 reload되어도 학습 store는 살아 있으므로 다음 같은 입력에
+      // 평가가 매칭에 반영된다.
+      learnedId?: string;
     };
 
 export type Thread = {

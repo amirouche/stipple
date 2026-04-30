@@ -35,7 +35,13 @@ import {
 } from "@/lib/packs/match";
 import { classifyIntent } from "@/lib/packs/intent";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
-import { incrementUsedCount, matchLearnedResponse, saveLearned } from "@/lib/learning";
+import {
+  incrementUsedCount,
+  matchLearnedResponse,
+  rateLearned,
+  saveLearned,
+  useLearnedRating,
+} from "@/lib/learning";
 import { addUserSATProblem, getUserSATProblems } from "@/lib/packs/study/user-store";
 import { buildSATMathDummy, buildSATMathFromLLM } from "@/lib/packs/study/parse-llm";
 import type { AnswerPayload } from "@/lib/dots-data";
@@ -285,6 +291,10 @@ function ChatPage() {
           pending: false,
           text: learned.response,
           provider: "learned",
+          // Phase B: 학습 hit이면 그 응답의 id를 그대로 핸들로 박는다 —
+          // 사용자가 "다른 거" 누르면 이 id로 priority -1 → 다음 같은
+          // 입력은 새 LLM 호출로 흘러간다.
+          learnedId: learned.id,
         });
         void incrementUsedCount(learned.id);
         setBusy(false);
@@ -395,8 +405,9 @@ function ChatPage() {
       // call the user already made, not making a new one. Cache use on
       // the next exact-match query is what skips a future LLM call.
       if (provider && payload.kind === "text" && body.trim()) {
+        const learnedId = crypto.randomUUID();
         void saveLearned({
-          id: crypto.randomUUID(),
+          id: learnedId,
           userInput: text,
           response: body,
           provider,
@@ -406,7 +417,11 @@ function ChatPage() {
           tone: composePack?.tone,
           createdAt: Date.now(),
           usedCount: 0,
+          priority: 0,
         });
+        // Phase B: 메시지 버블에 학습 id를 박아둬야 사용자가 "좋아"·
+        // "다른 거"를 눌렀을 때 어느 엔트리를 평가할지 알 수 있다.
+        patchMessage(thread.id, asstId, { learnedId });
       }
     };
 
@@ -833,6 +848,7 @@ function AssistantBubble({
             </div>
           )}
           {!m.pending && m.provider && <ProviderBadge provider={m.provider} />}
+          {!m.pending && m.learnedId && <RatingControls learnedId={m.learnedId} />}
           {!m.pending && m.suggestion && (
             <SuggestionBlock
               packName={m.suggestion.matchedPackName}
@@ -845,6 +861,40 @@ function AssistantBubble({
           {!m.pending && m.pitch && <PitchCard pitch={m.pitch} />}
         </div>
       )}
+    </div>
+  );
+}
+
+function RatingControls({ learnedId }: { learnedId: string }) {
+  // Phase B 큐레이션. LLM 응답(웹llm/gemini) 또는 학습 hit(learned) 메시지
+  // 아래 "좋아 / 다른 거" 텍스트 버튼을 띄운다. 사용자가 평가하면 store가
+  // 갱신되고 같은 입력의 다음 매칭에 곧장 반영된다 — bad는 매칭에서 제외,
+  // good은 priority 정렬 우선.
+  const rating = useLearnedRating(learnedId);
+  if (rating === "good" || rating === "bad") {
+    return (
+      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+        ✓ {rating === "good" ? "좋아함" : "다른 거 표시됨"}
+      </p>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 text-[11px]">
+      <button
+        type="button"
+        onClick={() => void rateLearned(learnedId, "good")}
+        className="text-ink-soft hover:text-ink transition-colors"
+      >
+        좋아
+      </button>
+      <span className="text-ink-soft/40">·</span>
+      <button
+        type="button"
+        onClick={() => void rateLearned(learnedId, "bad")}
+        className="text-ink-soft hover:text-ink transition-colors"
+      >
+        다른 거
+      </button>
     </div>
   );
 }

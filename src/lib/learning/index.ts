@@ -9,8 +9,10 @@ export {
   getAllLearned,
   getLearnedSnapshot,
   incrementUsedCount,
+  rateLearned,
   clearLearned,
   subscribeLearned,
 } from "./store";
 export { matchLearnedResponse } from "./match";
 export { setupLearningDebug } from "./debug";
+export { useLearnedRating } from "./hooks";

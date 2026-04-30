@@ -26,9 +26,13 @@ export type LearnedResponse = {
   // that" without re-running the full pipeline.
   systemPrompt?: string;
   createdAt: number; // Date.now()
-  // Phase B will add user thumbs ("good" / "bad") and rotate on "bad".
+  // Phase B 큐레이션: 사용자가 "좋아"·"다른 거" 클릭하면 rating + priority
+  // 가 함께 갱신된다. priority는 매칭 정렬 키 — bad(-1)는 매칭에서 제외,
+  // good(+1)은 같은 입력에 여러 응답이 있을 때 우선 선택.
   rating?: "good" | "bad";
+  priority: number; // default 0, good = +1, bad = -1
+  lastRatedAt?: number;
   // How many times this entry has been served on a match. Surfaces in
-  // debug listing; later Phase B will use this for ranking.
+  // debug listing; Phase B에서 priority와 함께 ranking 보조 키.
   usedCount: number;
 };
