@@ -10,6 +10,13 @@ import {
   type PackRecipe,
   type SuggestionOption,
 } from "@/lib/dots-data";
+import {
+  cosineSimilarity,
+  embed,
+  embedBatch,
+  getEmbeddingStatus,
+  PACK_SIMILARITY_THRESHOLD,
+} from "@/lib/embedding";
 import { getSATMathProblem } from "@/lib/packs/study/sat-math";
 import type { SATMathProblem } from "@/lib/packs/study/types";
 import { getUserSATProblems } from "@/lib/packs/study/user-store";
@@ -197,15 +204,114 @@ type Candidate = {
   bestScore: number;
 };
 
+// V4 Hybrid Search — 팩 콘텐츠 시맨틱 매칭. 모듈 단위 캐시: 첫 매칭 호출
+// 시 모든 팩 콘텐츠를 batch로 임베딩해서 보관. 사용자가 모델을 바꾸면
+// (768d ↔ 384d) 차원이 달라지므로 캐시를 비우고 다시 구축.
+const packVectorCache = new Map<string, Float32Array>();
+let packVectorBuildPromise: Promise<void> | null = null;
+let lastBuildModelId: string | undefined;
+
+function packVectorKey(kind: ContentMatch["kind"], id: string): string {
+  return `${kind}:${id}`;
+}
+
+function getRecipeMatchText(r: PackRecipe): string {
+  // 매칭에 가장 중요한 신호: 제목 + 주요 재료. 단계는 매칭 노이즈 많음
+  // ("끓이다"·"썰다" 같은 일반 동사). 시연 시 "백종원" / "참치" / "두부"가
+  // 핵심 식별자.
+  const ingredients = r.ingredients.map((i) => i.item).join(" ");
+  return `${r.title} ${ingredients}`;
+}
+
+function getSATMatchText(p: SATMathProblem): string {
+  // 한국어 토픽 라벨 + 문제 본문. 라벨이 한국어이므로 사용자가 한국어로
+  // 입력해도 의미 거리가 가깝다 ("기하" / "삼각형" 등).
+  return `${SAT_TOPIC_LABEL[p.topic]} ${p.question}`;
+}
+
+async function ensurePackVectors(installedPacks: Pack[]): Promise<void> {
+  const status = getEmbeddingStatus();
+  if (status.state !== "ready") return;
+  // 모델이 바뀌면 차원도 바뀌므로 캐시 폐기 후 다시 구축.
+  if (lastBuildModelId !== status.model) {
+    packVectorCache.clear();
+    lastBuildModelId = status.model;
+    packVectorBuildPromise = null;
+  }
+  if (packVectorBuildPromise) return packVectorBuildPromise;
+
+  packVectorBuildPromise = (async () => {
+    type Item = { key: string; text: string };
+    const items: Item[] = [];
+    for (const pack of installedPacks) {
+      if (!pack.contents) continue;
+      for (const ref of pack.contents) {
+        if (ref.kind === "sat-math") {
+          const p = getSATMathProblem(ref.problemId);
+          if (!p) continue;
+          const key = packVectorKey("sat-math", p.id);
+          if (packVectorCache.has(key)) continue;
+          items.push({ key, text: getSATMatchText(p) });
+        } else if (ref.kind === "cooking-recipe") {
+          const r = COOKING_RECIPES.find((x) => x.id === ref.recipeId);
+          if (!r) continue;
+          const key = packVectorKey("cooking-recipe", r.id);
+          if (packVectorCache.has(key)) continue;
+          items.push({ key, text: getRecipeMatchText(r) });
+        }
+      }
+      if (pack.id === "study-companion") {
+        for (const p of getUserSATProblems()) {
+          const key = packVectorKey("sat-math", p.id);
+          if (packVectorCache.has(key)) continue;
+          items.push({ key, text: getSATMatchText(p) });
+        }
+      }
+    }
+    if (items.length === 0) return;
+    try {
+      const vectors = await embedBatch(items.map((i) => i.text));
+      items.forEach((item, i) => packVectorCache.set(item.key, vectors[i]));
+    } catch (err) {
+      console.warn("[packs] 콘텐츠 임베딩 실패, 키워드만 사용:", err);
+    }
+  })();
+
+  await packVectorBuildPromise;
+  packVectorBuildPromise = null;
+}
+
+// 키워드 점수와 시맨틱 점수를 합친다. 두 신호 중 큰 값을 사용 — OR 게이트.
+//   - 키워드 hit (specific 60 / domain 30 / generic 5)이 강하면 그대로
+//   - 시맨틱 유사도 0.85 이상이면 sim*100으로 스케일해서 같이 비교
+//   - 둘 다 약하면 합쳐도 약함 → 매칭 임계값(30) 미달로 미스
+function combineScores(
+  keywordScore: number,
+  queryVec: Float32Array | null,
+  vectorKey: string,
+): number {
+  if (!queryVec) return keywordScore;
+  const stored = packVectorCache.get(vectorKey);
+  if (!stored) return keywordScore;
+  const sim = cosineSimilarity(queryVec, stored);
+  if (sim < PACK_SIMILARITY_THRESHOLD) return keywordScore;
+  return Math.max(keywordScore, sim * 100);
+}
+
 // Shared scoring loop. Builds candidates with non-zero scores; sorts so
 // the active pack wins ties, then highest-score wins. Both
 // matchPackContent and inferDomainPack use this — same scoring different
 // modes (strict gates generic-only to 0; soft keeps it).
+//
+// V4: queryVec이 주어지면 시맨틱 점수를 키워드 점수와 max로 합친다.
+// queryVec === null이면 V3 키워드만 — 모델 미사용 / inferDomainPack soft
+// 모드 호출 시.
 function scoreCandidates(
   query: string,
   installedPacks: Pack[],
   activePackId: string | undefined,
   mode: ScoreMode,
+  queryVec: Float32Array | null = null,
 ): Candidate[] {
   const q = lower(query);
   const candidates: Candidate[] = [];
@@ -217,12 +323,14 @@ function scoreCandidates(
       if (ref.kind === "sat-math") {
         const problem = getSATMathProblem(ref.problemId);
         if (!problem) continue;
-        const score = scoreSATMath(q, problem, mode);
+        const keyword = scoreSATMath(q, problem, mode);
+        const score = combineScores(keyword, queryVec, packVectorKey("sat-math", problem.id));
         if (score > 0) matches.push({ kind: "sat-math", problem, score });
       } else if (ref.kind === "cooking-recipe") {
         const recipe = COOKING_RECIPES.find((r) => r.id === ref.recipeId);
         if (!recipe) continue;
-        const score = scoreCookingRecipe(q, recipe, mode);
+        const keyword = scoreCookingRecipe(q, recipe, mode);
+        const score = combineScores(keyword, queryVec, packVectorKey("cooking-recipe", recipe.id));
         if (score > 0) matches.push({ kind: "cooking-recipe", recipe, score });
       }
     }
@@ -231,7 +339,8 @@ function scoreCandidates(
     // counts toward "Study에 N문제 있어".
     if (pack.id === "study-companion") {
       for (const problem of getUserSATProblems()) {
-        const score = scoreSATMath(q, problem, mode);
+        const keyword = scoreSATMath(q, problem, mode);
+        const score = combineScores(keyword, queryVec, packVectorKey("sat-math", problem.id));
         if (score > 0) matches.push({ kind: "sat-math", problem, score });
       }
     }
@@ -254,12 +363,27 @@ function scoreCandidates(
   return candidates;
 }
 
-export function matchPackContent(
+export async function matchPackContent(
   query: string,
   installedPacks: Pack[],
   activePackId?: string,
-): PackMatchResult | null {
-  const candidates = scoreCandidates(query, installedPacks, activePackId, "strict");
+): Promise<PackMatchResult | null> {
+  // V4 Hybrid Search 준비: 첫 호출 시 팩 콘텐츠를 batch로 임베딩 (모델
+  // ready일 때만). 이후 호출은 캐시 hit. 모델 미사용 환경에선 즉시 return.
+  await ensurePackVectors(installedPacks);
+
+  // 사용자 입력 임베딩. 모델 미사용 / 임베딩 실패 시 null로 흘려 V3
+  // 키워드 매칭만 작동.
+  let queryVec: Float32Array | null = null;
+  if (getEmbeddingStatus().state === "ready") {
+    try {
+      queryVec = await embed(query);
+    } catch (err) {
+      console.warn("[packs] 사용자 입력 임베딩 실패, 키워드만 사용:", err);
+    }
+  }
+
+  const candidates = scoreCandidates(query, installedPacks, activePackId, "strict", queryVec);
   if (candidates.length === 0) return null;
 
   const winner = candidates[0];

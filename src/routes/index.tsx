@@ -180,7 +180,7 @@ function ChatPage() {
       isFollowUpIntent ||
       hasDefinitionIntent(text) ||
       (justSawSuggestion && hasFollowUpIntent(text));
-    const matched = skipMatchStep ? null : matchPackContent(text, installed, undefined);
+    const matched = skipMatchStep ? null : await matchPackContent(text, installed, undefined);
     if (matched) {
       const userId = crypto.randomUUID();
       const asstId = crypto.randomUUID();
