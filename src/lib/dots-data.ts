@@ -41,6 +41,14 @@ export type Pack = {
   // pack can have contents (used by matchPackContent) without having a
   // folderRoute (no dedicated screen, content rendered inline).
   folderRoute?: string;
+  // V5.0 lite Phase I-2: 팩이 다루는 도메인. 사용자 입력의 도메인 점수가
+  // 이 도메인과 일치하면 매칭 흐름 진입. 도메인 사전 (src/lib/domain/dictionary)
+  // 의 키와 일치해야 — domain 매칭은 단순 string equality.
+  domain?: string[];
+  // 이 팩이 명시적으로 안 다루는 도메인. 사용자 입력 도메인 점수가 여기에
+  // 매칭되면 cloud 직행 — 매처 본체 우회. cooking pack에 "맛집 추천" 누수
+  // 차단용. domain 보다 우선 적용 (excluded이면 domain hit 무시).
+  excluded_domains?: string[];
 };
 
 export const PACKS: Pack[] = [
@@ -76,6 +84,11 @@ export const PACKS: Pack[] = [
       { kind: "cooking-recipe", recipeId: "baek-kimchi-jjigae" },
       { kind: "cooking-recipe", recipeId: "tuna-kimchi-jjigae" },
     ],
+    // V5.0 lite Phase I-2: cooking pack은 레시피·요리법·음식 도메인. 맛집·
+    // 지역·배달·건강 정보 누수 차단 (Tei 박은 "짜장면 ... 맛집 ... 배달"
+    // 케이스).
+    domain: ["레시피", "요리법", "음식"],
+    excluded_domains: ["맛집", "지역 정보", "배달", "건강 정보"],
   },
   {
     id: "study-companion",
@@ -102,6 +115,9 @@ export const PACKS: Pack[] = [
       { kind: "sat-math", problemId: "sat-m-005" },
     ],
     folderRoute: "/study",
+    // V5.0 lite Phase I-2: 학습·문제풀이·수학 도메인. 엔터테인먼트 누수 차단.
+    domain: ["학습", "문제풀이", "수학"],
+    excluded_domains: ["엔터테인먼트"],
   },
   {
     id: "morning-routine",
@@ -120,6 +136,10 @@ export const PACKS: Pack[] = [
       "- 운동, 식사, 컨디션, 일정 위주로 답하세요.",
       "- 절대 길게 말하지 마세요 — 사용자가 하루를 시작하는 데 방해되면 안 됩니다. 1~2 문장이 기본입니다.",
     ].join("\n"),
+    // V5.0 lite Phase I-2: 루틴·일상 도메인. 요리·학습 누수 차단 — morning
+    // routine은 짧은 일정/컨디션 응답 전용이라 cooking/study 매처 우회.
+    domain: ["루틴", "일상"],
+    excluded_domains: ["요리", "학습"],
   },
   {
     id: "focus-writer",

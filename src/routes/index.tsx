@@ -51,6 +51,9 @@ import { buildSATMathDummy, buildSATMathFromLLM } from "@/lib/packs/study/parse-
 import { addDemoTrace } from "@/lib/demo/trace";
 import { useMemoryStore } from "@/lib/memory";
 import type { ConversationSummary } from "@/lib/memory";
+// V5.0 lite Phase I-4: 도메인 인지 layer. matchPackContent 호출 전에
+// 사용자 입력의 도메인 점수와 pack의 excluded_domains 비교해 누수 차단.
+import { matchDomain, computeDomainExclusions, type DomainMatch } from "@/lib/domain";
 import type { AnswerPayload } from "@/lib/dots-data";
 
 // Words that mean "give me another / something else / please do it" — when
@@ -80,6 +83,14 @@ const FOLLOWUP_ACTION_PATTERNS = [
 function hasFollowUpIntent(input: string): boolean {
   const q = input.toLowerCase();
   return FOLLOWUP_ACTION_PATTERNS.some((p) => q.includes(p));
+}
+
+// V5.0 lite Phase I-4: trace.reason 에 박을 도메인 점수 요약. score > 0 인
+// 도메인을 "음식(1)+맛집(2)" 형식으로 묶음. score 0 이거나 dom 미박힘 시 빈
+// string — 기존 reason 텍스트에 영향 없게.
+function domainSummary(dom: DomainMatch): string {
+  if (dom.scores.length === 0) return "";
+  return dom.scores.map((s) => `${s.domain}(${s.score})`).join("+");
 }
 
 // V5.0 Phase M-1: ConversationSummary.sourceMessagesCount 는 DispatchTurn
@@ -281,8 +292,18 @@ function ChatPage() {
     // "뭐야" 단독은 specific 없이 definition → skip → cloud.
     const isFollowUpIntent = intent === "follow-up";
 
+    // V5.0 Phase I-4: 도메인 인지 — Tei 누수 케이스 ("짜장면 ... 맛집 ... 배달",
+    // "Cooking Essentials에 운동 루틴") 차단. computeDomainExclusions 가 두
+    // 룰 (excluded hit + top-domain owner mismatch) 모두 적용한 excludedIds
+    // 반환. 매처 본체 (matchPackContent body) 흐름은 그대로, 입력 installed
+    // 리스트만 좁힘.
+    const dom = matchDomain(text);
+    const domainExcludedIds = computeDomainExclusions(dom, installed);
+    const eligibleInstalled = installed.filter((p) => !domainExcludedIds.includes(p.id));
+    const domSummary = domainSummary(dom);
+
     const negTrend = classifyNegationOrTrend(text); // "negation" | "trend" | null
-    const specificTarget = findSpecificPackTarget(text, installed);
+    const specificTarget = findSpecificPackTarget(text, eligibleInstalled);
 
     let skipReason: string | null = null;
     if (negTrend) {
@@ -294,11 +315,16 @@ function ChatPage() {
       else if (hasDefinitionIntent(text)) skipReason = "definition";
       else if (justSawSuggestion && hasFollowUpIntent(text)) skipReason = "follow-up";
     }
+    // V5.0 Phase I-4: 모든 installed pack이 도메인-excluded 이면 매처 본체
+    // 자체를 skip. 이 분기가 Tei "짜장면 ... 맛집 ... 배달" 누수 차단의 핵심.
+    if (!skipReason && eligibleInstalled.length === 0 && domainExcludedIds.length > 0) {
+      skipReason = `domain-excluded:${domainExcludedIds.join(",")}`;
+    }
     const skipMatchStep = skipReason !== null;
 
     const matched = skipMatchStep
       ? null
-      : await matchPackContent(text, installed, undefined, intent);
+      : await matchPackContent(text, eligibleInstalled, undefined, intent);
     if (matched) {
       const userId = crypto.randomUUID();
       const asstId = crypto.randomUUID();
@@ -355,10 +381,12 @@ function ChatPage() {
           : conf === "exact" && matched.matchedAlias
             ? `[match=exact-alias, alias=${matched.matchedAlias}]`
             : `[match=${conf}]`;
-      const reasonText =
+      const baseReason =
         conf === "fuzzy"
           ? `pack: ${matched.pack.id} / ${entryName} ${matchTag}`
           : `pack: ${matched.pack.id} / ${entryName} ${facetTag} ${matchTag}`;
+      // V5.0 Phase I-4: 도메인 요약을 trace 에 박음 (있을 때만).
+      const reasonText = domSummary ? `${baseReason} · domain:${domSummary}` : baseReason;
       addDemoTrace({
         input: text,
         intent,
@@ -667,18 +695,23 @@ function ChatPage() {
         packId: composePack?.id,
         packName: composePack?.name,
         latencyMs: Date.now() - startTime,
-        reason: skipReason
-          ? `skip: ${skipReason}`
-          : [
-              provider ? `클라우드 LLM (${provider})` : "클라우드 LLM 실패 → 캔드 fallback",
-              summaryGenerated
-                ? "summary 생성됨 (별도 LLM 호출)"
-                : summaryUsed
-                  ? "summary 활용됨"
-                  : null,
-            ]
-              .filter(Boolean)
-              .join(" · "),
+        reason: [
+          skipReason
+            ? `skip: ${skipReason}`
+            : provider
+              ? `클라우드 LLM (${provider})`
+              : "클라우드 LLM 실패 → 캔드 fallback",
+          summaryGenerated
+            ? "summary 생성됨 (별도 LLM 호출)"
+            : summaryUsed
+              ? "summary 활용됨"
+              : null,
+          // V5.0 Phase I-4: 도메인 점수 요약 — skip / cloud 어느 쪽이든
+          // 박힘 (있을 때만). Tei 시각 검증용.
+          domSummary ? `domain:${domSummary}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
       });
     });
   }
