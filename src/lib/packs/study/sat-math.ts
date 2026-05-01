@@ -41,6 +41,18 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
           "11에서 3을 빼는 건 맞는데, 그 다음 2로 나누는 단계를 빼먹은 듯. 8을 그대로 두지 말고 ÷2까지 가야 해.",
       },
     ],
+    // V5.0 lite Phase A.5 facet — sat-m-001을 "대수" topic의 canonical entry로
+    // 채움. collectEntries에서 sat-m-001과 sat-m-002 둘 다 entryName="대수"이지만
+    // iteration order로 sat-m-001이 먼저 head로 잡힌다. 따라서 "대수" exact
+    // match와 "수학"/"방정식" fuzzy match 모두 이 facet을 노출.
+    definition:
+      "대수(algebra)는 미지수와 식의 관계를 다루는 수학 분야야. 일차/이차 방정식을 풀어 미지수를 구하거나, 함수 형태로 변수 간 관계를 다룬다.",
+    pack_context:
+      "Study Companion 팩의 SAT 수학 5문제 중 대수 2문제(일차·이차)가 들어 있어. 미적분, 선형대수학 같은 대학 수준은 cloud나 별도 팩 참조.",
+    how_to:
+      "기본은 등호 양변에 같은 연산을 적용해서 미지수를 분리. 일차는 한 번에 풀리고, 이차는 인수분해 / 근의 공식 / 꼭짓점 공식으로 접근. 검산까지 가는 게 안전해.",
+    examples: ["일차방정식 (2x+3=11)", "이차함수 꼭짓점 (x²−4x+3)"],
+    related_terms: ["일차", "이차", "방정식", "함수", "꼭짓점"],
   },
   {
     kind: "problem",

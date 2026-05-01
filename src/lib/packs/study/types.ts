@@ -30,6 +30,15 @@ export type SATMathProblem = {
   hint: string;
   solution: string;
   commonMistakes: CommonMistake[];
+  // V5.0 lite Phase A.5 facet — Study pack 마이그레이션. PackRecipe와 동일한
+  // 5필드. 모두 optional → 미마이그레이션 problem은 기존 question/solution
+  // 으로 fallback (backward compat 보장). topic 라벨이 entryName이라
+  // facet은 problem이 아니라 topic 단위로 의미를 갖도록 작성한다.
+  definition?: string;
+  pack_context?: string;
+  how_to?: string;
+  examples?: string[];
+  related_terms?: string[];
 };
 
 // Open union — add { kind: "concept"; ... } / { kind: "vocab"; ... } later.

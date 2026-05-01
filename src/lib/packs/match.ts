@@ -431,7 +431,27 @@ function scoreCandidates(
 //   definition / casual → entry.definition (definition만 pack_context 동반)
 //   search / recommend / unknown → entry.how_to
 //   follow-up           → Phase A에선 how_to 동일 처리. lastFacet 추적은 Phase B.
-function selectFacet(entry: PackRecipe, intent?: Intent): Facet | null {
+//
+// V5.0 lite Phase A.5: 입력 타입을 duck-typed FacetFields로 완화 — Study pack의
+// SATMathProblem도 같은 5필드를 갖도록 type 확장 후 그대로 통과시킨다.
+// PackRecipe도 FacetFields 호환 (5필드 모두 동일 이름·optional).
+type FacetFields = {
+  definition?: string;
+  pack_context?: string;
+  how_to?: string;
+  examples?: string[];
+  related_terms?: string[];
+};
+
+// V5.0 lite Phase A.5: ContentMatch에서 facet payload 추출. cooking-recipe와
+// sat-math 모두 FacetFields 호환 — head.kind만 분기해서 같은 selectFacet에 통과.
+function pickFacetFromMatch(head: ContentMatch, intent?: Intent): Facet | undefined {
+  if (head.kind === "cooking-recipe") return selectFacet(head.recipe, intent) ?? undefined;
+  if (head.kind === "sat-math") return selectFacet(head.problem, intent) ?? undefined;
+  return undefined;
+}
+
+function selectFacet(entry: FacetFields, intent?: Intent): Facet | null {
   if (!intent) return null;
   if (intent === "definition") {
     if (!entry.definition) return null;
@@ -585,8 +605,7 @@ export async function matchPackContent(
   const exactHit = findExactEntry(query, allEntries);
   if (exactHit) {
     const head = exactHit.match;
-    const facet =
-      head.kind === "cooking-recipe" ? (selectFacet(head.recipe, intent) ?? undefined) : undefined;
+    const facet = pickFacetFromMatch(head, intent);
     return {
       pack: exactHit.pack,
       isActivePack: exactHit.pack.id === activePackId,
@@ -603,8 +622,7 @@ export async function matchPackContent(
   const partialHit = findPartialEntry(nouns, allEntries);
   if (partialHit) {
     const head = partialHit.entry.match;
-    const facet =
-      head.kind === "cooking-recipe" ? (selectFacet(head.recipe, intent) ?? undefined) : undefined;
+    const facet = pickFacetFromMatch(head, intent);
     return {
       pack: partialHit.entry.pack,
       isActivePack: partialHit.entry.pack.id === activePackId,
@@ -646,8 +664,7 @@ export async function matchPackContent(
     : winner.matches.filter((m) => m.score === winner.bestScore).slice(0, 2);
 
   const head = matches[0];
-  const facet =
-    head?.kind === "cooking-recipe" ? (selectFacet(head.recipe, intent) ?? undefined) : undefined;
+  const facet = head ? pickFacetFromMatch(head, intent) : undefined;
 
   // V5.0 Phase B1: requestedNoun — 사용자가 입력했지만 어떤 entry name과도
   // 매칭 안 된 명사. 가장 긴 unmatched 명사를 골라 응답 텍스트에 노출.
@@ -759,7 +776,7 @@ function buildSATMathSuggestion(result: PackMatchResult): {
   text: string;
   options: SuggestionOption[];
 } {
-  const { pack, packLevel, matches, confidence, requestedNoun } = result;
+  const { pack, packLevel, matches, facet, confidence, requestedNoun } = result;
   const head = matches[0];
   if (head?.kind !== "sat-math") {
     return { text: `${pack.name}에서 비슷한 게 보여.`, options: [] };
@@ -767,12 +784,22 @@ function buildSATMathSuggestion(result: PackMatchResult): {
 
   // V5.0 Phase B1: fuzzy 정직 응답. 모든 pack 범용 — buildCookingSuggestion
   // 과 동일 패턴.
-  const text =
-    confidence === "fuzzy"
-      ? `${pack.name}에 ${requestedNoun ?? "그건"} 정확히 없어. 비슷한 건 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제. 다른 거 원하면 cloud로 찾아볼까?`
-      : packLevel
-        ? `${pack.name}에 SAT 수학 ${matches.length}문제 있어. 풀어볼래? 아니면 새 문제 받을래?`
-        : `${pack.name}에 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제(${head.problem.difficulty === "easy" ? "쉬움" : head.problem.difficulty === "medium" ? "보통" : "어려움"}) 있어. 풀어볼래?`;
+  // V5.0 lite Phase A.5: facet 분기 추가 (cooking과 동일 패턴). exact/partial일
+  // 때 facet이 있으면 facet 텍스트 노출. 없으면 기존 "문제 풀어볼래" 톤 유지.
+  let text: string;
+  if (confidence === "fuzzy") {
+    text = `${pack.name}에 ${requestedNoun ?? "그건"} 정확히 없어. 비슷한 건 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제. 다른 거 원하면 cloud로 찾아볼까?`;
+  } else if (facet) {
+    const body =
+      facet.kind === "definition" && facet.pack_context
+        ? `${facet.text}\n\n${facet.pack_context}`
+        : facet.text;
+    text = confidence === "partial" ? `${body}\n\n(비슷한 entry로 매칭됐어.)` : body;
+  } else if (packLevel) {
+    text = `${pack.name}에 SAT 수학 ${matches.length}문제 있어. 풀어볼래? 아니면 새 문제 받을래?`;
+  } else {
+    text = `${pack.name}에 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제(${head.problem.difficulty === "easy" ? "쉬움" : head.problem.difficulty === "medium" ? "보통" : "어려움"}) 있어. 풀어볼래?`;
+  }
 
   const cloudOption: SuggestionOption | null =
     confidence === "fuzzy"

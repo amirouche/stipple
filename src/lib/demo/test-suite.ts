@@ -192,6 +192,22 @@ export const TEST_SUITE: TestCase[] = [
     expectedExternalCall: false,
     description: "fuzzy fallback — '선형대수학' entry 없음, 정직 응답 (B1)",
   },
+  {
+    id: "study-11",
+    category: "Study",
+    input: "대수가 뭐야",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "exact + intent=definition → facet=definition (Phase A.5 study)",
+  },
+  {
+    id: "study-12",
+    category: "Study",
+    input: "대수 알려줘",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "exact + intent=unknown → facet=how_to (Phase A.5 study)",
+  },
 
   // ── General 6 ──────────────────────────────────────────────────────
   {
