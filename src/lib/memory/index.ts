@@ -6,6 +6,7 @@ export type {
   ArchiveGranularity,
   ArchiveEntry,
   MetaRecord,
+  ConversationSummary,
 } from "./types";
 
 export {
@@ -20,6 +21,10 @@ export {
   clearAll,
   hydrateMemoryStore,
   rehydrateMemoryStore,
+  putSummary,
+  getSummaryForThread,
+  deleteSummary,
+  clearSummaries,
 } from "./store";
 
 export { extractTopics } from "./topics";
@@ -44,3 +49,11 @@ export { tickScheduler, registerScheduler, SCHEDULER_META_KEY } from "./schedule
 export type { SchedulerReport } from "./scheduler";
 export { lookupMemory, STATE_WEIGHTS, GRANULARITY_WEIGHTS } from "./lookup";
 export type { LookupResult, LookupOpts, MemoryMatch, ArchiveMatch } from "./lookup";
+export {
+  maybeGenerateSummary,
+  shouldSummarize,
+  shouldResummarize,
+  estimateTokens,
+  SUMMARY_TRIGGER,
+  RECENT_AFTER_SUMMARY,
+} from "./summary";

@@ -8,17 +8,21 @@
 
 import { useSyncExternalStore } from "react";
 import * as persistence from "./persistence";
-import type { ArchiveEntry, MemoryRecord } from "./types";
+import type { ArchiveEntry, ConversationSummary, MemoryRecord } from "./types";
 
 type MemoryStoreState = {
   memories: MemoryRecord[];
   archives: ArchiveEntry[];
+  // V5.0 Phase M-1: thread-level summaries. 보통 thread당 0-1개. 전체 cap
+  // 없음 (사용자가 thread 많이 만들면 자연 증가) — 향후 필요시 prune.
+  summaries: ConversationSummary[];
   hydrated: boolean;
 };
 
 let state: MemoryStoreState = {
   memories: [],
   archives: [],
+  summaries: [],
   hydrated: false,
 };
 
@@ -38,11 +42,12 @@ export function hydrateMemoryStore(): Promise<void> {
   }
   hydrationPromise = (async () => {
     try {
-      const [memories, archives] = await Promise.all([
+      const [memories, archives, summaries] = await Promise.all([
         persistence.getAll<MemoryRecord>(persistence.STORES.memories),
         persistence.getAll<ArchiveEntry>(persistence.STORES.archives),
+        persistence.getAll<ConversationSummary>(persistence.STORES.summaries),
       ]);
-      state = { memories, archives, hydrated: true };
+      state = { memories, archives, summaries, hydrated: true };
       emit();
     } catch (err) {
       console.error("[memory] hydrate failed", err);
@@ -128,12 +133,46 @@ export async function clearArchives(): Promise<void> {
 }
 
 export async function clearAll(): Promise<void> {
-  state = { ...state, memories: [], archives: [] };
+  state = { ...state, memories: [], archives: [], summaries: [] };
   emit();
   await Promise.all([
     persistence.clear(persistence.STORES.memories),
     persistence.clear(persistence.STORES.archives),
+    persistence.clear(persistence.STORES.summaries),
   ]);
+}
+
+// V5.0 Phase M-1: summary store ops. id = `summary-${threadId}` 형식이라
+// 같은 thread에 putSummary 두 번이면 자동 supersede (재요약).
+export function putSummary(rec: ConversationSummary): void {
+  const next = state.summaries.filter((s) => s.id !== rec.id);
+  next.push(rec);
+  state = { ...state, summaries: next };
+  emit();
+  persistence.put(persistence.STORES.summaries, rec).catch((err) => {
+    console.error("[memory] putSummary failed", err);
+  });
+}
+
+export function getSummaryForThread(threadId: string): ConversationSummary | undefined {
+  return state.summaries.find((s) => s.threadId === threadId);
+}
+
+export function deleteSummary(id: string): void {
+  state = {
+    ...state,
+    summaries: state.summaries.filter((s) => s.id !== id),
+  };
+  emit();
+  persistence.del(persistence.STORES.summaries, id).catch((err) => {
+    console.error("[memory] deleteSummary failed", err);
+  });
+}
+
+export async function clearSummaries(): Promise<void> {
+  state = { ...state, summaries: [] };
+  emit();
+  await persistence.clear(persistence.STORES.summaries);
 }
 
 // Dev verification handle lives in `./debug` to avoid importing capture/promote

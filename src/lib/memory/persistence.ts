@@ -3,12 +3,15 @@
 // the store layer above does that, this file does not.
 
 const DB_NAME = "dots-memory";
-const DB_VERSION = 1;
+// V5.0 Phase M-1: v2 — summaries store 추가. 기존 사용자는 onupgradeneeded
+// 에서 신규 store만 생성, memories/archives 데이터 보존.
+const DB_VERSION = 2;
 
 export const STORES = {
   memories: "memories",
   archives: "archives",
   meta: "meta",
+  summaries: "summaries",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
@@ -34,6 +37,13 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORES.meta)) {
         db.createObjectStore(STORES.meta, { keyPath: "key" });
+      }
+      // V5.0 Phase M-1: thread당 1 summary. id = `summary-${threadId}` 라
+      // by_threadId 인덱스 따로 만들지 않음 — id 자체가 thread 키.
+      if (!db.objectStoreNames.contains(STORES.summaries)) {
+        const s = db.createObjectStore(STORES.summaries, { keyPath: "id" });
+        s.createIndex("by_threadId", "threadId");
+        s.createIndex("by_createdAt", "createdAt");
       }
     };
     req.onsuccess = () => resolve(req.result);

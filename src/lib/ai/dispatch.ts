@@ -18,6 +18,7 @@
 
 import type { AnswerPayload, Pack } from "@/lib/dots-data";
 import type { LookupResult } from "@/lib/memory/lookup";
+import type { ConversationSummary } from "@/lib/memory/types";
 import type { Intent } from "@/lib/packs/intent";
 // WebLLM 분기는 일시 비활성화 (2026-04-30). 모듈은 살려두고 imports만
 // 정리. callWebLLM / isWebLLMReady 같은 dead helper도 미래 재활성화를
@@ -56,6 +57,11 @@ export type DispatchInput = {
   // 이제는 unified builder가 둘을 한 곳에서 처리.
   memory?: LookupResult;
   payloadKind?: AnswerPayload["kind"];
+  // V5.0 Phase M-1: thread-level 요약. compose가 maybeGenerateSummary 호출
+  // 후 결과를 박으면 buildSystemPrompt에 CONVERSATION_SUMMARY 섹션이 추가됨.
+  // history도 caller가 recent N (예: 10) 만 보내야 — summary와 history가
+  // overlap되지 않도록.
+  summary?: ConversationSummary;
 };
 
 export type DispatchResult = {
@@ -126,6 +132,7 @@ export async function dispatchLLMCall(
     memory: input.memory,
     payloadKind: input.payloadKind,
     callerSystemPrompt: input.systemPrompt,
+    summary: input.summary,
   });
   const history = trimHistory(input.history);
 

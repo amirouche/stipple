@@ -11,6 +11,9 @@ import type { AnswerPayload, Pack } from "@/lib/dots-data";
 import type { LookupResult } from "@/lib/memory";
 // Direct path avoids a cycle: memory/index.ts ↔ dots-data via topics.ts.
 import { extractTopics } from "@/lib/memory/topics";
+// V5.0 Phase M-1: 임계점 도달 시 별도 Gemini 호출로 summary 생성. dispatch
+// 호출 전에 박혀 — summary가 만들어졌으면 history는 recent N 만 보냄.
+import { maybeGenerateSummary, RECENT_AFTER_SUMMARY } from "@/lib/memory/summary";
 import type { Intent } from "@/lib/packs/intent";
 import { matchPitch } from "@/lib/pitch";
 import { getPreferences } from "@/lib/preferences";
@@ -34,6 +37,11 @@ export type ComposeArgs = {
   // V3 라우터에서 분류된 의도. dispatch까지 그대로 전달 — casual일 땐
   // CASUAL_DISCIPLINE이 끼어 1 문장 인사로 응답 강제.
   intent?: Intent;
+  // V5.0 Phase M-1: 활성 thread id. 박혀 있으면 임계점 도달 시 summary 생성
+  // + 저장 + dispatch에 박음. omit하면 summary 비활성 (suggestion onClick의
+  // ad-hoc compose 등 thread context 없는 호출 — caller가 명시 박지 않으면
+  // summary 동작 X).
+  threadId?: string;
 };
 
 export type ComposeResult = {
@@ -41,12 +49,26 @@ export type ComposeResult = {
   // Which provider answered, if an LLM call ran. Absent on the fallback
   // path (network failure → canned reply has no LLM origin).
   provider?: "webllm" | "gemini";
+  // V5.0 Phase M-1: summary 활용 여부. trace 라벨 + UI 마커 박을 때 사용.
+  //   summaryUsed     — 이번 호출 시점에 thread에 summary가 존재해 활용됨.
+  //   summaryGenerated — 이번 호출에서 임계점 도달 → 새로 생성됨 (또는 supersede).
+  // generated이면 used도 true. used만 true는 기존 summary 재활용.
+  summaryUsed?: boolean;
+  summaryGenerated?: boolean;
 };
 
 // V5.0 Phase P-2: BASE_PERSONA / 팩·메모리 섹션 빌더 / payload-specific 디시플린
 // 모두 src/lib/ai/system-prompt.ts 로 이전. composeAnswer는 더 이상 prompt
 // string을 만들지 않고, memory + payloadKind 컨텍스트를 dispatchLLMCall에
 // 직접 전달한다 (DispatchInput의 새 필드).
+//
+// V5.0 Phase M-1: thread 컨텍스트 박혔으면 임계점 검사 + summary 자동 박음.
+
+// summaryGenerated 판정용 — 임계 hit 직전 시점에 store에 summary가 있었는지
+// 기록 + 호출 후 다시 비교. 이 import는 동적 — store 의존성 import 사이클
+// 회피용이지만 maybeGenerateSummary가 이미 store를 활용하므로 여기서는
+// pre-call 시점 체크만 위해 별도 import.
+import { getSummaryForThread } from "@/lib/memory/store";
 
 function attachPitch(payload: AnswerPayload, query: string): AnswerPayload {
   // Pitch matching is purely local — nothing about the query, topics, or
@@ -66,17 +88,35 @@ function attachPitch(payload: AnswerPayload, query: string): AnswerPayload {
 
 export async function composeAnswer(args: ComposeArgs): Promise<ComposeResult> {
   try {
+    // V5.0 Phase M-1: thread 컨텍스트 박혔으면 임계점 검사 → 필요시 별도
+    // Gemini 호출로 summary 생성 + 저장. summary 활성 시 dispatch에 보내는
+    // history는 recent N (10) 으로 제한 — summary가 그 이전을 대체하므로
+    // 중복 회피. omit (threadId 미박힘 — suggestion onClick ad-hoc 등) 시는
+    // summary 비활성 + history 그대로.
+    const fullHistory = args.history ?? [];
+    // 임계 hit 직전 store snapshot — generated 판정용 (post-call 시점에 새
+    // summary id/createdAt이 다르면 generated, 동일하면 reused).
+    const preExisting = args.threadId ? getSummaryForThread(args.threadId) : undefined;
+    const summary = args.threadId
+      ? await maybeGenerateSummary({ threadId: args.threadId, history: fullHistory })
+      : null;
+    const summaryGenerated = !!summary && summary.createdAt !== preExisting?.createdAt;
+    const dispatchHistory = summary
+      ? fullHistory.slice(summary.sourceMessagesCount).slice(-RECENT_AFTER_SUMMARY)
+      : fullHistory;
+
     // V5.0 Phase P-2: memory + payloadKind를 직접 dispatch에 전달 — 통일된
     // buildSystemPrompt가 두 컨텍스트 모두 한 번에 처리. 이전엔 compose가 prompt
     // string을 만들어 dispatch가 다시 prepend하던 2-layer 구조였음.
     const { text, provider } = await dispatchLLMCall(
       {
         userMessage: args.query,
-        history: args.history,
+        history: dispatchHistory,
         pack: args.pack,
         intent: args.intent,
         memory: args.lookup,
         payloadKind: args.fallback.kind,
+        summary: summary ?? undefined,
       },
       args.onToken,
     );
@@ -93,7 +133,12 @@ export async function composeAnswer(args: ComposeArgs): Promise<ComposeResult> {
     } else {
       payload = args.fallback;
     }
-    return { payload: attachPitch(payload, args.query), provider };
+    return {
+      payload: attachPitch(payload, args.query),
+      provider,
+      summaryUsed: !!summary,
+      summaryGenerated,
+    };
   } catch (err) {
     console.error("[compose] LLM call failed:", err);
     const message = err instanceof Error ? err.message : String(err);

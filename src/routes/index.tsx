@@ -4,6 +4,7 @@ import { Shell, useShell } from "@/components/Shell";
 import { ProcessingTrace } from "@/components/ProcessingTrace";
 import { RecipeCard } from "@/components/RecipeCard";
 import { PitchCard } from "@/components/PitchCard";
+import { SummaryMarker } from "@/components/SummaryMarker";
 import {
   PACKS,
   getCookingRecipe,
@@ -48,6 +49,8 @@ import {
 import { addUserSATProblem, getUserSATProblems } from "@/lib/packs/study/user-store";
 import { buildSATMathDummy, buildSATMathFromLLM } from "@/lib/packs/study/parse-llm";
 import { addDemoTrace } from "@/lib/demo/trace";
+import { useMemoryStore } from "@/lib/memory";
+import type { ConversationSummary } from "@/lib/memory";
 import type { AnswerPayload } from "@/lib/dots-data";
 
 // Words that mean "give me another / something else / please do it" — when
@@ -77,6 +80,20 @@ const FOLLOWUP_ACTION_PATTERNS = [
 function hasFollowUpIntent(input: string): boolean {
   const q = input.toLowerCase();
   return FOLLOWUP_ACTION_PATTERNS.some((p) => q.includes(p));
+}
+
+// V5.0 Phase M-1: ConversationSummary.sourceMessagesCount 는 DispatchTurn
+// 기준 (compose의 threadHistory 변환 후 카운트). UI는 ThreadMsg 인덱스가
+// 필요. dispatch에 들어간 첫 N 메시지의 마지막에 해당하는 ThreadMsg id를
+// 찾아 마커 박을 위치 결정.
+function findMarkerMessageId(messages: ThreadMsg[], dispatchTurnCount: number): string | undefined {
+  let count = 0;
+  for (const m of messages) {
+    const eligible = m.role === "user" || (!m.pending && !!m.text);
+    if (eligible) count++;
+    if (count === dispatchTurnCount) return m.id;
+  }
+  return undefined;
 }
 
 export const Route = createFileRoute("/")({
@@ -115,6 +132,17 @@ function ChatPage() {
 
   const thread = threads.find((t) => t.id === activeId) ?? threads[0];
   const messages = thread?.messages ?? [];
+
+  // V5.0 Phase M-1: 활성 thread에 summary가 있으면 그 시점에 시각 마커 박음.
+  // sourceMessagesCount는 DispatchTurn 기준 (user || (!pending && text))
+  // 카운트라 ThreadMsg 인덱스로 변환 필요.
+  const memSnap = useMemoryStore();
+  const activeSummary: ConversationSummary | undefined = thread
+    ? memSnap.summaries.find((s) => s.threadId === thread.id)
+    : undefined;
+  const summaryMarkerAfterId = activeSummary
+    ? findMarkerMessageId(messages, activeSummary.sourceMessagesCount)
+    : undefined;
 
   // CONSTITUTION: send() must NEVER call the LLM on its own.
   //   - Stage 1 (matchPackContent hit) → render suggestion + return
@@ -616,7 +644,10 @@ function ChatPage() {
       history: threadHistory(thread.messages),
       onToken,
       intent,
-    }).then(({ payload, provider }) => {
+      // V5.0 Phase M-1: thread id 전달 → 임계점 도달 시 summary 자동 생성/활용.
+      // suggestion onClick 분기는 ad-hoc compose라 threadId 미박힘 (의도).
+      threadId: thread.id,
+    }).then(({ payload, provider, summaryUsed, summaryGenerated }) => {
       renderPayload(payload, provider);
       // Stage 3 trace는 composeAnswer 결과가 돌아온 시점에. provider가
       // 박혔으면 클라우드 호출 성공, 없으면 catch path (캔드 fallback)인데
@@ -638,9 +669,16 @@ function ChatPage() {
         latencyMs: Date.now() - startTime,
         reason: skipReason
           ? `skip: ${skipReason}`
-          : provider
-            ? `클라우드 LLM (${provider})`
-            : "클라우드 LLM 실패 → 캔드 fallback",
+          : [
+              provider ? `클라우드 LLM (${provider})` : "클라우드 LLM 실패 → 캔드 fallback",
+              summaryGenerated
+                ? "summary 생성됨 (별도 LLM 호출)"
+                : summaryUsed
+                  ? "summary 활용됨"
+                  : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
       });
     });
   }
@@ -816,8 +854,12 @@ function ChatPage() {
           fallback: { kind: "text", text: "지금은 응답을 가져오지 못했어." },
           history: threadHistory(thread.messages),
           onToken: streamToken,
+          // V5.0 Phase M-1: 일반 suggestion → thread context 유지 → summary 활성.
+          // 위 분기 (option.systemPrompt — 예: SAT 출제) 는 ad-hoc 페르소나라
+          // summary 비활성 (의도된 omit).
+          threadId: thread.id,
         })
-          .then(({ payload, provider }) => {
+          .then(({ payload, provider, summaryUsed, summaryGenerated }) => {
             onDoneTextWithProvider(payload.kind === "text" ? payload.text : "", provider);
             addDemoTrace({
               input: option.label,
@@ -828,9 +870,18 @@ function ChatPage() {
               packId: matchedPack?.id,
               packName: matchedPack?.name,
               latencyMs: Date.now() - clickStart,
-              reason: provider
-                ? `선택지 클릭 — 클라우드 LLM (${provider})`
-                : "선택지 클릭 — 클라우드 LLM 실패",
+              reason: [
+                provider
+                  ? `선택지 클릭 — 클라우드 LLM (${provider})`
+                  : "선택지 클릭 — 클라우드 LLM 실패",
+                summaryGenerated
+                  ? "summary 생성됨 (별도 LLM 호출)"
+                  : summaryUsed
+                    ? "summary 활용됨"
+                    : null,
+              ]
+                .filter(Boolean)
+                .join(" · "),
             });
           })
           .catch(onFail);
@@ -888,6 +939,8 @@ function ChatPage() {
         send={send}
         onSuggestionAction={onSuggestionAction}
         onOpenFolder={(route) => navigate({ to: route })}
+        summaryMarkerAfterId={summaryMarkerAfterId}
+        activeSummary={activeSummary}
       />
     </Shell>
   );
@@ -905,6 +958,8 @@ function ChatBody({
   send,
   onSuggestionAction,
   onOpenFolder,
+  summaryMarkerAfterId,
+  activeSummary,
 }: {
   quickPacks: Pack[];
   hasMessages: boolean;
@@ -917,6 +972,9 @@ function ChatBody({
   send: (text: string) => void;
   onSuggestionAction: (option: SuggestionOption, matchedPackId?: string) => void;
   onOpenFolder: (route: string) => void;
+  // V5.0 Phase M-1: summary 마커 위치 + summary 본체.
+  summaryMarkerAfterId?: string;
+  activeSummary?: ConversationSummary;
 }) {
   const shell = useShell();
 
@@ -979,17 +1037,29 @@ function ChatBody({
         <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-6 sm:py-10 space-y-8">
           {!hasMessages && <WelcomeState continues={orderedContinues} onPick={send} />}
 
-          {messages.map((m) =>
-            m.role === "user" ? (
-              <div key={m.id} className="flex justify-end fade-in">
-                <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md bg-ink text-background text-[14px] leading-relaxed">
-                  {m.text}
+          {messages.map((m) => {
+            const node =
+              m.role === "user" ? (
+                <div key={m.id} className="flex justify-end fade-in">
+                  <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md bg-ink text-background text-[14px] leading-relaxed">
+                    {m.text}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <AssistantBubble key={m.id} m={m} onSuggestionAction={onSuggestionAction} />
-            ),
-          )}
+              ) : (
+                <AssistantBubble key={m.id} m={m} onSuggestionAction={onSuggestionAction} />
+              );
+            // V5.0 Phase M-1: summary 마커. summary가 cover한 마지막 메시지
+            // 직후 박힘. dispatch가 그 이후부터 raw multi-turn 보냄.
+            if (activeSummary && m.id === summaryMarkerAfterId) {
+              return (
+                <div key={`${m.id}-with-marker`} className="space-y-8">
+                  {node}
+                  <SummaryMarker summary={activeSummary} />
+                </div>
+              );
+            }
+            return node;
+          })}
         </div>
       </div>
 

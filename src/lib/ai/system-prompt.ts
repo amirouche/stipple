@@ -22,6 +22,7 @@
 
 import type { AnswerPayload, Pack } from "@/lib/dots-data";
 import type { LookupResult } from "@/lib/memory/lookup";
+import type { ConversationSummary } from "@/lib/memory/types";
 import type { Intent } from "@/lib/packs/intent";
 
 export type SystemPromptContext = {
@@ -34,6 +35,11 @@ export type SystemPromptContext = {
   intent?: Intent;
   // memory lookup 결과. totalScore > 0 일 때만 MEMORY_CONTEXT 섹션 추가.
   memory?: LookupResult;
+  // V5.0 Phase M-1: thread-level 요약. 임계점 (20 msg / 4000 char) 도달 후
+  // maybeGenerateSummary 결과. 박혀 있으면 CONVERSATION_SUMMARY 섹션 박힘.
+  // dispatch는 함께 history도 recent N (10) 만 보냄 — summary가 그 이전을
+  // 대체.
+  summary?: ConversationSummary;
   // payload kind. recipe / memory-recipes 일 땐 CARD_FOLLOWUP_NOTE 추가 — 카드가
   // 화면 하단에 붙으므로 LLM이 재료/단계 다시 적으면 중복.
   payloadKind?: AnswerPayload["kind"];
@@ -131,6 +137,19 @@ function buildPackPersona(pack: Pack): string {
   return lines.join("\n");
 }
 
+// V5.0 Phase M-1: thread-level 요약 섹션. dispatch가 이 함수의 결과를 system
+// prompt에 박으면서 history는 recent N 만 보냄 — summary가 [0..N) 메시지를
+// 대체. Tei 스펙 보존 측면 4가지 (정보·영역·미해결·톤) 가 들어와 LLM이 그대로
+// 활용. "이전 대화 요약" 라벨은 사용자가 보는 라벨이 아닌 LLM 인지용.
+function buildSummarySection(summary: ConversationSummary): string {
+  return [
+    `[이전 대화 요약 — ${summary.sourceMessagesCount} 메시지 분]`,
+    summary.content,
+    "",
+    "위 요약 이후의 메시지는 아래 multi-turn 형식으로 이어집니다. 요약과 최근 turn을 종합해 답변하세요.",
+  ].join("\n");
+}
+
 function buildMemoryContext(lookup: LookupResult): string {
   const lines: string[] = ["[사용자의 로컬 메모리 컨텍스트]"];
   const memTopics = lookup.memoryMatches
@@ -175,6 +194,12 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
   // Payload-specific — 카드가 뒤에 붙는 경우 LLM이 같은 정보 다시 적지 X.
   if (ctx.payloadKind === "recipe" || ctx.payloadKind === "memory-recipes") {
     sections.push(CARD_FOLLOWUP_NOTE);
+  }
+
+  // V5.0 Phase M-1: thread-level 요약을 cross-thread memory보다 위에 박는다.
+  // 같은 thread의 직전 흐름이 cross-thread memory보다 더 가까운 컨텍스트.
+  if (ctx.summary) {
+    sections.push(buildSummarySection(ctx.summary));
   }
 
   // Memory context — pack 페르소나 / intent override 다음. LLM이 응답 직전에
