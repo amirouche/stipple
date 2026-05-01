@@ -11,8 +11,8 @@
 
 import { PACKS, type Pack } from "@/lib/dots-data";
 import { matchLearnedResponse } from "@/lib/learning";
-import { classifyIntent } from "@/lib/packs/intent";
-import { hasDefinitionIntent, matchPackContent } from "@/lib/packs/match";
+import { classifyIntent, classifyNegationOrTrend } from "@/lib/packs/intent";
+import { findSpecificPackTarget, hasDefinitionIntent, matchPackContent } from "@/lib/packs/match";
 import { searchStoreForQuery } from "@/lib/packs/store-search";
 
 import { addDemoTrace, type DemoTrace } from "./trace";
@@ -40,14 +40,30 @@ export async function evaluateRouting(
   const intentResult = await classifyIntent(text);
   const intent = intentResult.intent;
 
-  const isExplanatoryIntent = intent === "definition" || intent === "casual";
+  // V3.5 게이트 — send()와 동일 로직 (정확 미러).
   const isFollowUpIntent = intent === "follow-up";
-  const skipMatchStep = isExplanatoryIntent || isFollowUpIntent || hasDefinitionIntent(text);
+  const negTrend = classifyNegationOrTrend(text);
+  const specificTarget = findSpecificPackTarget(text, installed);
+
+  let skipReason: string | null = null;
+  if (negTrend) {
+    skipReason = negTrend;
+  } else if (!specificTarget) {
+    if (intent === "casual") skipReason = "casual";
+    else if (intent === "definition") skipReason = "definition";
+    else if (isFollowUpIntent) skipReason = "follow-up";
+    else if (hasDefinitionIntent(text)) skipReason = "definition";
+  }
+  const skipMatchStep = skipReason !== null;
 
   // Stage 1: pack content match
   if (!skipMatchStep) {
     const matched = await matchPackContent(text, installed, undefined);
     if (matched) {
+      const matchedKeyword =
+        specificTarget && specificTarget.pack.id === matched.pack.id
+          ? specificTarget.trigger
+          : "(domain)";
       return addDemoTrace({
         input: text,
         intent,
@@ -57,9 +73,7 @@ export async function evaluateRouting(
         packId: matched.pack.id,
         packName: matched.pack.name,
         latencyMs: Date.now() - startTime,
-        reason: matched.packLevel
-          ? `pack-level 매칭 — ${matched.matches.length}개 후보`
-          : `content-level 매칭 — score ${matched.matches[0]?.score.toFixed(0) ?? "?"}`,
+        reason: `pack: ${matched.pack.id} / ${matchedKeyword}`,
       });
     }
 
@@ -98,7 +112,7 @@ export async function evaluateRouting(
   }
 
   // Stage 3: 클라우드로 갈 자리. 헤드리스 모드라 실제 호출은 안 함 —
-  // trace만 박고 "would-be cloud"임을 reason에 명시.
+  // skipReason 박혔으면 그 사유, 아니면 매칭 미스로 cloud.
   return addDemoTrace({
     input: text,
     intent,
@@ -107,7 +121,7 @@ export async function evaluateRouting(
     // 실제 호출 안 했으므로 provider는 unspecified.
     provider: "none",
     latencyMs: Date.now() - startTime,
-    reason: "헤드리스 평가 — 클라우드 LLM 호출 자리 (실제 미호출)",
+    reason: skipReason ? `skip: ${skipReason}` : "매칭 미스 — 헤드리스 cloud (실제 미호출)",
   });
 }
 

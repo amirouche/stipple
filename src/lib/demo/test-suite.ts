@@ -49,26 +49,26 @@ export const TEST_SUITE: TestCase[] = [
   {
     id: "cook-3",
     category: "Cooking",
-    input: "메뉴 추천",
+    input: "레시피말고 라면 인기있는거 알아봐",
     expectedRoute: "cloud",
     expectedExternalCall: true,
-    description: "추천 의도 — 단독 generic은 LLM",
+    description: "negation+trend 게이트 — '말고'/'인기'/'알아봐' → skip",
   },
   {
     id: "cook-4",
     category: "Cooking",
-    input: "오늘 저녁 뭐 먹지",
+    input: "라면 인기있는게 뭐야",
     expectedRoute: "cloud",
     expectedExternalCall: true,
-    description: "상황 추천 — LLM",
+    description: "trend 게이트 — '인기' → skip (definition이라도)",
   },
   {
     id: "cook-5",
     category: "Cooking",
     input: "김치찌개는 뭐야",
-    expectedRoute: "cloud",
-    expectedExternalCall: true,
-    description: "definition 의도 — LLM (V2 헌법)",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "specific override — '김치찌개' trigger가 definition 게이트 override",
   },
   {
     id: "cook-6",
@@ -77,6 +77,14 @@ export const TEST_SUITE: TestCase[] = [
     expectedRoute: "pack",
     expectedExternalCall: false,
     description: "팩 매칭 — 시그니처 키워드",
+  },
+  {
+    id: "cook-7",
+    category: "Cooking",
+    input: "김치찌개 만드는 법",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "search 의도 + specific trigger — pack 허용",
   },
 
   // ── Study 8 ────────────────────────────────────────────────────────

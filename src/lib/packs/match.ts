@@ -140,6 +140,29 @@ function lower(s: string): string {
   return s.toLowerCase();
 }
 
+// V3.5 게이트 보강 (2026-05-01): specific pack target 동적 스캔.
+// installed packs의 Pack.triggers를 그대로 사용 — 별도 사전 X / 하드코딩 X.
+// 입력에 어떤 trigger 단어라도 substring으로 들어 있으면 그 트리거+팩을
+// 반환. send()는 이 결과를 보고 definition/follow-up 게이트를 override.
+//
+// 주의: matchPackContent의 매칭 결과와 다를 수 있다. 이 헬퍼는 게이트용 —
+// specific 점수 계산이 아니라 "사용자가 명시적으로 팩을 가리켰는가" 판단.
+// 매처 본체 로직은 건드리지 않는다.
+export function findSpecificPackTarget(
+  text: string,
+  installed: Pack[],
+): { pack: Pack; trigger: string } | null {
+  const q = lower(text);
+  for (const pack of installed) {
+    for (const trigger of pack.triggers) {
+      if (q.includes(lower(trigger))) {
+        return { pack, trigger };
+      }
+    }
+  }
+  return null;
+}
+
 // Two scoring modes:
 //   "strict" — matchPackContent. Generic-only inputs ("맛집 추천") gate
 //              to 0 so we don't surface a SuggestionBlock from a single

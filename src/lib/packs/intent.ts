@@ -176,3 +176,19 @@ export function clearIntentCache(): void {
   cache.clear();
   inflight.clear();
 }
+
+// V3.5 게이트 보강 (2026-05-01): negation / trend 토큰. send()의 skipMatchStep
+// 게이트 강화용. 이 토큰들이 입력에 있으면 specific pack target과 무관하게
+// 무조건 Stage 1+2 skip → cloud로 흘림.
+//   - negation: 사용자가 매칭 후보를 명시적으로 거부 ("레시피 말고")
+//   - trend: 시점성·검색성 단어 ("요즘", "인기", "찾아봐"). 로컬 콘텐츠로
+//            만족 안 되는 의도라 LLM 우선.
+const NEGATION_TOKENS = ["말고", "아니고", "다른", "그거 말고"];
+const TREND_TOKENS = ["요즘", "인기", "찾아봐", "알아봐", "순위", "비교"];
+
+export function classifyNegationOrTrend(text: string): "negation" | "trend" | null {
+  const q = text.toLowerCase();
+  if (NEGATION_TOKENS.some((t) => q.includes(t.toLowerCase()))) return "negation";
+  if (TREND_TOKENS.some((t) => q.includes(t.toLowerCase()))) return "trend";
+  return null;
+}

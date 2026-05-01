@@ -32,8 +32,9 @@ import {
   buildPackSuggestion,
   inferDomainPack,
   hasDefinitionIntent,
+  findSpecificPackTarget,
 } from "@/lib/packs/match";
-import { classifyIntent } from "@/lib/packs/intent";
+import { classifyIntent, classifyNegationOrTrend } from "@/lib/packs/intent";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import {
   incrementUsedCount,
@@ -175,19 +176,36 @@ function ChatPage() {
       .find((m): m is Extract<ThreadMsg, { role: "assistant" }> => m.role === "assistant");
     const justSawSuggestion = Boolean(lastAsst?.suggestion);
 
-    // V3: 의도 기반 게이트. definition / follow-up / casual은 매칭 카드가
-    // 의도와 어긋나므로 Stage 1+2를 건너뛴다. search / recommend / unknown은
-    // 매칭 시도. (V2의 hasDefinitionIntent는 V3 분류기 fallback 안에서 똑같이
-    // 작동하므로 별도 호출은 필요 없지만, 분류기 자체가 미사용/실패한
-    // 극단 환경에서도 정의 요청 회귀를 막기 위해 OR로 살려둔다.)
-    const isExplanatoryIntent = intent === "definition" || intent === "casual";
+    // V3.5 게이트 (2026-05-01): demo-stable 우선 정정. matchPackContent
+    // 시그니처는 그대로 두고 send() 측 게이트를 보강.
+    //
+    // 우선순위:
+    //   1) negation/trend 토큰 ("말고"/"인기"/...) → 무조건 skip (override all)
+    //   2) specific pack target (입력이 installed 팩 trigger에 hit) → 게이트
+    //      통과. definition/follow-up/casual을 override (예: "김치찌개는 뭐야"는
+    //      definition이지만 김치찌개 트리거 → pack 허용).
+    //   3) 1·2 모두 X면 기존 V3 의도 게이트 적용.
+    //
+    // 결과적으로 "라면 인기있는게 뭐야" / "레시피말고 라면 알아봐"는 negation
+    // /trend로 1번에서 skip → cloud. "김치찌개는 뭐야"는 2번에서 통과 → pack.
+    // "뭐야" 단독은 specific 없이 definition → skip → cloud.
     const isFollowUpIntent = intent === "follow-up";
 
-    const skipMatchStep =
-      isExplanatoryIntent ||
-      isFollowUpIntent ||
-      hasDefinitionIntent(text) ||
-      (justSawSuggestion && hasFollowUpIntent(text));
+    const negTrend = classifyNegationOrTrend(text); // "negation" | "trend" | null
+    const specificTarget = findSpecificPackTarget(text, installed);
+
+    let skipReason: string | null = null;
+    if (negTrend) {
+      skipReason = negTrend;
+    } else if (!specificTarget) {
+      if (intent === "casual") skipReason = "casual";
+      else if (intent === "definition") skipReason = "definition";
+      else if (isFollowUpIntent) skipReason = "follow-up";
+      else if (hasDefinitionIntent(text)) skipReason = "definition";
+      else if (justSawSuggestion && hasFollowUpIntent(text)) skipReason = "follow-up";
+    }
+    const skipMatchStep = skipReason !== null;
+
     const matched = skipMatchStep ? null : await matchPackContent(text, installed, undefined);
     if (matched) {
       const userId = crypto.randomUUID();
@@ -230,6 +248,13 @@ function ChatPage() {
         });
       }
       setThreadPack(thread.id, matched.pack.id);
+      // trace.reason 새 형식 (V3.5): "pack: <id> / <matched_keyword>".
+      // matched_keyword는 specificTarget의 trigger를 우선 사용 — 그게 없으면
+      // domain hit으로 분류된 거라 "(domain)" 표기.
+      const matchedKeyword =
+        specificTarget && specificTarget.pack.id === matched.pack.id
+          ? specificTarget.trigger
+          : "(domain)";
       addDemoTrace({
         input: text,
         intent,
@@ -239,9 +264,7 @@ function ChatPage() {
         packId: matched.pack.id,
         packName: matched.pack.name,
         latencyMs: Date.now() - startTime,
-        reason: matched.packLevel
-          ? `pack-level 매칭 — ${matched.matches.length}개 후보`
-          : `content-level 매칭 — score ${matched.matches[0]?.score.toFixed(0) ?? "?"}`,
+        reason: `pack: ${matched.pack.id} / ${matchedKeyword}`,
       });
       setBusy(false);
       scrollDown();
@@ -510,6 +533,10 @@ function ChatPage() {
       // 둘 다 외부 호출은 시도된 것이라 externalCall: true로 통일.
       // payload.kind가 pack-suggestion인 비정상 경로는 발생할 일이 없지만
       // route는 "cloud"로 둔다 — Stage 3 흐름임을 보존.
+      //
+      // V3.5 trace.reason 새 형식: skipReason이 박혔으면 "skip: <reason>"이
+      // 곧 cloud로 떨어진 사유. 매처를 통과해 cloud까지 간 경우(매칭 미스)는
+      // 기존 "클라우드 LLM (...)" 텍스트 유지.
       addDemoTrace({
         input: text,
         intent,
@@ -519,7 +546,11 @@ function ChatPage() {
         packId: composePack?.id,
         packName: composePack?.name,
         latencyMs: Date.now() - startTime,
-        reason: provider ? `클라우드 LLM (${provider})` : "클라우드 LLM 실패 → 캔드 fallback",
+        reason: skipReason
+          ? `skip: ${skipReason}`
+          : provider
+            ? `클라우드 LLM (${provider})`
+            : "클라우드 LLM 실패 → 캔드 fallback",
       });
     });
   }
