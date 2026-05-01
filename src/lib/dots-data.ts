@@ -223,6 +223,15 @@ export type PackRecipe = {
   ingredients: { item: string; amount: string }[];
   steps: { t: string; minutes?: number }[];
   tip: string;
+  // V5.0 lite Phase A facet 스키마. matchPackContent가 intent별 응답 텍스트를
+  // entry 자체에서 뽑게 하기 위해 추가. 모두 optional — 미마이그레이션 entry는
+  // 기존 ingredients/steps/tip 구조로 그대로 렌더링 (backward compat 보장).
+  // Phase A: baek-kimchi-jjigae 1종만 채움. 나머지는 Phase B+에서.
+  definition?: string;
+  pack_context?: string;
+  how_to?: string;
+  examples?: string[];
+  related_terms?: string[];
 };
 
 export const COOKING_RECIPES: PackRecipe[] = [
@@ -248,6 +257,17 @@ export const COOKING_RECIPES: PackRecipe[] = [
       { t: "두부와 대파를 넣고 한 번 더 끓인다.", minutes: 5 },
     ],
     tip: "설탕 한 꼬집이 김치의 신맛을 잡아줘. 너무 많이 넣으면 안 돼.",
+    // V5.0 lite Phase A facet — baek-kimchi-jjigae를 김치찌개의 canonical
+    // entry로 채움. tuna-kimchi-jjigae는 동률 score일 때 baek가 head로 잡혀
+    // 이 facet이 노출됨 (정확 entry 매칭은 Phase B에서).
+    definition:
+      "김치찌개는 한국 전통 발효 찌개야. 묵은지의 발효 깊이를 끓이는 동안 끌어내, 신맛·감칠맛·매운맛이 한 그릇에 어우러지는 게 핵심이야.",
+    pack_context:
+      "이 팩엔 김치찌개 변형 2종(백종원식, 참치)이 들어 있어. 김치볶음밥, 된장찌개 같은 다른 한식은 cloud나 별도 팩으로 가야 해.",
+    how_to:
+      "묵은지 1/4포기와 돼지고기 200g을 함께 볶아 기름을 낸 뒤 물 3컵으로 끓여. 설탕 한 꼬집과 고춧가루로 신맛을 잡고, 두부·대파를 마지막에 넣어. 약 30분.",
+    examples: ["백종원식 김치찌개", "참치김치찌개"],
+    related_terms: ["된장찌개", "순두부찌개", "부대찌개", "찌개"],
   },
   {
     id: "tuna-kimchi-jjigae",

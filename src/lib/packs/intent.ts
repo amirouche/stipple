@@ -192,3 +192,24 @@ export function classifyNegationOrTrend(text: string): "negation" | "trend" | nu
   if (TREND_TOKENS.some((t) => q.includes(t.toLowerCase()))) return "trend";
   return null;
 }
+
+// V5.0 lite Phase B2: 직전 응답 부정 검출. 직전이 partial/fuzzy 매칭일 때
+// 사용자가 "그게 아니라"·"무슨소리야" 같은 거부 신호 보내면 같은 entry 재
+// 노출 X. negation 토큰 (말고/아니고/다른)과 별도로 분리한 이유: 사용자가
+// 매칭 자체를 거부하는 강한 신호와, 입력 안에서 제외 조건 표시 (말고)는
+// 다른 처리가 필요. negation은 매칭 진입을 막고, rejection은 직전 매칭을
+// 무효화한다.
+const REJECTION_TOKENS = [
+  "없는데",
+  "아니야",
+  "아닌데",
+  "그거 말고",
+  "그게 아니라",
+  "무슨소리",
+  "엉뚱",
+];
+
+export function classifyRejection(text: string): boolean {
+  const q = text.toLowerCase();
+  return REJECTION_TOKENS.some((t) => q.includes(t.toLowerCase()));
+}

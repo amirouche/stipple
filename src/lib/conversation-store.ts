@@ -54,12 +54,26 @@ export type ThreadMsg =
       learnedId?: string;
     };
 
+// V5.0 lite Phase B2: 직전 pack 매칭의 confidence·entry·요청 명사구를 보존.
+// 다음 turn에서 사용자가 거부 신호 (classifyRejection) 보내면 같은 entry
+// 재노출 차단. exact 매칭은 보존 X — confident하니 부정 처리가 어색.
+export type LastPackEntry = {
+  packId: string;
+  packName: string;
+  entryName: string;
+  confidence: "partial" | "fuzzy";
+  requestedNoun?: string; // fuzzy 분기에서만. 사용자가 입력했지만 entry에 없는 명사.
+  setAt: number;
+};
+
 export type Thread = {
   id: string;
   title: string;
   theme: ThreadTheme;
   // last pack the thread was operating in — used for follow-ups like "다른거는?"
   lastPackId?: string;
+  // V5.0 Phase B2: 직전 pack 매칭 컨텍스트 (rejection 검출용).
+  lastPackEntry?: LastPackEntry;
   // recipes already shown in this thread, so follow-ups can rotate to a new one
   servedRecipeIds: string[];
   messages: ThreadMsg[];
@@ -186,6 +200,12 @@ export function patchMessage(
 
 export function setThreadPack(threadId: string, packId?: string) {
   updateThread(threadId, () => ({ lastPackId: packId }));
+}
+
+// V5.0 Phase B2: 직전 pack 매칭 컨텍스트 setter. partial/fuzzy hit 직후 set,
+// exact hit 또는 매칭 실패 / 다른 stage 진입 시 undefined로 clear.
+export function setThreadLastEntry(threadId: string, entry: LastPackEntry | undefined) {
+  updateThread(threadId, () => ({ lastPackEntry: entry }));
 }
 
 export function markRecipeServed(threadId: string, recipeId: string) {

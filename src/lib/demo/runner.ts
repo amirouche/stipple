@@ -58,12 +58,20 @@ export async function evaluateRouting(
 
   // Stage 1: pack content match
   if (!skipMatchStep) {
-    const matched = await matchPackContent(text, installed, undefined);
+    const matched = await matchPackContent(text, installed, undefined, intent);
     if (matched) {
-      const matchedKeyword =
-        specificTarget && specificTarget.pack.id === matched.pack.id
-          ? specificTarget.trigger
-          : "(domain)";
+      // V5.0 lite Phase B trace 형식 — send()와 정확 미러.
+      const entryName = matched.topEntryName ?? "?";
+      const facetTag = matched.facet ? `[facet=${matched.facet.kind}]` : "[facet=none]";
+      const conf = matched.confidence ?? "fuzzy";
+      const matchTag =
+        conf === "fuzzy"
+          ? `[match=fuzzy, requested=${matched.requestedNoun ?? "(none)"}]`
+          : `[match=${conf}]`;
+      const reasonText =
+        conf === "fuzzy"
+          ? `pack: ${matched.pack.id} / ${entryName} ${matchTag}`
+          : `pack: ${matched.pack.id} / ${entryName} ${facetTag} ${matchTag}`;
       return addDemoTrace({
         input: text,
         intent,
@@ -73,7 +81,7 @@ export async function evaluateRouting(
         packId: matched.pack.id,
         packName: matched.pack.name,
         latencyMs: Date.now() - startTime,
-        reason: `pack: ${matched.pack.id} / ${matchedKeyword}`,
+        reason: reasonText,
       });
     }
 

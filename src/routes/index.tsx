@@ -19,6 +19,7 @@ import {
   markRecipeServed,
   patchMessage,
   renameThreadIfDefault,
+  setThreadLastEntry,
   setThreadPack,
   useConversationStore,
   type ThreadMsg,
@@ -34,7 +35,7 @@ import {
   hasDefinitionIntent,
   findSpecificPackTarget,
 } from "@/lib/packs/match";
-import { classifyIntent, classifyNegationOrTrend } from "@/lib/packs/intent";
+import { classifyIntent, classifyNegationOrTrend, classifyRejection } from "@/lib/packs/intent";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import {
   incrementUsedCount,
@@ -146,6 +147,7 @@ function ChatPage() {
         intent,
         confidence: intentResult.confidence,
         lastPackId: thread.lastPackId,
+        lastEntry: thread.lastPackEntry?.entryName,
       });
     }
 
@@ -159,6 +161,64 @@ function ChatPage() {
           behavior: "smooth",
         });
       });
+
+    // V5.0 Phase B2: 직전 응답이 partial/fuzzy 매칭이고 사용자가 거부 신호
+    // ("없는데"·"무슨소리"·"엉뚱"·…)를 보냈으면 같은 entry 재노출 차단.
+    // 즉시 정직 응답 + cloud 옵션으로 escalate. lastPackEntry는 클리어해
+    // 다음 turn에서 일반 라우팅으로 복귀.
+    const priorEntry = thread.lastPackEntry;
+    if (priorEntry && classifyRejection(text)) {
+      const userId = crypto.randomUUID();
+      const asstId = crypto.randomUUID();
+      const requestedLabel = priorEntry.requestedNoun ?? priorEntry.entryName;
+      const honestText = `맞아, ${requestedLabel}는 ${priorEntry.packName}에 정확히 없어. cloud로 찾아볼까?`;
+      appendMessage(thread.id, { id: userId, role: "user", text });
+      renameThreadIfDefault(thread.id, text);
+      appendMessage(thread.id, {
+        id: asstId,
+        role: "assistant",
+        route: "local",
+        state: "found_local",
+        reason: "",
+        packName: priorEntry.packName,
+        pending: false,
+        text: honestText,
+        suggestion: {
+          matchedPackName: priorEntry.packName,
+          matchedPackId: priorEntry.packId,
+          options: [
+            {
+              kind: "llm-call",
+              label: "cloud로 찾기",
+              prompt: priorEntry.requestedNoun
+                ? `${priorEntry.requestedNoun}에 대해 알려줘. 한국어로 짧고 정확하게.`
+                : `${priorEntry.entryName}와 비슷한 다른 걸 알려줘.`,
+            },
+          ],
+          badge: "local",
+        },
+      });
+      setThreadLastEntry(thread.id, undefined);
+      addDemoTrace({
+        input: text,
+        intent,
+        route: "local",
+        externalCall: false,
+        provider: "none",
+        packId: priorEntry.packId,
+        packName: priorEntry.packName,
+        latencyMs: Date.now() - startTime,
+        reason: "skip: user_rejected_prior_match",
+      });
+      setBusy(false);
+      scrollDown();
+      return;
+    }
+    // V5.0 Phase B2: rejection 분기에 안 들어왔다 = 사용자가 다른 turn으로
+    // 넘어감. 이전 lastPackEntry는 더 이상 유효 X. Stage 1 hit 시 다시 set.
+    if (thread.lastPackEntry) {
+      setThreadLastEntry(thread.id, undefined);
+    }
 
     // ---- On-device match: runs FIRST, before the engine and before any
     // pending bubble. The whole "이 기기 안에서" promise breaks if the user
@@ -206,7 +266,9 @@ function ChatPage() {
     }
     const skipMatchStep = skipReason !== null;
 
-    const matched = skipMatchStep ? null : await matchPackContent(text, installed, undefined);
+    const matched = skipMatchStep
+      ? null
+      : await matchPackContent(text, installed, undefined, intent);
     if (matched) {
       const userId = crypto.randomUUID();
       const asstId = crypto.randomUUID();
@@ -248,13 +310,21 @@ function ChatPage() {
         });
       }
       setThreadPack(thread.id, matched.pack.id);
-      // trace.reason 새 형식 (V3.5): "pack: <id> / <matched_keyword>".
-      // matched_keyword는 specificTarget의 trigger를 우선 사용 — 그게 없으면
-      // domain hit으로 분류된 거라 "(domain)" 표기.
-      const matchedKeyword =
-        specificTarget && specificTarget.pack.id === matched.pack.id
-          ? specificTarget.trigger
-          : "(domain)";
+      // V5.0 lite Phase B trace.reason 형식 (confidence별):
+      //   exact:   "pack: <id> / <name> [facet=<kind>] [match=exact]"
+      //   partial: "pack: <id> / <name> [facet=<kind>] [match=partial]"
+      //   fuzzy:   "pack: <id> / <name> [match=fuzzy, requested=<noun>]"
+      const entryName = matched.topEntryName ?? "?";
+      const facetTag = matched.facet ? `[facet=${matched.facet.kind}]` : "[facet=none]";
+      const conf = matched.confidence ?? "fuzzy";
+      const matchTag =
+        conf === "fuzzy"
+          ? `[match=fuzzy, requested=${matched.requestedNoun ?? "(none)"}]`
+          : `[match=${conf}]`;
+      const reasonText =
+        conf === "fuzzy"
+          ? `pack: ${matched.pack.id} / ${entryName} ${matchTag}`
+          : `pack: ${matched.pack.id} / ${entryName} ${facetTag} ${matchTag}`;
       addDemoTrace({
         input: text,
         intent,
@@ -264,8 +334,22 @@ function ChatPage() {
         packId: matched.pack.id,
         packName: matched.pack.name,
         latencyMs: Date.now() - startTime,
-        reason: `pack: ${matched.pack.id} / ${matchedKeyword}`,
+        reason: reasonText,
       });
+      // V5.0 Phase B2: partial/fuzzy 시 lastPackEntry 저장 → 다음 turn의
+      // rejection 검출에 사용. exact 또는 매칭 미스는 클리어.
+      if (conf === "partial" || conf === "fuzzy") {
+        setThreadLastEntry(thread.id, {
+          packId: matched.pack.id,
+          packName: matched.pack.name,
+          entryName,
+          confidence: conf,
+          requestedNoun: matched.requestedNoun,
+          setAt: Date.now(),
+        });
+      } else {
+        setThreadLastEntry(thread.id, undefined);
+      }
       setBusy(false);
       scrollDown();
       return;

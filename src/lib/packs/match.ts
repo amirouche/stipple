@@ -10,6 +10,8 @@ import {
   type PackRecipe,
   type SuggestionOption,
 } from "@/lib/dots-data";
+import type { Intent } from "@/lib/packs/intent";
+import { extractNouns } from "@/lib/text/extract-nouns";
 import {
   cosineSimilarity,
   embed,
@@ -127,6 +129,24 @@ export type ContentMatch =
   | { kind: "sat-math"; problem: SATMathProblem; score: number }
   | { kind: "cooking-recipe"; recipe: PackRecipe; score: number };
 
+// V5.0 lite Phase A: facet — entry가 intent별로 자기 응답 텍스트를 갖는다.
+// 매처 내부에서 intent를 보고 entry의 어떤 필드를 노출할지 결정 (selectFacet).
+// kind는 trace.reason의 facet 태그에도 그대로 사용.
+export type Facet = {
+  kind: "definition" | "how_to" | "casual";
+  text: string;
+  // definition 분기일 때 pack_context를 함께 노출. UI는 두 텍스트를 이어붙여
+  // 렌더링 — pack 자기-노출 (#13 Phase B 의 사전 단계).
+  pack_context?: string;
+};
+
+// V5.0 lite Phase B1: 매칭 우선순위.
+//   exact   — text가 entry.title을 그대로 substring으로 포함. 동률 0.
+//   partial — extractNouns(text) 명사구 ↔ entry.title 부분 매칭.
+//   fuzzy   — 기존 V3.5 keyword/임베딩 score 매칭 (fallback only).
+// 모든 pack 범용. pack-id / entry-id 기반 hardcode 0.
+export type MatchConfidence = "exact" | "partial" | "fuzzy";
+
 export type PackMatchResult = {
   pack: Pack;
   isActivePack: boolean;
@@ -134,6 +154,16 @@ export type PackMatchResult = {
   // the user's query is about the pack as a whole, not one item.
   packLevel: boolean;
   matches: ContentMatch[];
+  // V5.0 lite Phase A: 선택된 facet.
+  facet?: Facet;
+  // V5.0 lite Phase A: trace.reason의 [entry_name] 자리.
+  topEntryName?: string;
+  // V5.0 lite Phase B1: 매칭 confidence.
+  confidence?: MatchConfidence;
+  // V5.0 lite Phase B1: fuzzy 분기에서 사용자가 입력했지만 entry에 없는
+  // 명사. "[pack]에 [requestedNoun] 정확히 없어" 응답 텍스트 + B2 부정
+  // 처리에 사용.
+  requestedNoun?: string;
 };
 
 function lower(s: string): string {
@@ -393,17 +423,202 @@ function scoreCandidates(
   return candidates;
 }
 
+// V5.0 lite Phase A: intent별 facet 선택. entry에 facet 필드가 있고 intent와
+// 매핑되는 데이터가 있을 때만 Facet 반환. 그 외 (Phase A 미마이그레이션 entry,
+// intent 미상, follow-up 등) → null → 호출 측이 기존 렌더링으로 fallback.
+//
+// 분기:
+//   definition / casual → entry.definition (definition만 pack_context 동반)
+//   search / recommend / unknown → entry.how_to
+//   follow-up           → Phase A에선 how_to 동일 처리. lastFacet 추적은 Phase B.
+function selectFacet(entry: PackRecipe, intent?: Intent): Facet | null {
+  if (!intent) return null;
+  if (intent === "definition") {
+    if (!entry.definition) return null;
+    return { kind: "definition", text: entry.definition, pack_context: entry.pack_context };
+  }
+  if (intent === "casual") {
+    if (!entry.definition) return null;
+    return { kind: "casual", text: entry.definition };
+  }
+  if (intent === "search" || intent === "recommend" || intent === "unknown") {
+    if (!entry.how_to) return null;
+    return { kind: "how_to", text: entry.how_to };
+  }
+  if (intent === "follow-up") {
+    if (entry.how_to) return { kind: "how_to", text: entry.how_to };
+    return null;
+  }
+  return null;
+}
+
+const SAT_TOPIC_LABEL_FOR_TRACE: Record<string, string> = {
+  algebra: "대수",
+  geometry: "기하",
+  statistics: "확률·통계",
+  trigonometry: "삼각함수",
+};
+
+function getEntryNameForTrace(m: ContentMatch | undefined): string {
+  if (!m) return "?";
+  if (m.kind === "cooking-recipe") return m.recipe.title;
+  if (m.kind === "sat-math") {
+    return SAT_TOPIC_LABEL_FOR_TRACE[m.problem.topic] ?? m.problem.id;
+  }
+  return "?";
+}
+
+// V5.0 Phase B1 — 모든 pack의 모든 entry를 단일 배열로 평탄화. exact/partial
+// 매칭이 pack-id 무관하게 한 번에 스캔할 수 있게. 범용 코드.
+type EntryRef = { pack: Pack; match: ContentMatch; entryName: string };
+
+function collectEntries(installedPacks: Pack[]): EntryRef[] {
+  const out: EntryRef[] = [];
+  for (const pack of installedPacks) {
+    if (!pack.contents) continue;
+    for (const ref of pack.contents) {
+      if (ref.kind === "cooking-recipe") {
+        const r = COOKING_RECIPES.find((x) => x.id === ref.recipeId);
+        if (r)
+          out.push({
+            pack,
+            match: { kind: "cooking-recipe", recipe: r, score: 100 },
+            entryName: r.title,
+          });
+      } else if (ref.kind === "sat-math") {
+        const p = getSATMathProblem(ref.problemId);
+        if (p) {
+          const name = SAT_TOPIC_LABEL_FOR_TRACE[p.topic] ?? p.id;
+          out.push({
+            pack,
+            match: { kind: "sat-math", problem: p, score: 100 },
+            entryName: name,
+          });
+        }
+      }
+    }
+    if (pack.id === "study-companion") {
+      for (const p of getUserSATProblems()) {
+        const name = SAT_TOPIC_LABEL_FOR_TRACE[p.topic] ?? p.id;
+        out.push({
+          pack,
+          match: { kind: "sat-math", problem: p, score: 100 },
+          entryName: name,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+// Step 1: text가 entry.title을 그대로 substring으로 포함 + token 경계 일치
+// 시 exact. 경계 검사가 없으면 2자 entry name ("대수")이 더 긴 합성어
+// ("선형대수학")의 substring으로 false-exact 됨. 경계 = 시작/끝, 공백,
+// 조사 (는/은/이/가/...), 또는 구두점.
+const KOREAN_PARTICLE_BOUNDARIES = /[는은이가을를의에도만,.!?]/;
+
+function isExactBoundary(text: string, name: string): boolean {
+  const lowerText = text.toLowerCase();
+  const lowerName = name.toLowerCase();
+  let from = 0;
+  while (from < lowerText.length) {
+    const idx = lowerText.indexOf(lowerName, from);
+    if (idx === -1) return false;
+    const before = idx === 0 ? null : lowerText[idx - 1];
+    const afterIdx = idx + lowerName.length;
+    const after = afterIdx >= lowerText.length ? null : lowerText[afterIdx];
+    const beforeOk = before === null || /\s/.test(before);
+    const afterOk = after === null || /\s/.test(after) || KOREAN_PARTICLE_BOUNDARIES.test(after);
+    if (beforeOk && afterOk) return true;
+    from = idx + 1;
+  }
+  return false;
+}
+
+function findExactEntry(text: string, entries: EntryRef[]): EntryRef | null {
+  let best: EntryRef | null = null;
+  for (const e of entries) {
+    if (isExactBoundary(text, e.entryName)) {
+      if (!best || e.entryName.length > best.entryName.length) best = e;
+    }
+  }
+  return best;
+}
+
+// Step 2: 추출된 명사가 entry.title의 substring이면 partial. 가장 긴 명사
+// 우선 (구체성). 동률이면 entry name 길이순. exact가 실패한 뒤에만 호출.
+function findPartialEntry(
+  nouns: string[],
+  entries: EntryRef[],
+): { entry: EntryRef; matchedNoun: string } | null {
+  const sortedNouns = [...nouns].sort((a, b) => b.length - a.length);
+  for (const noun of sortedNouns) {
+    let best: EntryRef | null = null;
+    for (const e of entries) {
+      if (e.entryName.toLowerCase().includes(noun.toLowerCase())) {
+        if (!best || e.entryName.length > best.entryName.length) best = e;
+      }
+    }
+    if (best) return { entry: best, matchedNoun: noun };
+  }
+  return null;
+}
+
+// V5.0 Phase B1: 새 매칭 흐름. exact > partial > fuzzy 우선순위로 entry 검색.
+// 각 단계 hit 시 PackMatchResult를 confidence와 함께 반환.
+//
+// Step 1: exact — text가 entry.title을 그대로 substring 포함.
+// Step 2: partial — extractNouns(text) 명사가 entry.title의 substring.
+// Step 3: fuzzy — 기존 V3.5 keyword/임베딩 score 매칭 (fallback).
+//
+// step 1·2가 hit하면 V4 임베딩이 fuzzy step에서만 돌도록 — 실제로 step 3
+// 진입할 때만 await. exact/partial는 즉시 반환되어 fuzzy 비용 회피.
 export async function matchPackContent(
   query: string,
   installedPacks: Pack[],
   activePackId?: string,
+  intent?: Intent,
 ): Promise<PackMatchResult | null> {
-  // V4 Hybrid Search 준비: 첫 호출 시 팩 콘텐츠를 batch로 임베딩 (모델
-  // ready일 때만). 이후 호출은 캐시 hit. 모델 미사용 환경에선 즉시 return.
+  const allEntries = collectEntries(installedPacks);
+
+  // ── Step 1: exact match ───────────────────────────────────────────
+  const exactHit = findExactEntry(query, allEntries);
+  if (exactHit) {
+    const head = exactHit.match;
+    const facet =
+      head.kind === "cooking-recipe" ? (selectFacet(head.recipe, intent) ?? undefined) : undefined;
+    return {
+      pack: exactHit.pack,
+      isActivePack: exactHit.pack.id === activePackId,
+      packLevel: false,
+      matches: [head],
+      facet,
+      topEntryName: exactHit.entryName,
+      confidence: "exact",
+    };
+  }
+
+  // ── Step 2: partial match ─────────────────────────────────────────
+  const nouns = extractNouns(query);
+  const partialHit = findPartialEntry(nouns, allEntries);
+  if (partialHit) {
+    const head = partialHit.entry.match;
+    const facet =
+      head.kind === "cooking-recipe" ? (selectFacet(head.recipe, intent) ?? undefined) : undefined;
+    return {
+      pack: partialHit.entry.pack,
+      isActivePack: partialHit.entry.pack.id === activePackId,
+      packLevel: false,
+      matches: [head],
+      facet,
+      topEntryName: partialHit.entry.entryName,
+      confidence: "partial",
+    };
+  }
+
+  // ── Step 3: fuzzy match (existing V3.5 logic) ─────────────────────
   await ensurePackVectors(installedPacks);
 
-  // 사용자 입력 임베딩. 모델 미사용 / 임베딩 실패 시 null로 흘려 V3
-  // 키워드 매칭만 작동.
   let queryVec: Float32Array | null = null;
   if (getEmbeddingStatus().state === "ready") {
     try {
@@ -417,31 +632,40 @@ export async function matchPackContent(
   if (candidates.length === 0) return null;
 
   const winner = candidates[0];
-  // V2: 점수가 임계값 미만이면 매칭 자체를 포기한다. "메뉴 추천"·"수학"
-  // 같은 모호한 입력은 SuggestionBlock 강제 X, Stage 3 LLM이 자연스럽게.
   if (winner.bestScore < MATCH_THRESHOLD) return null;
 
   const packLevel = winner.bestScore < SPECIFIC_HIT_SCORE;
 
-  // V4.5 reranker 단계는 안정성 정정으로 일시 비활성. dead-code 가드로
-  // PACK_RERANK_THRESHOLD / RERANK_TOP_N import는 보존 — 모델 호환 복구
-  // 후 가드만 풀면 분기 즉시 부활.
   if (RERANKER_ENABLED) {
     void PACK_RERANK_THRESHOLD;
     void RERANK_TOP_N;
   }
 
-  // Pack-level match → keep all matches (used for "5문제 있어"). Content-
-  // level → keep only the items that tie at the top score, capped at 2.
   const matches = packLevel
     ? winner.matches
     : winner.matches.filter((m) => m.score === winner.bestScore).slice(0, 2);
+
+  const head = matches[0];
+  const facet =
+    head?.kind === "cooking-recipe" ? (selectFacet(head.recipe, intent) ?? undefined) : undefined;
+
+  // V5.0 Phase B1: requestedNoun — 사용자가 입력했지만 어떤 entry name과도
+  // 매칭 안 된 명사. 가장 긴 unmatched 명사를 골라 응답 텍스트에 노출.
+  const allEntryNames = allEntries.map((e) => e.entryName.toLowerCase());
+  const unmatched = nouns
+    .filter((n) => !allEntryNames.some((name) => name.includes(n.toLowerCase())))
+    .sort((a, b) => b.length - a.length);
+  const requestedNoun = unmatched[0];
 
   return {
     pack: winner.pack,
     isActivePack: winner.isActive,
     packLevel,
     matches,
+    facet,
+    topEntryName: getEntryNameForTrace(head),
+    confidence: "fuzzy",
+    requestedNoun,
   };
 }
 
@@ -535,15 +759,31 @@ function buildSATMathSuggestion(result: PackMatchResult): {
   text: string;
   options: SuggestionOption[];
 } {
-  const { pack, packLevel, matches } = result;
+  const { pack, packLevel, matches, confidence, requestedNoun } = result;
   const head = matches[0];
   if (head?.kind !== "sat-math") {
     return { text: `${pack.name}에서 비슷한 게 보여.`, options: [] };
   }
 
-  const text = packLevel
-    ? `${pack.name}에 SAT 수학 ${matches.length}문제 있어. 풀어볼래? 아니면 새 문제 받을래?`
-    : `${pack.name}에 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제(${head.problem.difficulty === "easy" ? "쉬움" : head.problem.difficulty === "medium" ? "보통" : "어려움"}) 있어. 풀어볼래?`;
+  // V5.0 Phase B1: fuzzy 정직 응답. 모든 pack 범용 — buildCookingSuggestion
+  // 과 동일 패턴.
+  const text =
+    confidence === "fuzzy"
+      ? `${pack.name}에 ${requestedNoun ?? "그건"} 정확히 없어. 비슷한 건 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제. 다른 거 원하면 cloud로 찾아볼까?`
+      : packLevel
+        ? `${pack.name}에 SAT 수학 ${matches.length}문제 있어. 풀어볼래? 아니면 새 문제 받을래?`
+        : `${pack.name}에 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제(${head.problem.difficulty === "easy" ? "쉬움" : head.problem.difficulty === "medium" ? "보통" : "어려움"}) 있어. 풀어볼래?`;
+
+  const cloudOption: SuggestionOption | null =
+    confidence === "fuzzy"
+      ? {
+          kind: "llm-call",
+          label: "cloud로 찾기",
+          prompt: requestedNoun
+            ? `${requestedNoun}에 대해 알려줘. 한국어로 짧고 정확하게.`
+            : "이 주제에 대해 알려줘. 한국어로 짧고 정확하게.",
+        }
+      : null;
 
   const options: SuggestionOption[] = [
     { kind: "open-folder", label: "풀어볼래", target: "/study" },
@@ -569,6 +809,7 @@ function buildSATMathSuggestion(result: PackMatchResult): {
       // Study pack rather than showing raw text in chat.
       postAction: "save-as-sat-problem",
     },
+    ...(cloudOption ? [cloudOption] : []),
   ];
 
   return { text, options };
@@ -578,14 +819,27 @@ function buildCookingSuggestion(result: PackMatchResult): {
   text: string;
   options: SuggestionOption[];
 } {
-  const { pack, packLevel, matches } = result;
+  const { pack, packLevel, matches, facet, confidence, requestedNoun } = result;
   const head = matches[0];
   if (head?.kind !== "cooking-recipe") {
     return { text: `${pack.name}에서 비슷한 게 보여.`, options: [] };
   }
 
   let text: string;
-  if (packLevel) {
+  // V5.0 lite Phase B1: fuzzy 분기는 정직 응답으로 분기.
+  //   "정확히 없어 — 비슷한 entry: <name>. 다른 거 원하면 cloud."
+  // partial은 facet 응답 + 작은 confidence 표시.
+  // exact는 facet 응답 그대로.
+  if (confidence === "fuzzy") {
+    const requestedLabel = requestedNoun ?? "그건";
+    text = `${pack.name}에 ${requestedLabel} 정확히 없어. 비슷한 건 ${head.recipe.title}. 다른 거 원하면 cloud로 찾아볼까?`;
+  } else if (facet) {
+    const body =
+      facet.kind === "definition" && facet.pack_context
+        ? `${facet.text}\n\n${facet.pack_context}`
+        : facet.text;
+    text = confidence === "partial" ? `${body}\n\n(비슷한 entry로 매칭됐어.)` : body;
+  } else if (packLevel) {
     text = `${pack.name}에 레시피 ${matches.length}개 있어. 보여줄까?`;
   } else if (matches.length === 1) {
     text = `${pack.name}에 ${head.recipe.title} 레시피 있어. 보여줄까? 아니면 다른 음식?`;
@@ -602,6 +856,19 @@ function buildCookingSuggestion(result: PackMatchResult): {
       recipeId: m.recipe.id,
     }));
 
+  // V5.0 Phase B1: fuzzy 분기에는 cloud 진입 옵션을 명시. 사용자가 "정확히
+  // 없다"는 응답을 보고 cloud로 escalate할 수 있게.
+  const cloudOption: SuggestionOption | null =
+    confidence === "fuzzy"
+      ? {
+          kind: "llm-call",
+          label: "cloud로 찾기",
+          prompt: requestedNoun
+            ? `${requestedNoun}에 대해 알려줘. 한국어로 짧고 정확하게.`
+            : "이 주제에 대해 알려줘. 한국어로 짧고 정확하게.",
+        }
+      : null;
+
   const options: SuggestionOption[] = [
     ...recipeOptions,
     {
@@ -609,6 +876,7 @@ function buildCookingSuggestion(result: PackMatchResult): {
       label: "다른 음식",
       prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
     },
+    ...(cloudOption ? [cloudOption] : []),
   ];
 
   return { text, options };

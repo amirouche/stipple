@@ -36,7 +36,7 @@ export const TEST_SUITE: TestCase[] = [
     input: "김치찌개",
     expectedRoute: "pack",
     expectedExternalCall: false,
-    description: "팩 키워드 매칭 (specific hit)",
+    description: "intent=unknown → facet=how_to (V5.0 lite Phase A)",
   },
   {
     id: "cook-2",
@@ -68,7 +68,7 @@ export const TEST_SUITE: TestCase[] = [
     input: "김치찌개는 뭐야",
     expectedRoute: "pack",
     expectedExternalCall: false,
-    description: "specific override — '김치찌개' trigger가 definition 게이트 override",
+    description: "intent=definition + specific → facet=definition + pack_context (V5.0 lite)",
   },
   {
     id: "cook-6",
@@ -84,7 +84,31 @@ export const TEST_SUITE: TestCase[] = [
     input: "김치찌개 만드는 법",
     expectedRoute: "pack",
     expectedExternalCall: false,
-    description: "search 의도 + specific trigger — pack 허용",
+    description: "intent=search + specific → facet=how_to (V5.0 lite Phase A)",
+  },
+  {
+    id: "cook-8",
+    category: "Cooking",
+    input: "백종원식 김치찌개",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "exact entry name match — baek 정확 픽 (V5.0 Phase B1)",
+  },
+  {
+    id: "cook-9",
+    category: "Cooking",
+    input: "참치김치찌개",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "exact entry name match — tuna 정확 픽 (B1, score tie 해소)",
+  },
+  {
+    id: "cook-10",
+    category: "Cooking",
+    input: "김치복음밥 레시피 있어",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "fuzzy fallback — 정확 entry 없음, '정확히 없어' 정직 응답 (B1)",
   },
 
   // ── Study 8 ────────────────────────────────────────────────────────
@@ -151,6 +175,22 @@ export const TEST_SUITE: TestCase[] = [
     expectedRoute: "cloud",
     expectedExternalCall: true,
     description: "수학 풀이 — LLM",
+  },
+  {
+    id: "study-9",
+    category: "Study",
+    input: "대수",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "exact entry name match — '대수' topic label (B1 범용성)",
+  },
+  {
+    id: "study-10",
+    category: "Study",
+    input: "선형대수학 알려줘",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "fuzzy fallback — '선형대수학' entry 없음, 정직 응답 (B1)",
   },
 
   // ── General 6 ──────────────────────────────────────────────────────
