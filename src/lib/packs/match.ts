@@ -11,6 +11,8 @@ import {
   type SuggestionOption,
 } from "@/lib/dots-data";
 import type { Intent } from "@/lib/packs/intent";
+import { classifyCraving } from "@/lib/packs/intent";
+import { cleanRequestedNoun } from "@/lib/text/clean-noun";
 import { extractNouns } from "@/lib/text/extract-nouns";
 import {
   cosineSimilarity,
@@ -132,8 +134,10 @@ export type ContentMatch =
 // V5.0 lite Phase A: facet — entry가 intent별로 자기 응답 텍스트를 갖는다.
 // 매처 내부에서 intent를 보고 entry의 어떤 필드를 노출할지 결정 (selectFacet).
 // kind는 trace.reason의 facet 태그에도 그대로 사용.
+// V5.0 Phase B3c: "craving" kind 추가 — 식욕 발화 ("먹고싶다") 감지 시 entry의
+// definition 텍스트를 craving 톤으로 노출.
 export type Facet = {
-  kind: "definition" | "how_to" | "casual";
+  kind: "definition" | "how_to" | "casual" | "craving";
   text: string;
   // definition 분기일 때 pack_context를 함께 노출. UI는 두 텍스트를 이어붙여
   // 렌더링 — pack 자기-노출 (#13 Phase B 의 사전 단계).
@@ -438,38 +442,71 @@ function scoreCandidates(
 // V5.0 lite Phase A.5: 입력 타입을 duck-typed FacetFields로 완화 — Study pack의
 // SATMathProblem도 같은 5필드를 갖도록 type 확장 후 그대로 통과시킨다.
 // PackRecipe도 FacetFields 호환 (5필드 모두 동일 이름·optional).
+// V5.0 Phase B3a/B3c: contexts 필드도 같이 평탄화 — selectFacet이 contexts
+// 멤버십 게이트 필요할 때 사용.
 type FacetFields = {
   definition?: string;
   pack_context?: string;
   how_to?: string;
   examples?: string[];
   related_terms?: string[];
+  contexts?: string[];
 };
+
+// V5.0 Phase B3c: facet 선택 보조 신호. craving은 intent enum에 없는 별도
+// 표현 검출 (먹고싶다 / 당기다 / 먹으러 등). selectFacet이 craving + entry
+// 의 contexts에 "craving" 있을 때 craving facet 우선 반환.
+type FacetOpts = { craving?: boolean };
 
 // V5.0 lite Phase A.5: ContentMatch에서 facet payload 추출. cooking-recipe와
 // sat-math 모두 FacetFields 호환 — head.kind만 분기해서 같은 selectFacet에 통과.
-function pickFacetFromMatch(head: ContentMatch, intent?: Intent): Facet | undefined {
-  if (head.kind === "cooking-recipe") return selectFacet(head.recipe, intent) ?? undefined;
-  if (head.kind === "sat-math") return selectFacet(head.problem, intent) ?? undefined;
+// V5.0 Phase B3c: opts (craving 등) 같이 전달.
+function pickFacetFromMatch(
+  head: ContentMatch,
+  intent?: Intent,
+  opts: FacetOpts = {},
+): Facet | undefined {
+  if (head.kind === "cooking-recipe") return selectFacet(head.recipe, intent, opts) ?? undefined;
+  if (head.kind === "sat-math") return selectFacet(head.problem, intent, opts) ?? undefined;
   return undefined;
 }
 
-function selectFacet(entry: FacetFields, intent?: Intent): Facet | null {
+function selectFacet(entry: FacetFields, intent?: Intent, opts: FacetOpts = {}): Facet | null {
+  const ctx = entry.contexts;
+
+  // V5.0 Phase B3c: craving 우선 분기. intent가 craving 의도를 잡지 못하므로
+  // 보조 신호로 분리. entry.contexts에 "craving" 있고 (또는 contexts 미정의),
+  // entry.definition도 있을 때 craving facet으로 노출. casual과 텍스트 동일하나
+  // kind는 craving — 응답 빌더 (action_options) 분기 + trace.reason 가시화에 사용.
+  if (opts.craving && (!ctx || ctx.includes("craving")) && entry.definition) {
+    return { kind: "craving", text: entry.definition };
+  }
+
   if (!intent) return null;
+
+  // V5.0 Phase B3c: contexts 게이트. entry.contexts가 정의되어 있고 해당 intent
+  // 매핑이 contexts에 없으면 facet 미반환 — entry가 자기 답변 범위를 명시한 경우
+  // 그 범위 밖 의도엔 일반 fallback (기존 hardcoded 톤) 사용.
   if (intent === "definition") {
     if (!entry.definition) return null;
+    if (ctx && !ctx.includes("definition")) return null;
     return { kind: "definition", text: entry.definition, pack_context: entry.pack_context };
   }
   if (intent === "casual") {
     if (!entry.definition) return null;
+    if (ctx && !ctx.includes("casual")) return null;
     return { kind: "casual", text: entry.definition };
   }
   if (intent === "search" || intent === "recommend" || intent === "unknown") {
     if (!entry.how_to) return null;
+    if (ctx && !ctx.includes("how_to") && !ctx.includes(intent)) return null;
     return { kind: "how_to", text: entry.how_to };
   }
   if (intent === "follow-up") {
-    if (entry.how_to) return { kind: "how_to", text: entry.how_to };
+    if (entry.how_to) {
+      if (ctx && !ctx.includes("how_to")) return null;
+      return { kind: "how_to", text: entry.how_to };
+    }
     return null;
   }
   return null;
@@ -642,6 +679,9 @@ export async function matchPackContent(
   intent?: Intent,
 ): Promise<PackMatchResult | null> {
   const allEntries = collectEntries(installedPacks);
+  // V5.0 Phase B3c: craving 신호 한 번 계산해 모든 facet 분기에 공통 전달.
+  const craving = classifyCraving(query);
+  const facetOpts = { craving };
 
   // ── Step 1: exact match ───────────────────────────────────────────
   // V5.0 Phase B3b: findExactEntry는 이제 entry name + aliases 둘 다 검사.
@@ -649,7 +689,7 @@ export async function matchPackContent(
   const exactHit = findExactEntry(query, allEntries);
   if (exactHit) {
     const head = exactHit.entry.match;
-    const facet = pickFacetFromMatch(head, intent);
+    const facet = pickFacetFromMatch(head, intent, facetOpts);
     return {
       pack: exactHit.entry.pack,
       isActivePack: exactHit.entry.pack.id === activePackId,
@@ -667,7 +707,7 @@ export async function matchPackContent(
   const partialHit = findPartialEntry(nouns, allEntries);
   if (partialHit) {
     const head = partialHit.entry.match;
-    const facet = pickFacetFromMatch(head, intent);
+    const facet = pickFacetFromMatch(head, intent, facetOpts);
     return {
       pack: partialHit.entry.pack,
       isActivePack: partialHit.entry.pack.id === activePackId,
@@ -710,15 +750,18 @@ export async function matchPackContent(
     : winner.matches.filter((m) => m.score === winner.bestScore).slice(0, 2);
 
   const head = matches[0];
-  const facet = head ? pickFacetFromMatch(head, intent) : undefined;
+  const facet = head ? pickFacetFromMatch(head, intent, facetOpts) : undefined;
 
   // V5.0 Phase B1: requestedNoun — 사용자가 입력했지만 어떤 entry name과도
   // 매칭 안 된 명사. 가장 긴 unmatched 명사를 골라 응답 텍스트에 노출.
+  // V5.0 Phase B3c: cleanRequestedNoun으로 어색한 형태 ("풀고싶") 를 원본
+  // token ("풀고싶어") 으로 복원해 응답 텍스트 자연성 ↑.
   const allEntryNames = allEntries.map((e) => e.entryName.toLowerCase());
   const unmatched = nouns
     .filter((n) => !allEntryNames.some((name) => name.includes(n.toLowerCase())))
     .sort((a, b) => b.length - a.length);
-  const requestedNoun = unmatched[0];
+  const requestedNounRaw = unmatched[0];
+  const requestedNoun = requestedNounRaw ? cleanRequestedNoun(requestedNounRaw, query) : undefined;
 
   return {
     pack: winner.pack,
@@ -858,32 +901,38 @@ function buildSATMathSuggestion(result: PackMatchResult): {
         }
       : null;
 
-  const options: SuggestionOption[] = [
-    { kind: "open-folder", label: "풀어볼래", target: "/study" },
-    {
-      kind: "llm-call",
-      label: "새 문제 받을래",
-      // systemPrompt overrides whatever pack persona the thread is in. SAT
-      // math under a cooking persona would just make Gemini refuse.
-      systemPrompt:
-        "당신은 SAT 수학 튜터입니다. 한국어로 친절하지만 간결하게 답하세요. 사용자가 요청한 형식을 정확히 지키세요.",
-      prompt: [
-        "SAT 수학 객관식 문제 1개를 새로 만들어 주세요. 다음 형식을 정확히 지켜주세요.",
-        "",
-        "문제: [한 두 문장의 문제]",
-        "① [보기 1]",
-        "② [보기 2]",
-        "③ [보기 3]",
-        "④ [보기 4]",
-        "정답: [번호]",
-        "풀이: [두세 줄의 짧은 풀이]",
-      ].join("\n"),
-      // Tells the chat handler to parse the response and store it in the
-      // Study pack rather than showing raw text in chat.
-      postAction: "save-as-sat-problem",
-    },
-    ...(cloudOption ? [cloudOption] : []),
-  ];
+  // V5.0 Phase B3c: facet 별 action_options 가 entry에 박혀 있으면 우선 사용.
+  // 미정의 facet은 기존 hardcoded fallback (학습 폴더 + 새 문제 생성 옵션).
+  const entryOptions = facet ? head.problem.action_options?.[facet.kind] : undefined;
+
+  const options: SuggestionOption[] = entryOptions
+    ? [...entryOptions, ...(cloudOption ? [cloudOption] : [])]
+    : [
+        { kind: "open-folder", label: "풀어볼래", target: "/study" },
+        {
+          kind: "llm-call",
+          label: "새 문제 받을래",
+          // systemPrompt overrides whatever pack persona the thread is in. SAT
+          // math under a cooking persona would just make Gemini refuse.
+          systemPrompt:
+            "당신은 SAT 수학 튜터입니다. 한국어로 친절하지만 간결하게 답하세요. 사용자가 요청한 형식을 정확히 지키세요.",
+          prompt: [
+            "SAT 수학 객관식 문제 1개를 새로 만들어 주세요. 다음 형식을 정확히 지켜주세요.",
+            "",
+            "문제: [한 두 문장의 문제]",
+            "① [보기 1]",
+            "② [보기 2]",
+            "③ [보기 3]",
+            "④ [보기 4]",
+            "정답: [번호]",
+            "풀이: [두세 줄의 짧은 풀이]",
+          ].join("\n"),
+          // Tells the chat handler to parse the response and store it in the
+          // Study pack rather than showing raw text in chat.
+          postAction: "save-as-sat-problem",
+        },
+        ...(cloudOption ? [cloudOption] : []),
+      ];
 
   return { text, options };
 }
@@ -942,15 +991,22 @@ function buildCookingSuggestion(result: PackMatchResult): {
         }
       : null;
 
-  const options: SuggestionOption[] = [
-    ...recipeOptions,
-    {
-      kind: "llm-call",
-      label: "다른 음식",
-      prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
-    },
-    ...(cloudOption ? [cloudOption] : []),
-  ];
+  // V5.0 Phase B3c: facet 별 action_options 가 entry에 박혀 있으면 우선 사용.
+  // 미정의 facet (또는 facet undefined) 은 기존 hardcoded recipeOptions + 다른
+  // 음식 옵션 fallback.
+  const entryOptions = facet ? head.recipe.action_options?.[facet.kind] : undefined;
+
+  const options: SuggestionOption[] = entryOptions
+    ? [...entryOptions, ...(cloudOption ? [cloudOption] : [])]
+    : [
+        ...recipeOptions,
+        {
+          kind: "llm-call",
+          label: "다른 음식",
+          prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
+        },
+        ...(cloudOption ? [cloudOption] : []),
+      ];
 
   return { text, options };
 }

@@ -36,6 +36,7 @@ import {
   findSpecificPackTarget,
 } from "@/lib/packs/match";
 import { classifyIntent, classifyNegationOrTrend, classifyRejection } from "@/lib/packs/intent";
+import { topicParticle } from "@/lib/text/clean-noun";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import {
   incrementUsedCount,
@@ -171,7 +172,8 @@ function ChatPage() {
       const userId = crypto.randomUUID();
       const asstId = crypto.randomUUID();
       const requestedLabel = priorEntry.requestedNoun ?? priorEntry.entryName;
-      const honestText = `맞아, ${requestedLabel}는 ${priorEntry.packName}에 정확히 없어. cloud로 찾아볼까?`;
+      // V5.0 Phase B3c: 받침 인지 조사 — "김치복음밥는" / "김치복음밥은" 자동 선택.
+      const honestText = `맞아, ${requestedLabel}${topicParticle(requestedLabel)} ${priorEntry.packName}에 정확히 없어. cloud로 찾아볼까?`;
       appendMessage(thread.id, { id: userId, role: "user", text });
       renameThreadIfDefault(thread.id, text);
       appendMessage(thread.id, {

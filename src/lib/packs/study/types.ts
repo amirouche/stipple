@@ -43,6 +43,9 @@ export type SATMathProblem = {
   // 사용되며 contexts는 향후 builder 분기용 (B3c+).
   aliases?: string[];
   contexts?: string[];
+  // V5.0 lite Phase B3c — facet별 응답 옵션. PackRecipe.action_options와 동일
+  // 구조. import는 type-only (런타임 영향 X, circular 회피).
+  action_options?: Record<string, import("@/lib/dots-data").SuggestionOption[]>;
 };
 
 // Open union — add { kind: "concept"; ... } / { kind: "vocab"; ... } later.

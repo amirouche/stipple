@@ -213,3 +213,19 @@ export function classifyRejection(text: string): boolean {
   const q = text.toLowerCase();
   return REJECTION_TOKENS.some((t) => q.includes(t.toLowerCase()));
 }
+
+// V5.0 lite Phase B3c: craving (식욕) 검출. intent 분류기 규칙은 craving을
+// 별도 의도로 잡지 않으므로 (rule fallback에 craving 패턴 없음) — 보조 신호로
+// 분리. selectFacet이 entry.contexts에 "craving"이 있으면 craving facet 반환.
+//
+// 토큰 선정:
+//   "먹고싶" — "먹고싶다"/"먹고싶어"/"먹고싶네" 모두 prefix 일치
+//   "먹고 싶" — 띄어쓰기 변형
+//   "당기" — "당겨"/"당긴다" (감정 표현)
+//   "먹으러" — "먹으러 가자"/"먹으러 갈까"
+const CRAVING_TOKENS = ["먹고싶", "먹고 싶", "당기", "먹으러"];
+
+export function classifyCraving(text: string): boolean {
+  const q = text.toLowerCase();
+  return CRAVING_TOKENS.some((t) => q.includes(t.toLowerCase()));
+}

@@ -61,6 +61,61 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
     // future: sat-m-002 (이차 방정식) 마이그레이션 시 "방정식" alias 충돌 검토.
     aliases: ["이차 방정식", "수학 문제", "대수학", "방정식"],
     contexts: ["definition", "how_to", "search", "casual"],
+    // V5.0 Phase B3c action_options — 학습 entry 옵션. SAT folder open + 새 문제
+    // 생성이 핵심. craving은 study contexts에 없어 미정의 (학습에 식욕 없음).
+    action_options: {
+      how_to: [
+        { kind: "open-folder", label: "풀어볼래", target: "/study" },
+        {
+          kind: "llm-call",
+          label: "새 문제 받을래",
+          systemPrompt:
+            "당신은 SAT 수학 튜터입니다. 한국어로 친절하지만 간결하게 답하세요. 사용자가 요청한 형식을 정확히 지키세요.",
+          prompt: [
+            "SAT 수학 객관식 문제 1개를 새로 만들어 주세요. 다음 형식을 정확히 지켜주세요.",
+            "",
+            "문제: [한 두 문장의 문제]",
+            "① [보기 1]",
+            "② [보기 2]",
+            "③ [보기 3]",
+            "④ [보기 4]",
+            "정답: [번호]",
+            "풀이: [두세 줄의 짧은 풀이]",
+          ].join("\n"),
+          postAction: "save-as-sat-problem",
+        },
+      ],
+      definition: [
+        { kind: "open-folder", label: "풀어볼래", target: "/study" },
+        {
+          kind: "llm-call",
+          label: "더 자세히",
+          prompt: "대수에 대해 더 자세히 알려줘. 한국어로 짧고 정확하게.",
+        },
+      ],
+      search: [
+        { kind: "open-folder", label: "풀어볼래", target: "/study" },
+        {
+          kind: "llm-call",
+          label: "새 문제 받을래",
+          systemPrompt:
+            "당신은 SAT 수학 튜터입니다. 한국어로 친절하지만 간결하게 답하세요. 사용자가 요청한 형식을 정확히 지키세요.",
+          prompt: [
+            "SAT 수학 객관식 문제 1개를 새로 만들어 주세요. 다음 형식을 정확히 지켜주세요.",
+            "",
+            "문제: [한 두 문장의 문제]",
+            "① [보기 1]",
+            "② [보기 2]",
+            "③ [보기 3]",
+            "④ [보기 4]",
+            "정답: [번호]",
+            "풀이: [두세 줄의 짧은 풀이]",
+          ].join("\n"),
+          postAction: "save-as-sat-problem",
+        },
+      ],
+      casual: [{ kind: "open-folder", label: "풀어볼래", target: "/study" }],
+    },
   },
   {
     kind: "problem",

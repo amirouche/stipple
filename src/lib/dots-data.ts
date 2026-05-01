@@ -240,6 +240,10 @@ export type PackRecipe = {
   //   예: ["craving","how_to","definition"]. 이번 단계엔 데이터 필드만 추가.
   aliases?: string[];
   contexts?: string[];
+  // V5.0 lite Phase B3c — entry가 자기 응답 옵션(버튼)을 facet 별로 제공.
+  // builder가 facet kind를 키로 lookup. 미정의 facet은 기존 hardcoded fallback.
+  // 예: action_options.craving = [{만들기}, {시켜먹기}, {비슷한 메뉴}]
+  action_options?: Record<string, SuggestionOption[]>;
 };
 
 export const COOKING_RECIPES: PackRecipe[] = [
@@ -283,6 +287,44 @@ export const COOKING_RECIPES: PackRecipe[] = [
     // 시스템 정직성과 충돌. 오타 처리는 미래 별도 phase (Levenshtein) 영역.
     aliases: ["백종원 김치찌개", "김치찌개", "김찌"],
     contexts: ["craving", "definition", "how_to", "casual"],
+    // V5.0 Phase B3c action_options — facet 별 사용자 옵션. builder가 facet
+    // kind로 lookup. 미정의 facet은 builder hardcoded fallback.
+    action_options: {
+      craving: [
+        { kind: "show-recipe", label: "만들기", recipeId: "baek-kimchi-jjigae" },
+        {
+          kind: "llm-call",
+          label: "시켜먹기",
+          prompt:
+            "근처 한식당이나 배달앱에서 김치찌개 잘하는 곳 후보 3곳만 추천해줘. 한국어로 짧게.",
+        },
+        {
+          kind: "llm-call",
+          label: "비슷한 메뉴",
+          prompt: "김치찌개랑 비슷한 결인데 살짝 다른 한식 추천해줘. 1-2개만.",
+        },
+      ],
+      how_to: [
+        { kind: "show-recipe", label: "보여줘", recipeId: "baek-kimchi-jjigae" },
+        {
+          kind: "llm-call",
+          label: "다른 음식",
+          prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
+        },
+      ],
+      definition: [
+        { kind: "show-recipe", label: "레시피 보기", recipeId: "baek-kimchi-jjigae" },
+        {
+          kind: "llm-call",
+          label: "다른 김치찌개",
+          prompt: "김치찌개의 다른 변형(참치 외)을 알려줘. 한국어로 짧게.",
+        },
+      ],
+      casual: [
+        { kind: "show-recipe", label: "만들기", recipeId: "baek-kimchi-jjigae" },
+        { kind: "llm-call", label: "다른 음식", prompt: "다른 요리 추천해줘. 가볍게." },
+      ],
+    },
   },
   {
     id: "tuna-kimchi-jjigae",
@@ -323,6 +365,37 @@ export const COOKING_RECIPES: PackRecipe[] = [
     // B3d revision: 오타 alias "참치찌게" 제거 (baek와 정책 통일).
     aliases: ["참치 김치찌개", "참치김치", "참치찌개"],
     contexts: ["craving", "definition", "how_to", "casual"],
+    // V5.0 Phase B3c action_options — tuna 변형에 맞춘 빠른 톤.
+    action_options: {
+      craving: [
+        { kind: "show-recipe", label: "참치로 빨리", recipeId: "tuna-kimchi-jjigae" },
+        {
+          kind: "llm-call",
+          label: "비슷한 빠른 음식",
+          prompt: "통조림 활용한 빠른 한식 1-2개 추천해줘. 짧게.",
+        },
+      ],
+      how_to: [
+        { kind: "show-recipe", label: "보여줘", recipeId: "tuna-kimchi-jjigae" },
+        {
+          kind: "llm-call",
+          label: "다른 음식",
+          prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
+        },
+      ],
+      definition: [
+        { kind: "show-recipe", label: "레시피 보기", recipeId: "tuna-kimchi-jjigae" },
+        {
+          kind: "show-recipe",
+          label: "백종원식 보기",
+          recipeId: "baek-kimchi-jjigae",
+        },
+      ],
+      casual: [
+        { kind: "show-recipe", label: "만들기", recipeId: "tuna-kimchi-jjigae" },
+        { kind: "llm-call", label: "다른 음식", prompt: "다른 요리 추천해줘. 가볍게." },
+      ],
+    },
   },
 ];
 

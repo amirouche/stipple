@@ -124,7 +124,8 @@ export const TEST_SUITE: TestCase[] = [
     input: "김치찌개 먹고싶다",
     expectedRoute: "pack",
     expectedExternalCall: false,
-    description: "exact-alias (alias=김치찌개) → baek (B3d). intent=unknown → facet=how_to.",
+    description:
+      "B3c craving 신호 → exact-alias (alias=김치찌개) → facet=craving + action_options 3개 (만들기/시켜먹기/비슷한 메뉴).",
   },
   {
     id: "cook-13",
