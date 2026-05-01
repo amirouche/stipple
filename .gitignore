@@ -35,3 +35,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Review artifacts — code snapshots / review packages, not part of the project
+/review-*/
+/dots-*.zip
