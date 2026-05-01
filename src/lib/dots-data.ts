@@ -232,6 +232,14 @@ export type PackRecipe = {
   how_to?: string;
   examples?: string[];
   related_terms?: string[];
+  // V5.0 lite Phase B3a 자기-기술 스키마.
+  // - aliases: 사용자 자연 발화 대안 표기. matchPackContent가 entry name 외에
+  //   추가 매칭 키로 사용. 예: "참치김치찌개"의 alias "참치찌개" / "참치 김치국".
+  //   exact match가 alias로 성립하면 confidence=exact + matchedAlias 기록.
+  // - contexts: 의미 컨텍스트 태그. 향후 builder/응답 분기에 사용 (B3c+).
+  //   예: ["craving","how_to","definition"]. 이번 단계엔 데이터 필드만 추가.
+  aliases?: string[];
+  contexts?: string[];
 };
 
 export const COOKING_RECIPES: PackRecipe[] = [
@@ -268,6 +276,13 @@ export const COOKING_RECIPES: PackRecipe[] = [
       "묵은지 1/4포기와 돼지고기 200g을 함께 볶아 기름을 낸 뒤 물 3컵으로 끓여. 설탕 한 꼬집과 고춧가루로 신맛을 잡고, 두부·대파를 마지막에 넣어. 약 30분.",
     examples: ["백종원식 김치찌개", "참치김치찌개"],
     related_terms: ["된장찌개", "순두부찌개", "부대찌개", "찌개"],
+    // V5.0 lite Phase B3d — baek는 김치찌개의 canonical entry이므로 generic
+    // "김치찌개" 호명도 baek에 매핑. 길이 desc로 정렬해 둠 (가독성, 알고리즘은
+    // 길이 비교만).
+    // B3d revision: 오타 alias "김치찌게" 제거 — 데이터에 오타를 박는 건
+    // 시스템 정직성과 충돌. 오타 처리는 미래 별도 phase (Levenshtein) 영역.
+    aliases: ["백종원 김치찌개", "김치찌개", "김찌"],
+    contexts: ["craving", "definition", "how_to", "casual"],
   },
   {
     id: "tuna-kimchi-jjigae",
@@ -301,6 +316,13 @@ export const COOKING_RECIPES: PackRecipe[] = [
       "묵은지 2컵과 마늘·고춧가루를 잠깐 볶은 뒤 물(또는 멸치육수) 2.5컵을 붓고 끓여. 끓어오르면 중불로 줄여 기름 뺀 참치캔과 두부를 넣고 더 끓여. 마지막에 대파. 약 20분.",
     examples: ["백종원식 김치찌개", "참치김치찌개"],
     related_terms: ["김치찌개", "참치", "통조림", "묵은지", "두부"],
+    // V5.0 lite Phase B3d — 참치 변형 호명 그룹. "김치찌개" 같은 generic은
+    // baek가 가져가도록 일부러 빼둠 (canonical 분리). "참치" 단독은 너무 broad
+    // (음식 전반에 등장)이라 alias 제외. "참치찌개" 단독은 자연 직관 ("참치"
+    // 들어가면 참치 entry) 으로 tuna 매핑 — Tei 의도 확정.
+    // B3d revision: 오타 alias "참치찌게" 제거 (baek와 정책 통일).
+    aliases: ["참치 김치찌개", "참치김치", "참치찌개"],
+    contexts: ["craving", "definition", "how_to", "casual"],
   },
 ];
 

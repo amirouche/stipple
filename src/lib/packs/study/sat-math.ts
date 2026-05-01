@@ -53,6 +53,14 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
       "기본은 등호 양변에 같은 연산을 적용해서 미지수를 분리. 일차는 한 번에 풀리고, 이차는 인수분해 / 근의 공식 / 꼭짓점 공식으로 접근. 검산까지 가는 게 안전해.",
     examples: ["일차방정식 (2x+3=11)", "이차함수 꼭짓점 (x²−4x+3)"],
     related_terms: ["일차", "이차", "방정식", "함수", "꼭짓점"],
+    // V5.0 lite Phase B3d — Study trace 누수 케이스 직격 해소. 어제 trace
+    // 분석에서 fuzzy로 빠지던 "방정식", "이차 방정식" 입력이 모두 exact-alias
+    // 로 격상. "대수학" 학명도 함께. 길이 desc 정렬.
+    // B3d revision: "수학" 단독 alias 제거 — 너무 broad. 미래 sat-m-002~005
+    // 마이그레이션 시 모든 수학 입력이 sat-m-001로 매핑되는 회귀 위험.
+    // future: sat-m-002 (이차 방정식) 마이그레이션 시 "방정식" alias 충돌 검토.
+    aliases: ["이차 방정식", "수학 문제", "대수학", "방정식"],
+    contexts: ["definition", "how_to", "search", "casual"],
   },
   {
     kind: "problem",

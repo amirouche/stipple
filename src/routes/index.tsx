@@ -311,16 +311,20 @@ function ChatPage() {
       }
       setThreadPack(thread.id, matched.pack.id);
       // V5.0 lite Phase B trace.reason 형식 (confidence별):
-      //   exact:   "pack: <id> / <name> [facet=<kind>] [match=exact]"
-      //   partial: "pack: <id> / <name> [facet=<kind>] [match=partial]"
-      //   fuzzy:   "pack: <id> / <name> [match=fuzzy, requested=<noun>]"
+      //   exact:       "pack: <id> / <name> [facet=<kind>] [match=exact]"
+      //   exact-alias: "pack: <id> / <name> [facet=<kind>] [match=exact-alias, alias=<a>]"  (B3b)
+      //   partial:     "pack: <id> / <name> [facet=<kind>] [match=partial]"
+      //   fuzzy:       "pack: <id> / <name> [match=fuzzy, requested=<noun>]"
       const entryName = matched.topEntryName ?? "?";
       const facetTag = matched.facet ? `[facet=${matched.facet.kind}]` : "[facet=none]";
       const conf = matched.confidence ?? "fuzzy";
+      // V5.0 Phase B3b: exact 분기에서 matchedAlias가 있으면 exact-alias로 분기.
       const matchTag =
         conf === "fuzzy"
           ? `[match=fuzzy, requested=${matched.requestedNoun ?? "(none)"}]`
-          : `[match=${conf}]`;
+          : conf === "exact" && matched.matchedAlias
+            ? `[match=exact-alias, alias=${matched.matchedAlias}]`
+            : `[match=${conf}]`;
       const reasonText =
         conf === "fuzzy"
           ? `pack: ${matched.pack.id} / ${entryName} ${matchTag}`

@@ -118,6 +118,22 @@ export const TEST_SUITE: TestCase[] = [
     expectedExternalCall: false,
     description: "exact + intent=definition → tuna facet=definition (Phase A.5 cooking #2)",
   },
+  {
+    id: "cook-12",
+    category: "Cooking",
+    input: "김치찌개 먹고싶다",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "exact-alias (alias=김치찌개) → baek (B3d). intent=unknown → facet=how_to.",
+  },
+  {
+    id: "cook-13",
+    category: "Cooking",
+    input: "참치찌개",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "exact-alias (alias=참치찌개) → tuna (B3d). 약칭 매칭.",
+  },
 
   // ── Study 8 ────────────────────────────────────────────────────────
   {
@@ -215,6 +231,22 @@ export const TEST_SUITE: TestCase[] = [
     expectedRoute: "pack",
     expectedExternalCall: false,
     description: "exact + intent=unknown → facet=how_to (Phase A.5 study)",
+  },
+  {
+    id: "study-13",
+    category: "Study",
+    input: "수학 문제 풀고싶어",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "exact-alias (alias=수학 문제) → sat-m-001 (B3d). 어제 fuzzy 누수 해소.",
+  },
+  {
+    id: "study-14",
+    category: "Study",
+    input: "방정식 풀어볼래",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "exact-alias (alias=방정식) → sat-m-001 (B3d). 어제 fuzzy 누수 해소.",
   },
 
   // ── General 6 ──────────────────────────────────────────────────────

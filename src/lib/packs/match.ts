@@ -164,6 +164,9 @@ export type PackMatchResult = {
   // 명사. "[pack]에 [requestedNoun] 정확히 없어" 응답 텍스트 + B2 부정
   // 처리에 사용.
   requestedNoun?: string;
+  // V5.0 lite Phase B3b: alias로 매칭된 경우 매칭된 alias 텍스트. confidence는
+  // exact 또는 partial 그대로 유지. trace.reason 형식만 분기 (exact-alias).
+  matchedAlias?: string;
 };
 
 function lower(s: string): string {
@@ -490,7 +493,9 @@ function getEntryNameForTrace(m: ContentMatch | undefined): string {
 
 // V5.0 Phase B1 — 모든 pack의 모든 entry를 단일 배열로 평탄화. exact/partial
 // 매칭이 pack-id 무관하게 한 번에 스캔할 수 있게. 범용 코드.
-type EntryRef = { pack: Pack; match: ContentMatch; entryName: string };
+// V5.0 Phase B3b — entry.aliases도 EntryRef에 평탄화. matcher가 entryName 외에
+// alias도 동일 priority로 검사 (단, exact-alias 매칭 시 trace.reason만 분기).
+type EntryRef = { pack: Pack; match: ContentMatch; entryName: string; aliases: string[] };
 
 function collectEntries(installedPacks: Pack[]): EntryRef[] {
   const out: EntryRef[] = [];
@@ -504,6 +509,7 @@ function collectEntries(installedPacks: Pack[]): EntryRef[] {
             pack,
             match: { kind: "cooking-recipe", recipe: r, score: 100 },
             entryName: r.title,
+            aliases: r.aliases ?? [],
           });
       } else if (ref.kind === "sat-math") {
         const p = getSATMathProblem(ref.problemId);
@@ -513,6 +519,7 @@ function collectEntries(installedPacks: Pack[]): EntryRef[] {
             pack,
             match: { kind: "sat-math", problem: p, score: 100 },
             entryName: name,
+            aliases: p.aliases ?? [],
           });
         }
       }
@@ -524,6 +531,7 @@ function collectEntries(installedPacks: Pack[]): EntryRef[] {
           pack,
           match: { kind: "sat-math", problem: p, score: 100 },
           entryName: name,
+          aliases: p.aliases ?? [],
         });
       }
     }
@@ -555,31 +563,65 @@ function isExactBoundary(text: string, name: string): boolean {
   return false;
 }
 
-function findExactEntry(text: string, entries: EntryRef[]): EntryRef | null {
-  let best: EntryRef | null = null;
+// V5.0 Phase B3b: entryName 외에 aliases도 동일 priority로 검사. 가장 긴
+// 매칭 텍스트 (entry name 또는 alias) 우선. entry name과 alias가 동률이면
+// entry name 우선 (정렬 안정성). alias로 매칭되면 matchedAlias 기록.
+function findExactEntry(
+  text: string,
+  entries: EntryRef[],
+): { entry: EntryRef; matchedAlias?: string } | null {
+  let best: { entry: EntryRef; matchedAlias?: string; matchLength: number } | null = null;
+
   for (const e of entries) {
+    // entry name 먼저 — 동률 시 우선.
     if (isExactBoundary(text, e.entryName)) {
-      if (!best || e.entryName.length > best.entryName.length) best = e;
+      if (!best || e.entryName.length > best.matchLength) {
+        best = { entry: e, matchLength: e.entryName.length };
+      }
+    }
+    for (const alias of e.aliases) {
+      if (isExactBoundary(text, alias)) {
+        if (!best || alias.length > best.matchLength) {
+          best = { entry: e, matchedAlias: alias, matchLength: alias.length };
+        }
+      }
     }
   }
-  return best;
+
+  if (!best) return null;
+  return { entry: best.entry, matchedAlias: best.matchedAlias };
 }
 
-// Step 2: 추출된 명사가 entry.title의 substring이면 partial. 가장 긴 명사
-// 우선 (구체성). 동률이면 entry name 길이순. exact가 실패한 뒤에만 호출.
+// Step 2: 추출된 명사가 entry.title 또는 entry.aliases의 substring이면 partial.
+// 가장 긴 명사 우선 (구체성). 동률이면 매칭 텍스트(entry name 또는 alias)
+// 길이순. exact가 실패한 뒤에만 호출.
+// V5.0 Phase B3b: aliases도 검사. matchedAlias 기록 — partial-alias는 trace.
+// reason 형식 변경 X (현 spec 대로 [match=partial] 그대로). matchedAlias는
+// PackMatchResult에 박혀 향후 builder/B3c가 사용 가능.
 function findPartialEntry(
   nouns: string[],
   entries: EntryRef[],
-): { entry: EntryRef; matchedNoun: string } | null {
+): { entry: EntryRef; matchedNoun: string; matchedAlias?: string } | null {
   const sortedNouns = [...nouns].sort((a, b) => b.length - a.length);
   for (const noun of sortedNouns) {
-    let best: EntryRef | null = null;
+    let best: { entry: EntryRef; matchLength: number; matchedAlias?: string } | null = null;
     for (const e of entries) {
       if (e.entryName.toLowerCase().includes(noun.toLowerCase())) {
-        if (!best || e.entryName.length > best.entryName.length) best = e;
+        if (!best || e.entryName.length > best.matchLength) {
+          best = { entry: e, matchLength: e.entryName.length };
+        }
+      }
+      for (const alias of e.aliases) {
+        if (alias.toLowerCase().includes(noun.toLowerCase())) {
+          if (!best || alias.length > best.matchLength) {
+            best = { entry: e, matchLength: alias.length, matchedAlias: alias };
+          }
+        }
       }
     }
-    if (best) return { entry: best, matchedNoun: noun };
+    if (best) {
+      return { entry: best.entry, matchedNoun: noun, matchedAlias: best.matchedAlias };
+    }
   }
   return null;
 }
@@ -602,18 +644,21 @@ export async function matchPackContent(
   const allEntries = collectEntries(installedPacks);
 
   // ── Step 1: exact match ───────────────────────────────────────────
+  // V5.0 Phase B3b: findExactEntry는 이제 entry name + aliases 둘 다 검사.
+  // alias로 매칭되면 result.matchedAlias 박혀 trace.reason 분기에 사용.
   const exactHit = findExactEntry(query, allEntries);
   if (exactHit) {
-    const head = exactHit.match;
+    const head = exactHit.entry.match;
     const facet = pickFacetFromMatch(head, intent);
     return {
-      pack: exactHit.pack,
-      isActivePack: exactHit.pack.id === activePackId,
+      pack: exactHit.entry.pack,
+      isActivePack: exactHit.entry.pack.id === activePackId,
       packLevel: false,
       matches: [head],
       facet,
-      topEntryName: exactHit.entryName,
+      topEntryName: exactHit.entry.entryName,
       confidence: "exact",
+      matchedAlias: exactHit.matchedAlias,
     };
   }
 
@@ -631,6 +676,7 @@ export async function matchPackContent(
       facet,
       topEntryName: partialHit.entry.entryName,
       confidence: "partial",
+      matchedAlias: partialHit.matchedAlias,
     };
   }
 

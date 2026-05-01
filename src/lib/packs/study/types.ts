@@ -39,6 +39,10 @@ export type SATMathProblem = {
   how_to?: string;
   examples?: string[];
   related_terms?: string[];
+  // V5.0 lite Phase B3a 자기-기술 — PackRecipe와 동일 패턴. aliases가 매칭에
+  // 사용되며 contexts는 향후 builder 분기용 (B3c+).
+  aliases?: string[];
+  contexts?: string[];
 };
 
 // Open union — add { kind: "concept"; ... } / { kind: "vocab"; ... } later.

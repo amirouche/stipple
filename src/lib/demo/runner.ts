@@ -61,13 +61,16 @@ export async function evaluateRouting(
     const matched = await matchPackContent(text, installed, undefined, intent);
     if (matched) {
       // V5.0 lite Phase B trace 형식 — send()와 정확 미러.
+      // V5.0 Phase B3b: exact-alias 분기 추가.
       const entryName = matched.topEntryName ?? "?";
       const facetTag = matched.facet ? `[facet=${matched.facet.kind}]` : "[facet=none]";
       const conf = matched.confidence ?? "fuzzy";
       const matchTag =
         conf === "fuzzy"
           ? `[match=fuzzy, requested=${matched.requestedNoun ?? "(none)"}]`
-          : `[match=${conf}]`;
+          : conf === "exact" && matched.matchedAlias
+            ? `[match=exact-alias, alias=${matched.matchedAlias}]`
+            : `[match=${conf}]`;
       const reasonText =
         conf === "fuzzy"
           ? `pack: ${matched.pack.id} / ${entryName} ${matchTag}`
