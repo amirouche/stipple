@@ -290,6 +290,17 @@ export const COOKING_RECIPES: PackRecipe[] = [
       { t: "대파를 올려 마무리.", minutes: 1 },
     ],
     tip: "참치 기름을 빼야 국물이 깔끔해. 두부는 마지막에 넣어야 안 부서져.",
+    // V5.0 lite Phase A.5 facet — Cooking pack #2 entry. pack_context는 baek와
+    // 동일 텍스트 — pack scope 정보는 entry-invariant. definition / how_to는
+    // tuna 변형 고유 (통조림 활용 + 조리 시간 단축)에 맞춰 별도 작성.
+    definition:
+      "참치김치찌개는 통조림 참치를 활용한 빠른 김치찌개 변형이야. 돼지고기 대신 참치캔을 써서 단백질·감칠맛은 살리되 조리 시간은 절반으로 줄인 평일 저녁용 버전이야.",
+    pack_context:
+      "이 팩엔 김치찌개 변형 2종(백종원식, 참치)이 들어 있어. 김치볶음밥, 된장찌개 같은 다른 한식은 cloud나 별도 팩으로 가야 해.",
+    how_to:
+      "묵은지 2컵과 마늘·고춧가루를 잠깐 볶은 뒤 물(또는 멸치육수) 2.5컵을 붓고 끓여. 끓어오르면 중불로 줄여 기름 뺀 참치캔과 두부를 넣고 더 끓여. 마지막에 대파. 약 20분.",
+    examples: ["백종원식 김치찌개", "참치김치찌개"],
+    related_terms: ["김치찌개", "참치", "통조림", "묵은지", "두부"],
   },
 ];
 

@@ -110,6 +110,14 @@ export const TEST_SUITE: TestCase[] = [
     expectedExternalCall: false,
     description: "fuzzy fallback — 정확 entry 없음, '정확히 없어' 정직 응답 (B1)",
   },
+  {
+    id: "cook-11",
+    category: "Cooking",
+    input: "참치김치찌개는 뭐야",
+    expectedRoute: "pack",
+    expectedExternalCall: false,
+    description: "exact + intent=definition → tuna facet=definition (Phase A.5 cooking #2)",
+  },
 
   // ── Study 8 ────────────────────────────────────────────────────────
   {
