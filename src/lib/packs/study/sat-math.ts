@@ -65,7 +65,7 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
     // 생성이 핵심. craving은 study contexts에 없어 미정의 (학습에 식욕 없음).
     action_options: {
       how_to: [
-        { kind: "open-folder", label: "풀어볼래", target: "/study" },
+        { kind: "open-folder", label: "풀어볼래", target: "/study", action_area: "만들기" },
         {
           kind: "llm-call",
           label: "새 문제 받을래",
@@ -83,18 +83,20 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
             "풀이: [두세 줄의 짧은 풀이]",
           ].join("\n"),
           postAction: "save-as-sat-problem",
+          action_area: "찾기",
         },
       ],
       definition: [
-        { kind: "open-folder", label: "풀어볼래", target: "/study" },
+        { kind: "open-folder", label: "풀어볼래", target: "/study", action_area: "만들기" },
         {
           kind: "llm-call",
           label: "더 자세히",
           prompt: "대수에 대해 더 자세히 알려줘. 한국어로 짧고 정확하게.",
+          action_area: "정보",
         },
       ],
       search: [
-        { kind: "open-folder", label: "풀어볼래", target: "/study" },
+        { kind: "open-folder", label: "풀어볼래", target: "/study", action_area: "만들기" },
         {
           kind: "llm-call",
           label: "새 문제 받을래",
@@ -112,9 +114,10 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
             "풀이: [두세 줄의 짧은 풀이]",
           ].join("\n"),
           postAction: "save-as-sat-problem",
+          action_area: "찾기",
         },
       ],
-      casual: [{ kind: "open-folder", label: "풀어볼래", target: "/study" }],
+      casual: [{ kind: "open-folder", label: "풀어볼래", target: "/study", action_area: "만들기" }],
     },
   },
   {

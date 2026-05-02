@@ -36,7 +36,12 @@ import {
   hasDefinitionIntent,
   findSpecificPackTarget,
 } from "@/lib/packs/match";
-import { classifyIntent, classifyNegationOrTrend, classifyRejection } from "@/lib/packs/intent";
+import {
+  classifyActionNegation,
+  classifyIntent,
+  classifyNegationOrTrend,
+  classifyRejection,
+} from "@/lib/packs/intent";
 import { topicParticle } from "@/lib/text/clean-noun";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import {
@@ -325,10 +330,14 @@ function ChatPage() {
     const matched = skipMatchStep
       ? null
       : await matchPackContent(text, eligibleInstalled, undefined, intent);
+    // V5.0 Phase I-6: 사용자 발화의 negation-aware 행동 영역 인지. 매칭이 hit
+    // 한 시점에 박음 — buildPackSuggestion 이 동일 영역 카드 drop. matchPackContent
+    // 본체 흐름 변경 X. excludedActions 빈 배열이면 builder 가 기존 옵션 그대로.
+    const excludedActions = matched ? classifyActionNegation(text) : [];
     if (matched) {
       const userId = crypto.randomUUID();
       const asstId = crypto.randomUUID();
-      const payload = buildPackSuggestion(matched);
+      const payload = buildPackSuggestion(matched, excludedActions);
       const sugText = payload.kind === "pack-suggestion" ? payload.text : "";
       const sugData =
         payload.kind === "pack-suggestion"
@@ -386,7 +395,14 @@ function ChatPage() {
           ? `pack: ${matched.pack.id} / ${entryName} ${matchTag}`
           : `pack: ${matched.pack.id} / ${entryName} ${facetTag} ${matchTag}`;
       // V5.0 Phase I-4: 도메인 요약을 trace 에 박음 (있을 때만).
-      const reasonText = domSummary ? `${baseReason} · domain:${domSummary}` : baseReason;
+      // V5.0 Phase I-6: excludedActions 박힘 → trace 에 명시 (사용자 인지 검증).
+      const reasonText = [
+        baseReason,
+        domSummary ? `domain:${domSummary}` : null,
+        excludedActions.length > 0 ? `negation:${excludedActions.join(",")}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
       addDemoTrace({
         input: text,
         intent,

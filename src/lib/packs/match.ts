@@ -10,6 +10,7 @@ import {
   type PackRecipe,
   type SuggestionOption,
 } from "@/lib/dots-data";
+import type { ActionArea } from "@/lib/dots-data";
 import type { Intent } from "@/lib/packs/intent";
 import { classifyCraving } from "@/lib/packs/intent";
 import { cleanRequestedNoun } from "@/lib/text/clean-noun";
@@ -861,7 +862,35 @@ const SAT_TOPIC_LABEL: Record<SATMathProblem["topic"], string> = {
   trigonometry: "삼각함수",
 };
 
-function buildSATMathSuggestion(result: PackMatchResult): {
+// V5.0 Phase I-6: action_options 박힌 후 사용자 발화의 negation-aware
+// 영역 제외 처리. excludedActions 박힌 영역의 카드 모두 drop. 모두 drop이면
+// 빈 배열 반환 — caller (buildCooking/buildSATMath) 가 fallback 박음.
+function filterByExcludedActions(
+  options: SuggestionOption[],
+  excludedActions: ActionArea[],
+): SuggestionOption[] {
+  if (excludedActions.length === 0) return options;
+  return options.filter((opt) => !opt.action_area || !excludedActions.includes(opt.action_area));
+}
+
+// 빈 카드 박힐 때 fallback. cloud 옵션 + 일반 다른 거 — 사용자가 박은 영역
+// 외 escape 경로 보장. 핵심: 사용자가 모든 옵션을 부정해도 응답이 카드 0개로
+// 무력화되지 X.
+function buildExclusionFallback(): SuggestionOption[] {
+  return [
+    {
+      kind: "llm-call",
+      label: "cloud로 찾기",
+      prompt: "다른 방향으로 도와줘. 한국어로 짧고 정확하게.",
+      action_area: "찾기",
+    },
+  ];
+}
+
+function buildSATMathSuggestion(
+  result: PackMatchResult,
+  excludedActions: ActionArea[] = [],
+): {
   text: string;
   options: SuggestionOption[];
 } {
@@ -905,10 +934,13 @@ function buildSATMathSuggestion(result: PackMatchResult): {
   // 미정의 facet은 기존 hardcoded fallback (학습 폴더 + 새 문제 생성 옵션).
   const entryOptions = facet ? head.problem.action_options?.[facet.kind] : undefined;
 
-  const options: SuggestionOption[] = entryOptions
-    ? [...entryOptions, ...(cloudOption ? [cloudOption] : [])]
+  // V5.0 Phase I-6: excludedActions 박힘 → 해당 영역 카드 drop → 빈 배열이면
+  // fallback. cloudOption 은 별도 fuzzy 분기 옵션이라 excluded 적용 X (사용자가
+  // 모든 영역 부정해도 cloud escape 보존).
+  const baseOptions: SuggestionOption[] = entryOptions
+    ? [...entryOptions]
     : [
-        { kind: "open-folder", label: "풀어볼래", target: "/study" },
+        { kind: "open-folder", label: "풀어볼래", target: "/study", action_area: "만들기" },
         {
           kind: "llm-call",
           label: "새 문제 받을래",
@@ -930,14 +962,23 @@ function buildSATMathSuggestion(result: PackMatchResult): {
           // Tells the chat handler to parse the response and store it in the
           // Study pack rather than showing raw text in chat.
           postAction: "save-as-sat-problem",
+          action_area: "찾기",
         },
-        ...(cloudOption ? [cloudOption] : []),
       ];
+
+  const filteredOptions = filterByExcludedActions(baseOptions, excludedActions);
+  const options: SuggestionOption[] = [
+    ...(filteredOptions.length === 0 ? buildExclusionFallback() : filteredOptions),
+    ...(cloudOption ? [cloudOption] : []),
+  ];
 
   return { text, options };
 }
 
-function buildCookingSuggestion(result: PackMatchResult): {
+function buildCookingSuggestion(
+  result: PackMatchResult,
+  excludedActions: ActionArea[] = [],
+): {
   text: string;
   options: SuggestionOption[];
 } {
@@ -976,6 +1017,9 @@ function buildCookingSuggestion(result: PackMatchResult): {
       kind: "show-recipe",
       label: matches.length === 1 ? "보여줘" : m.recipe.title,
       recipeId: m.recipe.id,
+      // V5.0 Phase I-6: hardcoded fallback recipe option 도 만들기 영역 — user
+      // 가 직접 요리하는 행동이라 entry action_options 의 craving/how_to 와 동일.
+      action_area: "만들기",
     }));
 
   // V5.0 Phase B1: fuzzy 분기에는 cloud 진입 옵션을 명시. 사용자가 "정확히
@@ -996,28 +1040,39 @@ function buildCookingSuggestion(result: PackMatchResult): {
   // 음식 옵션 fallback.
   const entryOptions = facet ? head.recipe.action_options?.[facet.kind] : undefined;
 
-  const options: SuggestionOption[] = entryOptions
-    ? [...entryOptions, ...(cloudOption ? [cloudOption] : [])]
+  // V5.0 Phase I-6: excludedActions 박힘 → 해당 영역 카드 drop → 빈 배열이면
+  // fallback. cloudOption 은 fuzzy 전용이라 excluded 적용 X.
+  const baseOptions: SuggestionOption[] = entryOptions
+    ? [...entryOptions]
     : [
         ...recipeOptions,
         {
           kind: "llm-call",
           label: "다른 음식",
           prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
+          action_area: "찾기",
         },
-        ...(cloudOption ? [cloudOption] : []),
       ];
+
+  const filteredOptions = filterByExcludedActions(baseOptions, excludedActions);
+  const options: SuggestionOption[] = [
+    ...(filteredOptions.length === 0 ? buildExclusionFallback() : filteredOptions),
+    ...(cloudOption ? [cloudOption] : []),
+  ];
 
   return { text, options };
 }
 
-export function buildPackSuggestion(result: PackMatchResult): AnswerPayload {
+export function buildPackSuggestion(
+  result: PackMatchResult,
+  excludedActions: ActionArea[] = [],
+): AnswerPayload {
   const head = result.matches[0];
   let body: { text: string; options: SuggestionOption[] };
   if (head?.kind === "sat-math") {
-    body = buildSATMathSuggestion(result);
+    body = buildSATMathSuggestion(result, excludedActions);
   } else if (head?.kind === "cooking-recipe") {
-    body = buildCookingSuggestion(result);
+    body = buildCookingSuggestion(result, excludedActions);
   } else {
     body = { text: `${result.pack.name}에서 비슷한 게 보여.`, options: [] };
   }

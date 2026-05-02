@@ -311,38 +311,67 @@ export const COOKING_RECIPES: PackRecipe[] = [
     // kind로 lookup. 미정의 facet은 builder hardcoded fallback.
     action_options: {
       craving: [
-        { kind: "show-recipe", label: "만들기", recipeId: "baek-kimchi-jjigae" },
+        {
+          kind: "show-recipe",
+          label: "만들기",
+          recipeId: "baek-kimchi-jjigae",
+          action_area: "만들기",
+        },
         {
           kind: "llm-call",
           label: "시켜먹기",
           prompt:
             "근처 한식당이나 배달앱에서 김치찌개 잘하는 곳 후보 3곳만 추천해줘. 한국어로 짧게.",
+          action_area: "시켜먹기",
         },
         {
           kind: "llm-call",
           label: "비슷한 메뉴",
           prompt: "김치찌개랑 비슷한 결인데 살짝 다른 한식 추천해줘. 1-2개만.",
+          action_area: "찾기",
         },
       ],
       how_to: [
-        { kind: "show-recipe", label: "보여줘", recipeId: "baek-kimchi-jjigae" },
+        {
+          kind: "show-recipe",
+          label: "보여줘",
+          recipeId: "baek-kimchi-jjigae",
+          action_area: "만들기",
+        },
         {
           kind: "llm-call",
           label: "다른 음식",
           prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
+          action_area: "찾기",
         },
       ],
       definition: [
-        { kind: "show-recipe", label: "레시피 보기", recipeId: "baek-kimchi-jjigae" },
+        {
+          kind: "show-recipe",
+          label: "레시피 보기",
+          recipeId: "baek-kimchi-jjigae",
+          action_area: "정보",
+        },
         {
           kind: "llm-call",
           label: "다른 김치찌개",
           prompt: "김치찌개의 다른 변형(참치 외)을 알려줘. 한국어로 짧게.",
+          action_area: "찾기",
         },
       ],
       casual: [
-        { kind: "show-recipe", label: "만들기", recipeId: "baek-kimchi-jjigae" },
-        { kind: "llm-call", label: "다른 음식", prompt: "다른 요리 추천해줘. 가볍게." },
+        {
+          kind: "show-recipe",
+          label: "만들기",
+          recipeId: "baek-kimchi-jjigae",
+          action_area: "만들기",
+        },
+        {
+          kind: "llm-call",
+          label: "다른 음식",
+          prompt: "다른 요리 추천해줘. 가볍게.",
+          action_area: "찾기",
+        },
       ],
     },
   },
@@ -388,32 +417,60 @@ export const COOKING_RECIPES: PackRecipe[] = [
     // V5.0 Phase B3c action_options — tuna 변형에 맞춘 빠른 톤.
     action_options: {
       craving: [
-        { kind: "show-recipe", label: "참치로 빨리", recipeId: "tuna-kimchi-jjigae" },
+        {
+          kind: "show-recipe",
+          label: "참치로 빨리",
+          recipeId: "tuna-kimchi-jjigae",
+          action_area: "만들기",
+        },
         {
           kind: "llm-call",
           label: "비슷한 빠른 음식",
           prompt: "통조림 활용한 빠른 한식 1-2개 추천해줘. 짧게.",
+          action_area: "찾기",
         },
       ],
       how_to: [
-        { kind: "show-recipe", label: "보여줘", recipeId: "tuna-kimchi-jjigae" },
+        {
+          kind: "show-recipe",
+          label: "보여줘",
+          recipeId: "tuna-kimchi-jjigae",
+          action_area: "만들기",
+        },
         {
           kind: "llm-call",
           label: "다른 음식",
           prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
+          action_area: "찾기",
         },
       ],
       definition: [
-        { kind: "show-recipe", label: "레시피 보기", recipeId: "tuna-kimchi-jjigae" },
+        {
+          kind: "show-recipe",
+          label: "레시피 보기",
+          recipeId: "tuna-kimchi-jjigae",
+          action_area: "정보",
+        },
         {
           kind: "show-recipe",
           label: "백종원식 보기",
           recipeId: "baek-kimchi-jjigae",
+          action_area: "정보",
         },
       ],
       casual: [
-        { kind: "show-recipe", label: "만들기", recipeId: "tuna-kimchi-jjigae" },
-        { kind: "llm-call", label: "다른 음식", prompt: "다른 요리 추천해줘. 가볍게." },
+        {
+          kind: "show-recipe",
+          label: "만들기",
+          recipeId: "tuna-kimchi-jjigae",
+          action_area: "만들기",
+        },
+        {
+          kind: "llm-call",
+          label: "다른 음식",
+          prompt: "다른 요리 추천해줘. 가볍게.",
+          action_area: "찾기",
+        },
       ],
     },
   },
@@ -543,15 +600,24 @@ function pickGreeting(): string {
 // saves it to the Study pack's user-content store, and renders a folder-
 // open message instead of raw text — the constitution's "LLM 응답을
 // 일회용으로 흘려보내지 말고 팩에 저장한다" rule.
+// V5.0 Phase I-6: 행동 영역 (action area). 사용자 발화의 negation 이 어느
+// 영역을 부정하는지 분류 후, builder 가 동일 영역 카드 박지 X.
+// 만들기 = user 직접 행동 (요리, 풀이, 제조).
+// 시켜먹기 = 외부 주문 (배달, 시키기).
+// 찾기 = 대안 / 추천 / 탐색.
+// 정보 = passive viewing (정의/설명/보여주기).
+export type ActionArea = "만들기" | "시켜먹기" | "찾기" | "정보";
+
 export type SuggestionOption =
-  | { kind: "open-folder"; label: string; target: string }
-  | { kind: "show-recipe"; label: string; recipeId: string }
+  | { kind: "open-folder"; label: string; target: string; action_area?: ActionArea }
+  | { kind: "show-recipe"; label: string; recipeId: string; action_area?: ActionArea }
   | {
       kind: "llm-call";
       label: string;
       prompt: string;
       systemPrompt?: string;
       postAction?: "save-as-sat-problem";
+      action_area?: ActionArea;
     };
 
 export type AnswerPayload =

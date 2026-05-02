@@ -229,3 +229,57 @@ export function classifyCraving(text: string): boolean {
   const q = text.toLowerCase();
   return CRAVING_TOKENS.some((t) => q.includes(t.toLowerCase()));
 }
+
+// V5.0 Phase I-6: 행동 영역 (action area) 분류 박음. action_options 카드의
+// kind 메타 (만들기 / 시켜먹기 / 찾기 / 정보) 와 매핑되는 사용자 발화 토큰.
+//
+// 배경: classifyNegationOrTrend 는 "negation 박힘 → 매처 우회" 까지만 박음.
+// 매처 본체 진입 후 facet 박힌 carded 응답에서 사용자 부정 신호 무시 (Step 3
+// 누수 — "만들고싶은게 아니라" 박혀도 [만들기] 카드 노출). I-6 가 negation
+// 의 *영역* 까지 인지해 action_options 필터.
+//
+// 영역 정의:
+//   만들기 — user 가 직접 행동 (요리, 풀이, 제조). 제외 시 [만들기/끓이기/풀이] 카드 차단.
+//   시켜먹기 — user 가 외부에 주문 (배달, 시키기). 제외 시 [시켜먹기/배달] 카드 차단.
+//   찾기 — 대안 / 추천 / 비슷한 거 (탐색). 제외 시 [다른 거/cloud로 찾기] 카드 차단.
+//   정보 — passive viewing (정의/설명/보여주기). 제외 시 [레시피 보기/풀이 보기] 카드 차단.
+export type ActionArea = "만들기" | "시켜먹기" | "찾기" | "정보";
+
+const ACTION_AREA_TOKENS: Record<ActionArea, string[]> = {
+  // 풀고 — "풀고싶다" / "풀고싶은게" 활용형. 풀어 (풀어보다) / 풀이 (명사) 와 함께
+  만들기: ["만들", "끓이", "요리하", "조리", "제조", "굽", "볶", "찌", "풀이", "풀어", "풀고"],
+  시켜먹기: ["시켜", "시키", "배달", "주문", "딜리버리", "테이크아웃"],
+  찾기: ["찾기", "찾아", "검색", "추천", "비슷한", "다른 거", "다른거"],
+  정보: ["알려", "보여", "설명", "정의"],
+};
+
+// Window-based negation 검출. action token 직후 N chars 내에 negation marker
+// 박혀 있으면 그 영역 excluded. window 박힌 자리:
+//   "만들고싶은게 아니라" — token "만들" 끝 + 8 chars 안에 "아니" 박힘.
+//   "추천하지마" — token "추천" 끝 + 3 chars 안에 "하지" 박힘.
+//   "시켜먹기 X" — token "시켜" 끝 + 5 chars 안에 "x"/"X" 박힘.
+// 지마/지 마 prefix 다양 지원 ("하지마"/"보지마"/"주지마"/"먹지마") 위해
+// `지\s*마` 단독 패턴 박음. "지" 단독은 "지요" 같은 어미와 충돌 가능 — 반드시
+// "마" 가 뒤따르는 경우만.
+const NEGATION_NEAR_PATTERN =
+  /아니|싫|말고|별로|지\s*마|하지\s*않|않[아으을]|안\s|안하|그만|필요\s*없|원치\s*않|\s[xX]\b|\s[xX]\s|x$|X$/;
+
+const NEGATION_WINDOW = 12; // 한국어 어미·조사 박힘 여유. "만들고싶은게 아니라" = 약 8 chars.
+
+export function classifyActionNegation(text: string): ActionArea[] {
+  const lower = text.toLowerCase();
+  const excluded = new Set<ActionArea>();
+  for (const [area, tokens] of Object.entries(ACTION_AREA_TOKENS) as [ActionArea, string[]][]) {
+    for (const tok of tokens) {
+      const idx = lower.indexOf(tok.toLowerCase());
+      if (idx === -1) continue;
+      const windowStart = idx + tok.length;
+      const window = lower.slice(windowStart, windowStart + NEGATION_WINDOW);
+      if (NEGATION_NEAR_PATTERN.test(window)) {
+        excluded.add(area);
+        break;
+      }
+    }
+  }
+  return Array.from(excluded);
+}
