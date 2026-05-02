@@ -20,6 +20,144 @@
 const BM25_K1 = 1.5;
 const BM25_B = 0.75;
 
+// V5 정정 (2026-05-02 19:39): 영어 stopword + 짧은 Latin 토큰 게이트.
+// 첫 V5 검증에서 발견:
+//   "I want to learn about quantum mechanics" → "i want food" entry 매칭
+//   공통 토큰 "want" 가 BM25 점수 박아 false positive.
+// IDF 가 알아서 weight 낮춰주지만, corpus 가 작으면 (수십 entry) IDF 도
+// 충분히 깎이지 X. 명시적 stopword 제거 + 길이 게이트 (≥3) 가 더 안전.
+//
+// 후보 단어 — 산업 표준 영어 stopword list (NLTK / sklearn 교집합) 의
+// 핵심부. 도메인 단어 ("food"/"quantum" 등) 는 박지 X — 사용자 발화의
+// 주제 신호.
+const ENGLISH_STOPWORDS = new Set<string>([
+  // 대명사
+  "i",
+  "me",
+  "my",
+  "you",
+  "your",
+  "we",
+  "us",
+  "our",
+  "they",
+  "them",
+  "their",
+  "he",
+  "him",
+  "his",
+  "she",
+  "her",
+  "it",
+  "its",
+  // be 동사 / 활용
+  "am",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  // 관사
+  "a",
+  "an",
+  "the",
+  // 전치사
+  "to",
+  "of",
+  "in",
+  "on",
+  "at",
+  "for",
+  "by",
+  "with",
+  "about",
+  "from",
+  "into",
+  "over",
+  "under",
+  "up",
+  "down",
+  "out",
+  // 접속사 / 지시어
+  "and",
+  "or",
+  "but",
+  "so",
+  "if",
+  "that",
+  "this",
+  "these",
+  "those",
+  // 의미 약한 동사
+  "want",
+  "wants",
+  "wanted",
+  "need",
+  "needs",
+  "like",
+  "likes",
+  "get",
+  "got",
+  "have",
+  "has",
+  "had",
+  "do",
+  "does",
+  "did",
+  "make",
+  "made",
+  "go",
+  "going",
+  "went",
+  // 조동사
+  "can",
+  "could",
+  "will",
+  "would",
+  "should",
+  "may",
+  "might",
+  "must",
+  "shall",
+  // 양화사 / 정도
+  "more",
+  "less",
+  "much",
+  "many",
+  "very",
+  "some",
+  "any",
+  "all",
+  "few",
+  "several",
+  // 의문사
+  "what",
+  "when",
+  "where",
+  "who",
+  "why",
+  "how",
+  "which",
+  "whose",
+  // 기타 자주 등장
+  "not",
+  "no",
+  "yes",
+  "here",
+  "there",
+  "just",
+  "only",
+  "also",
+  "too",
+  "than",
+  "then",
+  "now",
+  "as",
+  "such",
+]);
+
 // 문자 클래스 판정. Unicode property escapes 가 ESBuild 에서 안전 사용 가능.
 function isLatin(ch: string): boolean {
   return /[A-Za-z0-9]/.test(ch);
@@ -66,8 +204,10 @@ export function tokenize(text: string): string[] {
       return;
     }
     if (bufScript === "latin") {
-      // Latin: word 그대로 (length >= 2)
-      if (buf.length >= 2) tokens.push(buf);
+      // Latin: 길이 ≥ 3 + stopword 미포함. "to"/"of" 같은 짧은 기능어 + "i"/
+      // "want" 같은 stopword 둘 다 노이즈 토큰 (false positive 의 주요 원인).
+      // "go"/"ai" 같은 2-char 단어는 demo 시연 시 손실 미미.
+      if (buf.length >= 3 && !ENGLISH_STOPWORDS.has(buf)) tokens.push(buf);
     } else {
       // Korean / Japanese / CJK: bigram
       tokens.push(...bigrams(buf));
