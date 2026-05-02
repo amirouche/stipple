@@ -47,4 +47,9 @@ export type LearnedResponse = {
   // 추출 실패 (대부분 follow-up: "더 자세히") → undefined. 그런 entry는
   // V4 시맨틱 경로로 폴백.
   topic?: string;
+  // V5 Hybrid sparse-retrieval. saveLearned 시점에 tokenize(userInput) 으로
+  // 미리 박힘. BM25 매칭이 매 query 마다 모든 entry 를 재토큰화하지 않게
+  // pre-compute. localStorage 에 그대로 직렬화 (string[] — 평균 ~30 bigram
+  // / entry 라 storage 부담 미미). 마이그레이션 시 자동 채움.
+  tokens?: string[];
 };

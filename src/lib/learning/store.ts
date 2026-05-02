@@ -9,6 +9,7 @@
 
 import { embed, getEmbeddingStatus } from "@/lib/embedding";
 
+import { tokenize } from "./bm25";
 import { extractTopic } from "./topic";
 import type { LearnedResponse } from "./types";
 
@@ -18,8 +19,12 @@ const STORAGE_KEY = "dots:learned-responses";
 // 계산해야 같은 주제 그룹화가 작동. 이 키와 CURRENT_TOPIC_VERSION 비교 →
 // 다르면 next hydrate 에서 모든 entry 의 topic 필드 재계산 + 한 번 persist.
 // 새 entry 는 saveLearned 가 신로직으로 박으므로 영향 X.
+//
+// V5 (2026-05-02 저녁): tokens 필드 추가 — BM25 sparse retrieval 용. 같은
+// version 키를 공유 — 모든 entry 의 topic + tokens 가 한 번에 재계산.
+// version "3" 은 "topic v2 + tokens v1" 콤보 마이그레이션을 의미.
 const TOPIC_VERSION_KEY = "dots:learned-topic-version";
-const CURRENT_TOPIC_VERSION = "2";
+const CURRENT_TOPIC_VERSION = "3";
 
 let cache: LearnedResponse[] = [];
 let hydrated = false;
@@ -85,6 +90,13 @@ export function hydrateLearned(): void {
             migrated = true;
           }
         }
+        // V5: tokens 마이그레이션. version bump 시 또는 처음 박힌 entry
+        // 면 BM25 토큰화. 기존 토큰이 있으면 그대로 (사용자가 직접 박았을
+        // 가능성 X — saveLearned 외 박는 경로 없음).
+        if ((recomputeAllTopics || !next.tokens) && next.userInput) {
+          next.tokens = tokenize(next.userInput);
+          migrated = true;
+        }
         return next;
       });
       if (migrated) persist();
@@ -120,6 +132,11 @@ export async function saveLearned(entry: LearnedResponse): Promise<void> {
   if (!entry.topic) {
     const topic = extractTopic(entry.userInput);
     if (topic) entry = { ...entry, topic };
+  }
+  // V5: BM25 sparse retrieval 용 tokens 미리 박음. 매칭 hot path 에서
+  // 매번 재토큰화 회피. 호출 측이 미리 박은 경우 그대로.
+  if (!entry.tokens) {
+    entry = { ...entry, tokens: tokenize(entry.userInput) };
   }
   // V4: 임베딩 모델 ready 상태면 userInput을 자동 임베딩. 호출 측이
   // 미리 vector를 채워 보낸 경우(배치 마이그레이션 등)는 그대로 사용.

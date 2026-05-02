@@ -39,6 +39,9 @@ type LearnedSnapshotRow = {
   // V4.1: topic 그룹화 키. dotsLearning.list() 로 같은 topic 박힌 entry
   // 가 몇 개 쌓였는지 한눈에.
   topic?: string;
+  // V5: BM25 토큰 수. 0 이면 토큰화 실패 / 미마이그레이션 — 매칭 시 fallback
+  // 으로 즉석 토큰화. 정상 entry 는 보통 5-30.
+  tokenCount?: number;
   responseLength: number;
   createdAt: string;
 };
@@ -89,6 +92,7 @@ export function setupLearningDebug(): void {
         priority: e.priority,
         vectorDim: e.vector?.length,
         topic: e.topic,
+        tokenCount: e.tokens?.length,
         responseLength: e.response.length,
         createdAt: new Date(e.createdAt).toISOString(),
       })),
