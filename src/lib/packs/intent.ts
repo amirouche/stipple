@@ -230,6 +230,26 @@ export function classifyCraving(text: string): boolean {
   return CRAVING_TOKENS.some((t) => q.includes(t.toLowerCase()));
 }
 
+// V4.1 종합 의도 (memo summary). 사용자가 "지금까지 양자역학으로 모은
+// 거 다 보여줘" 처럼 같은 주제에 쌓인 메모 자산을 *전부* 보고 싶다는
+// 신호. learned cache 매처가 이 신호를 받으면 가장 풍부한 1개가 아니라
+// 같은 topic 의 모든 entry 를 합쳐서 보여준다 (메모 전시 모드).
+//
+// Pack 매처에는 영향 X — Pack은 대화 진행용으로 entry 1개 깔끔이 그대로.
+//
+// 토큰: "정리"·"전부"·"다"·"모두"·"종합"·"지금까지". "다" 는 1 char 라
+// false-positive 위험 (예: "달다" 의 "다") — 단독 "다 " (공백 뒤) 또는
+// 문장 끝 "다" + 동사 ("다 보여줘", "다 알려줘") 형태로만 잡는다.
+const SUMMARY_TOKENS = ["정리", "전부", "모두", "종합", "지금까지"];
+const SUMMARY_DA_PATTERN = /(^|\s)다\s+(보여|알려|꺼내|모아|줘|줄래|정리|말해)/;
+
+export function classifySummaryIntent(text: string): boolean {
+  const q = text.toLowerCase();
+  if (SUMMARY_TOKENS.some((t) => q.includes(t))) return true;
+  if (SUMMARY_DA_PATTERN.test(q)) return true;
+  return false;
+}
+
 // V5.0 Phase I-6: 행동 영역 (action area) 분류 박음. action_options 카드의
 // kind 메타 (만들기 / 시켜먹기 / 찾기 / 정보) 와 매핑되는 사용자 발화 토큰.
 //

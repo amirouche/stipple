@@ -28,6 +28,10 @@ type LearnedSnapshotRow = {
   // V4: 시맨틱 매칭 가능 여부 + 차원. 디버깅 시 어떤 모델로 임베딩됐는지
   // 한눈에 (768d = EmbeddingGemma, 384d = MiniLM, undefined = 임베딩 X).
   vectorDim?: number;
+  // V4.1: topic 그룹화 키. dotsLearning.list() 로 같은 topic 박힌 entry
+  // 가 몇 개 쌓였는지 한눈에.
+  topic?: string;
+  responseLength: number;
   createdAt: string;
 };
 
@@ -46,6 +50,8 @@ export function setupLearningDebug(): void {
         rating: e.rating,
         priority: e.priority,
         vectorDim: e.vector?.length,
+        topic: e.topic,
+        responseLength: e.response.length,
         createdAt: new Date(e.createdAt).toISOString(),
       })),
     clear: () => clearLearned(),

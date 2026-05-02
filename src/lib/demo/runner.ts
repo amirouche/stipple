@@ -10,8 +10,8 @@
 // 로직을 복제. 분기 추가 시 양쪽 동기화 필요 — 회귀 시 demo 결과로 잡힘.
 
 import { PACKS, type Pack } from "@/lib/dots-data";
-import { matchLearnedResponse } from "@/lib/learning";
-import { classifyIntent, classifyNegationOrTrend } from "@/lib/packs/intent";
+import { matchLearnedResponse, matchLearnedTopicGroup } from "@/lib/learning";
+import { classifyIntent, classifyNegationOrTrend, classifySummaryIntent } from "@/lib/packs/intent";
 import { findSpecificPackTarget, hasDefinitionIntent, matchPackContent } from "@/lib/packs/match";
 import { searchStoreForQuery } from "@/lib/packs/store-search";
 
@@ -104,7 +104,23 @@ export async function evaluateRouting(
   }
 
   // Stage 2.5: learned cache. send()와 동일한 follow-up 게이트.
+  // V4.1 종합 모드 (memo summary) — same-topic entry 가 있으면 합쳐서
+  // 노출. send() 와 정확 미러.
   const skipLearned = isFollowUpIntent || hasFollowUpHint(text);
+  if (!skipLearned && classifySummaryIntent(text)) {
+    const group = matchLearnedTopicGroup(text);
+    if (group.length > 0) {
+      return addDemoTrace({
+        input: text,
+        intent,
+        route: "learned",
+        externalCall: false,
+        provider: "learned",
+        latencyMs: Date.now() - startTime,
+        reason: `학습 캐시 종합 — ${group.length}개 합침`,
+      });
+    }
+  }
   if (!skipLearned) {
     const learned = await matchLearnedResponse(text);
     if (learned) {

@@ -9,6 +9,7 @@
 
 import { embed, getEmbeddingStatus } from "@/lib/embedding";
 
+import { extractTopic } from "./topic";
 import type { LearnedResponse } from "./types";
 
 const STORAGE_KEY = "dots:learned-responses";
@@ -43,17 +44,33 @@ export function hydrateLearned(): void {
     if (Array.isArray(parsed)) {
       // Phase B 마이그레이션: 기존 엔트리에 priority가 없으면 rating을 보고
       // 역추정 (good=+1 / bad=-1 / 없음=0). 새 필드 lastRatedAt은 비워둔다.
-      cache = parsed.map((e) => ({
-        ...(e as LearnedResponse),
-        priority:
-          typeof e.priority === "number"
-            ? e.priority
-            : e.rating === "good"
-              ? 1
-              : e.rating === "bad"
-                ? -1
-                : 0,
-      }));
+      // V4.1 마이그레이션: topic이 비어 있으면 userInput에서 추출해 채움.
+      // 기존 entry도 topic 그룹화 대상이 되도록.
+      let migrated = false;
+      cache = parsed.map((e) => {
+        const next: LearnedResponse = {
+          ...(e as LearnedResponse),
+          priority:
+            typeof e.priority === "number"
+              ? e.priority
+              : e.rating === "good"
+                ? 1
+                : e.rating === "bad"
+                  ? -1
+                  : 0,
+        };
+        if (!next.topic && next.userInput) {
+          const topic = extractTopic(next.userInput);
+          if (topic) {
+            next.topic = topic;
+            migrated = true;
+          }
+        }
+        return next;
+      });
+      // topic 마이그레이션이 일어났으면 한 번 재저장 — 다음 hydrate 시
+      // 같은 비용 반복 X.
+      if (migrated) persist();
       emit();
     }
   } catch (err) {
@@ -73,6 +90,13 @@ export async function getAllLearned(): Promise<LearnedResponse[]> {
 }
 
 export async function saveLearned(entry: LearnedResponse): Promise<void> {
+  // V4.1: topic 자동 추출. 호출 측이 미리 박은 경우 (배치 마이그레이션
+  // 등) 는 그대로. extractTopic 실패 (대부분 follow-up) → undefined,
+  // 매칭은 V4 시맨틱 경로로 폴백.
+  if (!entry.topic) {
+    const topic = extractTopic(entry.userInput);
+    if (topic) entry = { ...entry, topic };
+  }
   // V4: 임베딩 모델 ready 상태면 userInput을 자동 임베딩. 호출 측이
   // 미리 vector를 채워 보낸 경우(배치 마이그레이션 등)는 그대로 사용.
   // 임베딩 실패는 silent — 정확 일치 매칭은 그대로 가능.

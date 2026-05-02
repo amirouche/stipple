@@ -13,6 +13,8 @@ export {
   clearLearned,
   subscribeLearned,
 } from "./store";
-export { matchLearnedResponse } from "./match";
+export { matchLearnedResponse, matchLearnedTopicGroup } from "./match";
+export { buildTopicSummary } from "./summary";
+export { extractTopic } from "./topic";
 export { setupLearningDebug } from "./debug";
 export { useLearnedRating } from "./hooks";

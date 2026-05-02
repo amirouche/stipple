@@ -41,4 +41,10 @@ export type LearnedResponse = {
   // 모델 미사용 / 임베딩 실패 → undefined. matchLearnedResponse는 그
   // 엔트리를 정확 일치 경로로만 평가한다 (V3 fallback).
   vector?: number[];
+  // V4.1 Topic consolidation. saveLearned 시점에 extractTopic(userInput)
+  // 으로 채워진다. 같은 주제의 여러 entry를 묶어 단일 모드 (가장 풍부한
+  // 1개) / 종합 모드 (메모 전시) 두 갈래로 흘리기 위한 그룹 키.
+  // 추출 실패 (대부분 follow-up: "더 자세히") → undefined. 그런 entry는
+  // V4 시맨틱 경로로 폴백.
+  topic?: string;
 };

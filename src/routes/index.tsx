@@ -41,12 +41,16 @@ import {
   classifyIntent,
   classifyNegationOrTrend,
   classifyRejection,
+  classifySummaryIntent,
 } from "@/lib/packs/intent";
 import { topicParticle } from "@/lib/text/clean-noun";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import {
+  buildTopicSummary,
+  extractTopic,
   incrementUsedCount,
   matchLearnedResponse,
+  matchLearnedTopicGroup,
   rateLearned,
   saveLearned,
   useLearnedRating,
@@ -488,7 +492,49 @@ function ChatPage() {
     // bump usedCount. Skipped on follow-up intent so "다른거" goes to a
     // fresh LLM turn instead of replaying the previous cached one.
     // Casual은 학습된 인사 응답 hit이면 그대로 사용 (인사 자체를 캐싱) — V2 동작.
+    //
+    // V4.1 종합 모드: "정리" / "전부" / "다 보여" 같은 메모 종합 의도가
+    // 박혀 있고 같은 topic 그룹 entry 가 하나 이상 있으면, 가장 가까운
+    // 1개 대신 그룹 전체를 메모 형태로 합쳐 노출. Pack 매처는 영향 X —
+    // 메모리 layer 만의 행동.
     const skipLearnedStep = isFollowUpIntent || (justSawSuggestion && hasFollowUpIntent(text));
+    if (!skipLearnedStep && classifySummaryIntent(text)) {
+      const group = matchLearnedTopicGroup(text);
+      const topic = extractTopic(text);
+      if (group.length > 0 && topic) {
+        const userId = crypto.randomUUID();
+        const asstId = crypto.randomUUID();
+        appendMessage(thread.id, { id: userId, role: "user", text });
+        renameThreadIfDefault(thread.id, text);
+        appendMessage(thread.id, {
+          id: asstId,
+          role: "assistant",
+          route: "local",
+          state: "found_local",
+          reason: "",
+          packName: undefined,
+          pending: false,
+          text: buildTopicSummary(topic, group),
+          provider: "learned",
+          // 종합 모드는 단일 entry rating 대상 X — learnedId 미박힘.
+        });
+        // 종합 모드도 사용된 entry 의 usedCount 를 모두 bump — 시연 시
+        // dotsLearning.list() 로 어느 entry가 자주 호출되는지 추적 가능.
+        for (const e of group) void incrementUsedCount(e.id);
+        addDemoTrace({
+          input: text,
+          intent,
+          route: "learned",
+          externalCall: false,
+          provider: "learned",
+          latencyMs: Date.now() - startTime,
+          reason: `학습 캐시 종합 — topic=${topic}, ${group.length}개 합침`,
+        });
+        setBusy(false);
+        scrollDown();
+        return;
+      }
+    }
     if (!skipLearnedStep) {
       const learned = await matchLearnedResponse(text);
       if (learned) {
