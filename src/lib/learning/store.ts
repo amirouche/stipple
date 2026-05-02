@@ -13,6 +13,13 @@ import { extractTopic } from "./topic";
 import type { LearnedResponse } from "./types";
 
 const STORAGE_KEY = "dots:learned-responses";
+// V4.1 정정 (2026-05-02 오후): topic 추출 로직이 first-noun + stopword 로
+// 바뀌었음. 기존 entry 의 topic 필드 (잘못 박힌 "대하알고싶" 등) 를 다시
+// 계산해야 같은 주제 그룹화가 작동. 이 키와 CURRENT_TOPIC_VERSION 비교 →
+// 다르면 next hydrate 에서 모든 entry 의 topic 필드 재계산 + 한 번 persist.
+// 새 entry 는 saveLearned 가 신로직으로 박으므로 영향 X.
+const TOPIC_VERSION_KEY = "dots:learned-topic-version";
+const CURRENT_TOPIC_VERSION = "2";
 
 let cache: LearnedResponse[] = [];
 let hydrated = false;
@@ -44,8 +51,13 @@ export function hydrateLearned(): void {
     if (Array.isArray(parsed)) {
       // Phase B 마이그레이션: 기존 엔트리에 priority가 없으면 rating을 보고
       // 역추정 (good=+1 / bad=-1 / 없음=0). 새 필드 lastRatedAt은 비워둔다.
-      // V4.1 마이그레이션: topic이 비어 있으면 userInput에서 추출해 채움.
-      // 기존 entry도 topic 그룹화 대상이 되도록.
+      //
+      // V4.1 topic 마이그레이션:
+      //   - 처음 박힌 entry (topic 미존재) → 추출해서 채움.
+      //   - topic 추출 로직 버전이 바뀜 (TOPIC_VERSION_KEY 미일치) → 모든
+      //     entry 의 topic 재계산. 잘못 박힌 ("대하알고싶") 그룹화 키 폐기.
+      const storedTopicVersion = localStorage.getItem(TOPIC_VERSION_KEY);
+      const recomputeAllTopics = storedTopicVersion !== CURRENT_TOPIC_VERSION;
       let migrated = false;
       cache = parsed.map((e) => {
         const next: LearnedResponse = {
@@ -59,18 +71,30 @@ export function hydrateLearned(): void {
                   ? -1
                   : 0,
         };
-        if (!next.topic && next.userInput) {
+        if ((recomputeAllTopics || !next.topic) && next.userInput) {
           const topic = extractTopic(next.userInput);
-          if (topic) {
+          // 재계산이 undefined 를 반환하면 (extractTopic 실패) 기존 topic 도
+          // 폐기. 잘못 박힌 키 보다는 매칭이 V4 시맨틱 경로로 폴백되는 게
+          // 정직.
+          if (recomputeAllTopics) {
+            if (topic) next.topic = topic;
+            else delete next.topic;
+            migrated = true;
+          } else if (topic) {
             next.topic = topic;
             migrated = true;
           }
         }
         return next;
       });
-      // topic 마이그레이션이 일어났으면 한 번 재저장 — 다음 hydrate 시
-      // 같은 비용 반복 X.
       if (migrated) persist();
+      if (recomputeAllTopics) {
+        try {
+          localStorage.setItem(TOPIC_VERSION_KEY, CURRENT_TOPIC_VERSION);
+        } catch (err) {
+          console.warn("[learning] topic version persist failed:", err);
+        }
+      }
       emit();
     }
   } catch (err) {
