@@ -42,6 +42,11 @@ export type ComposeArgs = {
   // ad-hoc compose 등 thread context 없는 호출 — caller가 명시 박지 않으면
   // summary 동작 X).
   threadId?: string;
+  // V5.0 Phase I-5: cloud-direct 모드. routes/index.tsx Stage 3 (matchPackContent
+  // miss → cloud) 가 박음. 박혀 있으면 pack identity 흉내 X, 일반 cloud 톤.
+  // suggestion onClick 분기 (사용자 명시 pack 클릭) 는 미박힘 — pack identity
+  // 유지.
+  cloudMode?: boolean;
 };
 
 export type ComposeResult = {
@@ -117,6 +122,7 @@ export async function composeAnswer(args: ComposeArgs): Promise<ComposeResult> {
         memory: args.lookup,
         payloadKind: args.fallback.kind,
         summary: summary ?? undefined,
+        cloudMode: args.cloudMode,
       },
       args.onToken,
     );

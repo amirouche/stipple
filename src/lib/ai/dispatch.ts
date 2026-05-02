@@ -62,6 +62,9 @@ export type DispatchInput = {
   // history도 caller가 recent N (예: 10) 만 보내야 — summary와 history가
   // overlap되지 않도록.
   summary?: ConversationSummary;
+  // V5.0 Phase I-5: cloud-direct 모드. 박혀 있으면 pack 컨텍스트는 단순 참고로
+  // 변환 + CLOUD_DISCIPLINE 박힘 (Pack 이름 언급 X). 미박힘 = pack identity.
+  cloudMode?: boolean;
 };
 
 export type DispatchResult = {
@@ -133,6 +136,7 @@ export async function dispatchLLMCall(
     payloadKind: input.payloadKind,
     callerSystemPrompt: input.systemPrompt,
     summary: input.summary,
+    cloudMode: input.cloudMode,
   });
   const history = trimHistory(input.history);
 

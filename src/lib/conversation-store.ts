@@ -52,6 +52,13 @@ export type ThreadMsg =
       // 채팅이 reload되어도 학습 store는 살아 있으므로 다음 같은 입력에
       // 평가가 매칭에 반영된다.
       learnedId?: string;
+      // V5.0 Phase I-5: cloud-direct 모드 메시지 표시. 박혀 있으면:
+      //   - system prompt 가 PACK_REFERENCE + CLOUD_DISCIPLINE 박힘 (pack
+      //     identity 흉내 X)
+      //   - ProviderBadge 라벨이 "Cloud (Pack 외부)" 형태로 강화
+      // 미박힘 = pack identity 응답 (suggestion onClick 등) 또는 cloud 호출
+      // 미발생.
+      cloudMode?: boolean;
     };
 
 // V5.0 lite Phase B2: 직전 pack 매칭의 confidence·entry·요청 명사구를 보존.

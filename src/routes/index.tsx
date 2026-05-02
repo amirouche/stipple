@@ -538,6 +538,9 @@ function ChatPage() {
       reason: result.reason,
       packName: result.pack?.name,
       pending: true,
+      // V5.0 Phase I-5: Stage 3 cloud-direct 메시지 표시 — UI 라벨 강화
+      // (ProviderBadge 가 "Cloud (Pack 외부)" 형태) + 검수 디버그 용.
+      cloudMode: true,
     });
 
     // V3: Stage 3 진입 = matchPackContent miss = lastPackId 변경 X.
@@ -675,6 +678,11 @@ function ChatPage() {
       // V5.0 Phase M-1: thread id 전달 → 임계점 도달 시 summary 자동 생성/활용.
       // suggestion onClick 분기는 ad-hoc compose라 threadId 미박힘 (의도).
       threadId: thread.id,
+      // V5.0 Phase I-5: Stage 3 cloud-direct = matchPackContent miss 후 cloud
+      // 호출. composePack 이 박혀 있어도 (thread.lastPackId 으로 inferred)
+      // pack identity 흉내 X — 일반 cloud 톤. Tei 발견 ("Cooking Essentials에는
+      // ... 정보는 없어") 누수 차단.
+      cloudMode: true,
     }).then(({ payload, provider, summaryUsed, summaryGenerated }) => {
       renderPayload(payload, provider);
       // Stage 3 trace는 composeAnswer 결과가 돌아온 시점에. provider가
@@ -1167,7 +1175,9 @@ function AssistantBubble({
               )}
             </div>
           )}
-          {!m.pending && m.provider && <ProviderBadge provider={m.provider} />}
+          {!m.pending && m.provider && (
+            <ProviderBadge provider={m.provider} cloudMode={m.cloudMode} />
+          )}
           {!m.pending && m.learnedId && <RatingControls learnedId={m.learnedId} />}
           {!m.pending && m.suggestion && (
             <SuggestionBlock
@@ -1219,7 +1229,16 @@ function RatingControls({ learnedId }: { learnedId: string }) {
   );
 }
 
-function ProviderBadge({ provider }: { provider: "webllm" | "gemini" | "learned" }) {
+function ProviderBadge({
+  provider,
+  cloudMode,
+}: {
+  provider: "webllm" | "gemini" | "learned";
+  // V5.0 Phase I-5: Stage 3 cloud-direct 응답 (matchPackContent miss). 박혀
+  // 있으면 gemini 라벨이 "Cloud (Pack 외부) · 외부 API" 형태로 강화 — pack
+  // identity 응답 (suggestion onClick 등) 과 시각 분리.
+  cloudMode?: boolean;
+}) {
   // Three-tone visual contract across the chat:
   //   red   — local match or learned cache (no LLM call this turn)
   //   green — WebLLM (private, on-device, zero external calls)
@@ -1235,7 +1254,9 @@ function ProviderBadge({ provider }: { provider: "webllm" | "gemini" | "learned"
     provider === "webllm"
       ? "내 기기 (WebLLM) · 외부 호출 0"
       : provider === "gemini"
-        ? "클라우드 (Gemini) · 외부 API"
+        ? cloudMode
+          ? "Cloud (Pack 외부) · Gemini API"
+          : "클라우드 (Gemini) · 외부 API"
         : "학습됨 · 캐시에서 (외부 호출 0)";
   return (
     <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft flex items-center gap-1.5">

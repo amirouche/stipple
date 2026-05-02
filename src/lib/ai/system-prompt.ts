@@ -40,6 +40,15 @@ export type SystemPromptContext = {
   // dispatch는 함께 history도 recent N (10) 만 보냄 — summary가 그 이전을
   // 대체.
   summary?: ConversationSummary;
+  // V5.0 Phase I-5: cloud-direct 호출 모드. 박혀 있으면:
+  //   - PACK_PERSONA 대신 PACK_REFERENCE 박힘 (pack identity → 참고 컨텍스트)
+  //   - CLOUD_DISCIPLINE 박힘 (Pack 이름 언급 X, 일반 지식 톤)
+  // 미박힘 = pack identity 모드 (기존 동작 — suggestion onClick 등 명시적
+  // pack 흐름).
+  // Tei 발견: "맥주 ... 짜장면 ..." 입력에 cloud 응답이 "Cooking Essentials에는
+  // ... 정보는 없어" 라며 pack 톤 흉내 → 사용자 인지 모호. cloudMode=true 가
+  // 이 누수 차단.
+  cloudMode?: boolean;
   // payload kind. recipe / memory-recipes 일 땐 CARD_FOLLOWUP_NOTE 추가 — 카드가
   // 화면 하단에 붙으므로 LLM이 재료/단계 다시 적으면 중복.
   payloadKind?: AnswerPayload["kind"];
@@ -137,6 +146,37 @@ function buildPackPersona(pack: Pack): string {
   return lines.join("\n");
 }
 
+// V5.0 Phase I-5: pack 을 identity 가 아닌 "참고 컨텍스트" 로 박는 변형.
+// cloudMode=true 일 때 PACK_PERSONA 대신 사용. LLM 이 pack 톤 흉내 X, 단순
+// 참고로 대화 영역만 인지.
+//
+// 사용 케이스: matchPackContent miss 후 Stage 3 cloud — thread.lastPackId
+// 으로 composePack 박혀 있어도 사용자가 cloud 일반 답변을 기대하는 흐름.
+// 예: "맥주 ... 짜장면 ..." 같이 pack 외부 영역 입력.
+function buildPackReference(pack: Pack): string {
+  return [
+    `[참고 컨텍스트 — 이전 대화 영역: ${pack.name}]`,
+    `해당 영역의 voice="${pack.voice}", tone="${pack.tone}".`,
+    "이 정보는 단순 참고. 이번 응답은 cloud 일반 지식으로 답하라.",
+  ].join("\n");
+}
+
+// V5.0 Phase I-5: cloud-direct 응답 디시플린. cloudMode=true 일 때 박힘.
+// Pack 이름 언급 / pack scope 표현 차단.
+//
+// 설계 노트:
+//   - "Cooking Essentials" 같은 pack 이름 언급 X — pack/cloud 경계 흐림.
+//   - "Pack 에는 ... 정보가 없어" 표현 X — pack 으로 가장한 cloud 응답이 됨.
+//   - Pack 외부 영역임을 자각해야 한다면 응답 시작에 한 줄만 (사용자 인지용).
+//   - 본문은 cloud 일반 지식 톤 ("일반적으로 ...", "대체로 ...").
+const CLOUD_DISCIPLINE = [
+  "[현재 상황: cloud 응답 — Pack 외부 영역]",
+  '- Pack 이름 (예: "Cooking Essentials", "Study Companion") 언급 X.',
+  '- "Pack 에는 ... 정보가 없어" 같은 pack scope 표현 X — pack 톤 흉내 X.',
+  '- Cloud 의 일반 지식으로 답하라. 모르면 솔직히 "잘 모르겠어".',
+  '- Pack 외부임을 자각해야 한다면 응답 시작에 한 줄만 (예: "이건 cloud로 찾아본 거야"), 본문은 cloud 일반 톤.',
+].join("\n");
+
 // V5.0 Phase M-1: thread-level 요약 섹션. dispatch가 이 함수의 결과를 system
 // prompt에 박으면서 history는 recent N 만 보냄 — summary가 [0..N) 메시지를
 // 대체. Tei 스펙 보존 측면 4가지 (정보·영역·미해결·톤) 가 들어와 LLM이 그대로
@@ -179,8 +219,19 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
   // 시나리오 (예: SAT 수학 튜터가 cooking pack에서 호출되는 경우) 라 pack
   // 페르소나 자동 skip. 이 결정은 caller가 dispatchLLMCall 호출 시 pack 인자
   // 자체를 omit하는 방식으로 표현 (routes/index.tsx 의 suggestion onClick 분기).
+  //
+  // V5.0 Phase I-5: cloudMode=true 일 때 PACK_PERSONA 대신 PACK_REFERENCE
+  // 박힘 — pack 정보를 identity 가 아닌 참고 컨텍스트로. 이후 CLOUD_DISCIPLINE
+  // 도 박혀 pack 이름 언급 / pack 톤 흉내 차단.
   if (ctx.pack) {
-    sections.push(buildPackPersona(ctx.pack));
+    if (ctx.cloudMode) {
+      sections.push(buildPackReference(ctx.pack));
+    } else {
+      sections.push(buildPackPersona(ctx.pack));
+    }
+  }
+  if (ctx.cloudMode) {
+    sections.push(CLOUD_DISCIPLINE);
   }
 
   // Intent override — DOTS_CHARTER의 일부 룰을 의도적으로 덮어씀. casual이
