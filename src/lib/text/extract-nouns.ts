@@ -51,6 +51,14 @@ const ENDINGS = [
   "는가",
 ];
 
+// V5.0 Phase 2: 수식어 stem 제거. Verbal participle 형식 ("만들다" 의 "만든",
+// "하다" 의 "한") 이 nouns 목록에 박혀 partial 매칭 노이즈 박지 X. exact-alias
+// 매칭은 isExactBoundary 가 처리하므로 영향 X — partial 분기에만 의미.
+//
+// 안전 박음: 진짜 noun 으로 의미 박힌 단어는 X (예: "오늘", "맛있", "이름").
+// verbal participle stem 만 (일반 noun 으로 등장 X 한 단어).
+const COMMON_MODIFIERS = ["만든", "한", "할", "시킨", "사온", "먹은", "끓인", "구운"];
+
 export function extractNouns(text: string): string[] {
   const tokens = text.trim().split(/\s+/);
   const result: string[] = [];
@@ -72,7 +80,7 @@ export function extractNouns(text: string): string[] {
         break;
       }
     }
-    if (cleaned.length >= 2) {
+    if (cleaned.length >= 2 && !COMMON_MODIFIERS.includes(cleaned)) {
       result.push(cleaned);
     }
   }

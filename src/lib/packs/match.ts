@@ -904,8 +904,15 @@ function buildSATMathSuggestion(
   // 과 동일 패턴.
   // V5.0 lite Phase A.5: facet 분기 추가 (cooking과 동일 패턴). exact/partial일
   // 때 facet이 있으면 facet 텍스트 노출. 없으면 기존 "문제 풀어볼래" 톤 유지.
+  // Phase 2 (Entry miss 정직): fuzzy + packLevel = domain hit but no specific
+  // entry. Surface honest "domain matches but no entry" instead of pretending
+  // the closest topic is "비슷한 건". Specific-hit fuzzy still shows the
+  // closest entry as before.
+  const entryMiss = confidence === "fuzzy" && packLevel;
   let text: string;
-  if (confidence === "fuzzy") {
+  if (entryMiss) {
+    text = `${pack.name}의 도메인은 맞지만, ${requestedNoun ?? "이 주제"} 정확한 문제로는 없어. cloud로 찾아볼까?`;
+  } else if (confidence === "fuzzy") {
     text = `${pack.name}에 ${requestedNoun ?? "그건"} 정확히 없어. 비슷한 건 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제. 다른 거 원하면 cloud로 찾아볼까?`;
   } else if (facet) {
     const body =
@@ -932,39 +939,43 @@ function buildSATMathSuggestion(
 
   // V5.0 Phase B3c: facet 별 action_options 가 entry에 박혀 있으면 우선 사용.
   // 미정의 facet은 기존 hardcoded fallback (학습 폴더 + 새 문제 생성 옵션).
+  // Phase 2: entry-miss 면 fuzzy entry 제안 X — 사용자가 입력한 noun 과 매칭된
+  // 문제 사이 의미 거리가 ↑ (단지 도메인만 맞음). "Pack 다른 문제 보기" 만 노출.
   const entryOptions = facet ? head.problem.action_options?.[facet.kind] : undefined;
 
   // V5.0 Phase I-6: excludedActions 박힘 → 해당 영역 카드 drop → 빈 배열이면
   // fallback. cloudOption 은 별도 fuzzy 분기 옵션이라 excluded 적용 X (사용자가
   // 모든 영역 부정해도 cloud escape 보존).
-  const baseOptions: SuggestionOption[] = entryOptions
-    ? [...entryOptions]
-    : [
-        { kind: "open-folder", label: "풀어볼래", target: "/study", action_area: "만들기" },
-        {
-          kind: "llm-call",
-          label: "새 문제 받을래",
-          // systemPrompt overrides whatever pack persona the thread is in. SAT
-          // math under a cooking persona would just make Gemini refuse.
-          systemPrompt:
-            "당신은 SAT 수학 튜터입니다. 한국어로 친절하지만 간결하게 답하세요. 사용자가 요청한 형식을 정확히 지키세요.",
-          prompt: [
-            "SAT 수학 객관식 문제 1개를 새로 만들어 주세요. 다음 형식을 정확히 지켜주세요.",
-            "",
-            "문제: [한 두 문장의 문제]",
-            "① [보기 1]",
-            "② [보기 2]",
-            "③ [보기 3]",
-            "④ [보기 4]",
-            "정답: [번호]",
-            "풀이: [두세 줄의 짧은 풀이]",
-          ].join("\n"),
-          // Tells the chat handler to parse the response and store it in the
-          // Study pack rather than showing raw text in chat.
-          postAction: "save-as-sat-problem",
-          action_area: "찾기",
-        },
-      ];
+  const baseOptions: SuggestionOption[] = entryMiss
+    ? [{ kind: "open-folder", label: "Pack 다른 문제 보기", target: "/study", action_area: "찾기" }]
+    : entryOptions
+      ? [...entryOptions]
+      : [
+          { kind: "open-folder", label: "풀어볼래", target: "/study", action_area: "만들기" },
+          {
+            kind: "llm-call",
+            label: "새 문제 받을래",
+            // systemPrompt overrides whatever pack persona the thread is in. SAT
+            // math under a cooking persona would just make Gemini refuse.
+            systemPrompt:
+              "당신은 SAT 수학 튜터입니다. 한국어로 친절하지만 간결하게 답하세요. 사용자가 요청한 형식을 정확히 지키세요.",
+            prompt: [
+              "SAT 수학 객관식 문제 1개를 새로 만들어 주세요. 다음 형식을 정확히 지켜주세요.",
+              "",
+              "문제: [한 두 문장의 문제]",
+              "① [보기 1]",
+              "② [보기 2]",
+              "③ [보기 3]",
+              "④ [보기 4]",
+              "정답: [번호]",
+              "풀이: [두세 줄의 짧은 풀이]",
+            ].join("\n"),
+            // Tells the chat handler to parse the response and store it in the
+            // Study pack rather than showing raw text in chat.
+            postAction: "save-as-sat-problem",
+            action_area: "찾기",
+          },
+        ];
 
   const filteredOptions = filterByExcludedActions(baseOptions, excludedActions);
   const options: SuggestionOption[] = [
@@ -993,7 +1004,14 @@ function buildCookingSuggestion(
   //   "정확히 없어 — 비슷한 entry: <name>. 다른 거 원하면 cloud."
   // partial은 facet 응답 + 작은 confidence 표시.
   // exact는 facet 응답 그대로.
-  if (confidence === "fuzzy") {
+  // Phase 2 (Entry miss 정직): fuzzy + packLevel = domain hit but no specific
+  // recipe entry. Don't surface "비슷한 건 X" as if X is close — meaning
+  // distance is high. Specific-hit fuzzy still shows the closest recipe.
+  const entryMiss = confidence === "fuzzy" && packLevel;
+  if (entryMiss) {
+    const requestedLabel = requestedNoun ?? "이 주제";
+    text = `${pack.name}의 도메인은 맞지만, ${requestedLabel} 정확한 레시피로는 없어. cloud로 찾아볼까?`;
+  } else if (confidence === "fuzzy") {
     const requestedLabel = requestedNoun ?? "그건";
     text = `${pack.name}에 ${requestedLabel} 정확히 없어. 비슷한 건 ${head.recipe.title}. 다른 거 원하면 cloud로 찾아볼까?`;
   } else if (facet) {
@@ -1038,21 +1056,32 @@ function buildCookingSuggestion(
   // V5.0 Phase B3c: facet 별 action_options 가 entry에 박혀 있으면 우선 사용.
   // 미정의 facet (또는 facet undefined) 은 기존 hardcoded recipeOptions + 다른
   // 음식 옵션 fallback.
+  // Phase 2: entry-miss 면 recipeOptions 제안 X — 사용자가 입력한 noun 과 매칭된
+  // recipe 사이 의미 거리가 ↑. "다른 레시피 보기" 만 노출 + cloud.
   const entryOptions = facet ? head.recipe.action_options?.[facet.kind] : undefined;
 
   // V5.0 Phase I-6: excludedActions 박힘 → 해당 영역 카드 drop → 빈 배열이면
   // fallback. cloudOption 은 fuzzy 전용이라 excluded 적용 X.
-  const baseOptions: SuggestionOption[] = entryOptions
-    ? [...entryOptions]
-    : [
-        ...recipeOptions,
+  const baseOptions: SuggestionOption[] = entryMiss
+    ? [
         {
           kind: "llm-call",
-          label: "다른 음식",
-          prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
+          label: "Pack 다른 레시피 보기",
+          prompt: `${pack.name}에 어떤 레시피가 있는지 보여줘.`,
           action_area: "찾기",
         },
-      ];
+      ]
+    : entryOptions
+      ? [...entryOptions]
+      : [
+          ...recipeOptions,
+          {
+            kind: "llm-call",
+            label: "다른 음식",
+            prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
+            action_area: "찾기",
+          },
+        ];
 
   const filteredOptions = filterByExcludedActions(baseOptions, excludedActions);
   const options: SuggestionOption[] = [
