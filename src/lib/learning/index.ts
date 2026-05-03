@@ -18,3 +18,16 @@ export { buildTopicSummary } from "./summary";
 export { extractTopic } from "./topic";
 export { setupLearningDebug } from "./debug";
 export { useLearnedRating } from "./hooks";
+// V6A 명시적 학습 (Active Learning).
+export type { CommandResult } from "./commands";
+export { parseCommand } from "./commands";
+export type { AliasEntry, AliasDirection } from "./dictionary";
+export {
+  hydrateDictionary,
+  addAlias,
+  removeAlias,
+  listAliases,
+  resolveAlias,
+  subscribeDictionary,
+  clearDictionary,
+} from "./dictionary";

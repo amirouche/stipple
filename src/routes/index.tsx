@@ -46,12 +46,16 @@ import {
 import { topicParticle } from "@/lib/text/clean-noun";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import {
+  addAlias,
   buildTopicSummary,
   extractTopic,
   incrementUsedCount,
+  listAliases,
   matchLearnedResponse,
   matchLearnedTopicGroup,
+  parseCommand,
   rateLearned,
+  removeAlias,
   saveLearned,
   useLearnedRating,
 } from "@/lib/learning";
@@ -187,6 +191,64 @@ function ChatPage() {
     const startTime = Date.now();
     setBusy(true);
     setInput("");
+
+    // ---- Stage 0 (V6A): 명시적 학습 명령 (@learn / @unlearn / @list).
+    // intent 분류 / 매처 / 라우팅 모두 skip — 명령은 사용자가 직접 가르치는
+    // 행위라 LLM 호출 불필요. cost 0. 일반 입력은 parseCommand 가 null
+    // 반환 → 기존 흐름 그대로.
+    const cmd = parseCommand(text);
+    if (cmd) {
+      const userId = crypto.randomUUID();
+      const asstId = crypto.randomUUID();
+      appendMessage(thread.id, { id: userId, role: "user", text });
+      renameThreadIfDefault(thread.id, text);
+      let body = "";
+      if (cmd.command === "learn") {
+        await addAlias(cmd.alias, cmd.canonical);
+        body = `알겠어. '${cmd.alias}'를 '${cmd.canonical}'로 기억할게.`;
+      } else if (cmd.command === "unlearn") {
+        const removed = await removeAlias(cmd.alias);
+        body = removed ? `'${cmd.alias}' 잊을게.` : `'${cmd.alias}'는 학습된 적 없어.`;
+      } else {
+        const aliases = listAliases();
+        if (aliases.length === 0) {
+          body =
+            "학습된 alias 가 아직 없어. `@learn 두쫀쿠 = 두바이 쫀득쿠키` 같은 형식으로 가르쳐줘.";
+        } else {
+          const lines = aliases.map((a) => `• ${a.alias} → ${a.canonical}`);
+          body = `학습된 alias ${aliases.length}개:\n${lines.join("\n")}`;
+        }
+      }
+      appendMessage(thread.id, {
+        id: asstId,
+        role: "assistant",
+        route: "local",
+        state: "found_local",
+        reason: "",
+        packName: "명령어",
+        pending: false,
+        text: body,
+        provider: "learned",
+      });
+      addDemoTrace({
+        input: text,
+        intent: "casual",
+        route: "local",
+        externalCall: false,
+        provider: "none",
+        latencyMs: Date.now() - startTime,
+        reason: `학습 명령 — ${cmd.command}`,
+      });
+      setBusy(false);
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({
+          top: scrollRef.current?.scrollHeight ?? 0,
+          behavior: "smooth",
+        });
+      });
+      return;
+    }
+
     const intentResult = await classifyIntent(text);
     const intent = intentResult.intent;
 

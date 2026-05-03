@@ -38,6 +38,7 @@
 import { cosineSimilarity, embed, getEmbeddingStatus, toFloat32 } from "@/lib/embedding";
 
 import { bm25Score, computeCorpusStats, tokenize } from "./bm25";
+import { resolveAlias } from "./dictionary";
 import { getLearnedSnapshot } from "./store";
 import { extractTopic } from "./topic";
 import type { LearnedResponse } from "./types";
@@ -138,18 +139,23 @@ function rrfScore(scoredList: Scored[]): Map<string, number> {
 }
 
 export async function matchLearnedResponse(input: string): Promise<LearnedResponse | null> {
-  const target = normalize(input);
+  // V6A: alias 변환 진입. Custom Dictionary 비어있으면 즉시 input 반환 (cost 0).
+  // "두쫀쿠 어때?" → "두바이 쫀득쿠키 어때?" 변환 후 매칭. 변환 실패 시
+  // 원래 input 사용 — alias 등록 안 된 텍스트는 그대로.
+  const resolved = await resolveAlias(input);
+  const target = normalize(resolved);
   if (!target) return null;
   const all = getLearnedSnapshot();
   if (all.length === 0) return null;
 
-  const scored = await scoreAll(input, all);
+  const scored = await scoreAll(resolved, all);
   const passing = scored.filter(passesEvidenceGate);
 
   if (import.meta.env.DEV) {
     const top = [...scored].sort((a, b) => b.bm25 + b.embed - (a.bm25 + a.embed))[0];
     console.log("[hybrid-match]", {
       query: input,
+      resolved: resolved !== input ? resolved : undefined,
       passing: passing.length,
       total: all.length,
       topBm25: top ? Number(top.bm25.toFixed(3)) : 0,
@@ -164,7 +170,7 @@ export async function matchLearnedResponse(input: string): Promise<LearnedRespon
 
   // V4.1 topic 우선. query topic 박힘 + 같은 topic 통과 entry 있으면 그 안
   // 에서 가장 풍부한 (response 길이 최대) 1개. 없으면 RRF 1위.
-  const queryTopic = extractTopic(input);
+  const queryTopic = extractTopic(resolved);
   if (queryTopic) {
     const sameTopic = passing.filter((s) => s.entry.topic === queryTopic);
     if (sameTopic.length > 0) {
