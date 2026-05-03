@@ -25,10 +25,13 @@
 //   5. topic 일치 entry 가 통과 set 에 있으면 그 안에서 가장 풍부한 (response
 //      길이 최대) 1개. 없으면 RRF 점수 가장 높은 1개.
 //
-// 임계값 (V5 cold-start 보수적):
-//   BM25_MIN = 1.0       — 최소 1개 IDF-weighted term 일치
+// 임계값 (V5.1 한국어 intent 보강 — 2026-05-03):
+//   BM25_MIN = 1.5       — 최소 IDF-weighted term 일치 강도. 1.0 → 1.5 로 상향
+//                          (한국어 stopword 통과 후에도 약한 overlap 차단).
 //   EMBED_BACKING = 0.5  — 같은 의미 영역에 박혀있다는 약한 신호
-//   STRICT = 0.85        — 토큰 0 일 때 단독 통과 가능한 매우 높은 의미 매칭
+//   STRICT = 0.90        — 토큰 0 일 때 단독 통과 가능한 매우 높은 의미 매칭.
+//                          0.85 → 0.90 으로 상향 (cross-lingual 너그러움
+//                          0.78-0.85 박힘 — 0.90 이면 진짜 paraphrase 만 통과).
 //
 // 매칭 미스 → null → routes/index.tsx 가 cloud (Stage 3) 로 흘림. 정직.
 
@@ -39,9 +42,9 @@ import { getLearnedSnapshot } from "./store";
 import { extractTopic } from "./topic";
 import type { LearnedResponse } from "./types";
 
-const BM25_MIN = 1.0;
+const BM25_MIN = 1.5;
 const EMBED_BACKING = 0.5;
-const STRICT_EMBED = 0.85;
+const STRICT_EMBED = 0.9;
 const RRF_K = 60;
 
 function normalize(s: string): string {

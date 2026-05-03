@@ -158,6 +158,198 @@ const ENGLISH_STOPWORDS = new Set<string>([
   "such",
 ]);
 
+// V5.1 Korean stopword (2026-05-03). 영어 110+ stopword 박은 후 한국어 leak
+// 이 그대로 남음 — Tei 진단 (브라우저 검증):
+//   "술을 너무 많이 마셔서 힘들어" → "성적이 떨어져서 속상하겠다" (false positive)
+//     원인: "너무" + 감정 단어 공통 → BM25 점수 ↑
+//   "숙취 해소에 좋은거 알려줘" → "양자역학…" (false positive)
+//     원인: "알려줘" 공통 → BM25 점수 ↑
+// 같은 진단의 후속 — 영어 stopword 110+ 같은 처리가 한국어에 부족했음.
+//
+// 채택 기준 — 발화 안에서 의미 운반력이 약한 단어:
+//   1) 정도 부사 (강도 표현) — 의미 X, 톤 modifier
+//   2) 형용사 stem — 평가어 (의미 약 형용사)
+//   3) 의미 약 동사 — 요청 형식어 (실제 동사 의미는 X)
+//   4) 의문사 — 정보 요청 신호 (주제 X)
+//   5) 관계어 / 연결어 — 문장 연결 기능
+//   6) 의존명사 / 형식명사 — 단독으론 의미 X
+//   7) 어미 — 종결 / 연결 morpheme 잔여
+//   8) 감탄사 / 응대어 — 대화 윤활
+//
+// "주제 단어" 는 박지 X — "양자역학" / "숙취" / "성적" / "음식" 등은 발화의
+// 진짜 의미 신호. 이런 단어가 매칭에서 살아있어야 단일 모드가 작동.
+const KOREAN_STOPWORD_WORDS = new Set<string>([
+  // 1) 정도 부사
+  "너무",
+  "많이",
+  "좀",
+  "조금",
+  "더",
+  "덜",
+  "매우",
+  "진짜",
+  "정말",
+  "엄청",
+  "아주",
+  "굉장",
+  "상당",
+  "약간",
+  "살짝",
+  "그냥",
+  "막",
+  "워낙",
+  "되게",
+  "꽤",
+  "참",
+  // 2) 형용사 stem (의미 약 형용사)
+  "힘들",
+  "좋을",
+  "어떨",
+  "어때",
+  "좋은",
+  "나쁜",
+  "맛있",
+  "싫은",
+  "쉬운",
+  "어려운",
+  "빠른",
+  "느린",
+  "큰",
+  "작은",
+  "새로운",
+  "괜찮",
+  "괜찮은",
+  "이상",
+  "별로",
+  // 3) 의미 약 동사 (요청형 / 보조동사)
+  "알려",
+  "보여",
+  "가르쳐",
+  "해줘",
+  "줘",
+  "봐",
+  "가",
+  "와",
+  "해",
+  "하",
+  "되",
+  "있",
+  "없",
+  "같",
+  "보",
+  "받",
+  "주",
+  "할까",
+  "할게",
+  "할래",
+  "해야",
+  // 4) 의문사
+  "뭐",
+  "무엇",
+  "어떻게",
+  "어떤",
+  "왜",
+  "어디",
+  "언제",
+  "누가",
+  "누구",
+  "어느",
+  "얼마",
+  "몇",
+  "뭐가",
+  "뭘",
+  // 5) 관계어 / 연결어
+  "때문",
+  "위해",
+  "위한",
+  "같은",
+  "처럼",
+  "만큼",
+  "보다",
+  "까지",
+  "부터",
+  "마저",
+  "조차",
+  "라도",
+  "마다",
+  "또는",
+  "혹은",
+  "그런",
+  "이런",
+  "저런",
+  // 6) 의존명사 / 형식명사
+  "거",
+  "것",
+  "게",
+  "걸",
+  "데",
+  "수",
+  "적",
+  "줄",
+  "척",
+  "양",
+  "통",
+  "참",
+  "동안",
+  "사이",
+  // 7) 어미 / 활용형 잔여
+  "인데",
+  "했어",
+  "했는데",
+  "거든",
+  "던데",
+  "잖아",
+  "네요",
+  "군요",
+  "어요",
+  "았어",
+  "였어",
+  "였던",
+  "했던",
+  "했지",
+  "이야",
+  "이지",
+  "구나",
+  "구만",
+  // 8) 감탄사 / 응대어
+  "아",
+  "어",
+  "음",
+  "그래",
+  "응",
+  "네",
+  "아니",
+  "어머",
+  "와",
+  "헐",
+  "아이고",
+  "그럼",
+]);
+
+// 빠른 bigram-level filter set. KOREAN_STOPWORD_WORDS 의 길이 ≥ 2 stopword
+// 의 모든 bigram 을 박음. tokenize 의 bigram 출력에서 이 set 박힌 토큰
+// 제외. 활용형 흡수 효과 — "힘들어" → bigrams ["힘들","들어"] 중 "힘들"
+// (stopword bigram) 만 제거. "힘드네" → ["힘드","드네"] 는 "힘드" 가
+// 박혀있지 않아 그대로 — 활용형마다 stopword 명시가 필요 X.
+const KOREAN_STOPWORD_BIGRAMS = new Set<string>();
+for (const sw of KOREAN_STOPWORD_WORDS) {
+  if (sw.length < 2) continue;
+  for (let i = 0; i < sw.length - 1; i++) {
+    KOREAN_STOPWORD_BIGRAMS.add(sw.slice(i, i + 2));
+  }
+}
+
+// V5.1 verbal connective bigram noise — 활용형 안에서 자주 등장하는 morpheme
+// 경계 bigram. 의미 단어 X, 작은 corpus 에서 IDF 가 높게 박혀 매칭 잡음
+// 박힘. 진단:
+//   "마음이 힘들어" entry 와 "술을 마셔서 힘들어" query 가 "들어" bigram
+//   (힘+들+어 의 들|어 boundary) 1개로 BM25 ≈ 2.5 — 1.5 게이트 통과 →
+//   false positive. "들어" 제거 → 0 → 정직 차단.
+//
+// 채택 기준 — 두 자리에서 자주 등장 + 의미 운반력 X:
+const KOREAN_VERBAL_BIGRAMS = ["들어", "어서", "아서", "져서", "었어", "었던"];
+for (const bg of KOREAN_VERBAL_BIGRAMS) KOREAN_STOPWORD_BIGRAMS.add(bg);
+
 // 문자 클래스 판정. Unicode property escapes 가 ESBuild 에서 안전 사용 가능.
 function isLatin(ch: string): boolean {
   return /[A-Za-z0-9]/.test(ch);
@@ -208,8 +400,21 @@ export function tokenize(text: string): string[] {
       // "want" 같은 stopword 둘 다 노이즈 토큰 (false positive 의 주요 원인).
       // "go"/"ai" 같은 2-char 단어는 demo 시연 시 손실 미미.
       if (buf.length >= 3 && !ENGLISH_STOPWORDS.has(buf)) tokens.push(buf);
+    } else if (bufScript === "ko") {
+      // V5.1 Korean: 두 단계 stopword 필터.
+      //   word-level: whitespace-separated word 가 stopword 면 통째로 skip.
+      //               "너무" / "알려" 같은 단독 등장 차단.
+      //   bigram-level: 활용형 ("힘들어" → ["힘들","들어"]) 중 stopword bigram
+      //                 ("힘들") 만 제거. 비stopword bigram ("들어") 은 보존.
+      if (KOREAN_STOPWORD_WORDS.has(buf)) {
+        // skip 통째로
+      } else {
+        for (const bg of bigrams(buf)) {
+          if (!KOREAN_STOPWORD_BIGRAMS.has(bg)) tokens.push(bg);
+        }
+      }
     } else {
-      // Korean / Japanese / CJK: bigram
+      // Japanese / CJK: bigram (stopword 처리 미박음 — 시연 범위 X)
       tokens.push(...bigrams(buf));
     }
     buf = "";
