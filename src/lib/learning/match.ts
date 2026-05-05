@@ -138,24 +138,25 @@ function rrfScore(scoredList: Scored[]): Map<string, number> {
   return rrf;
 }
 
-export async function matchLearnedResponse(input: string): Promise<LearnedResponse | null> {
-  // V6A: alias 변환 진입. Custom Dictionary 비어있으면 즉시 input 반환 (cost 0).
-  // "두쫀쿠 어때?" → "두바이 쫀득쿠키 어때?" 변환 후 매칭. 변환 실패 시
-  // 원래 input 사용 — alias 등록 안 된 텍스트는 그대로.
-  const resolved = await resolveAlias(input);
-  const target = normalize(resolved);
+// V6A 핵심 매칭. 단일 query 에 대해 BM25 + embedding + RRF + topic 우선
+// 박은 결과 1 entry 또는 null. matchLearnedResponse 가 (alias 변환 시)
+// 두 번 호출하기 위해 분리.
+async function matchOnce(
+  query: string,
+  all: LearnedResponse[],
+  attempt: "primary" | "fallback" = "primary",
+): Promise<LearnedResponse | null> {
+  const target = normalize(query);
   if (!target) return null;
-  const all = getLearnedSnapshot();
-  if (all.length === 0) return null;
 
-  const scored = await scoreAll(resolved, all);
+  const scored = await scoreAll(query, all);
   const passing = scored.filter(passesEvidenceGate);
 
   if (import.meta.env.DEV) {
     const top = [...scored].sort((a, b) => b.bm25 + b.embed - (a.bm25 + a.embed))[0];
     console.log("[hybrid-match]", {
-      query: input,
-      resolved: resolved !== input ? resolved : undefined,
+      query,
+      attempt,
       passing: passing.length,
       total: all.length,
       topBm25: top ? Number(top.bm25.toFixed(3)) : 0,
@@ -165,12 +166,11 @@ export async function matchLearnedResponse(input: string): Promise<LearnedRespon
 
   if (passing.length === 0) return null;
 
-  // RRF 점수 — passing set 안에서.
   const rrf = rrfScore(passing);
 
   // V4.1 topic 우선. query topic 박힘 + 같은 topic 통과 entry 있으면 그 안
   // 에서 가장 풍부한 (response 길이 최대) 1개. 없으면 RRF 1위.
-  const queryTopic = extractTopic(resolved);
+  const queryTopic = extractTopic(query);
   if (queryTopic) {
     const sameTopic = passing.filter((s) => s.entry.topic === queryTopic);
     if (sameTopic.length > 0) {
@@ -186,11 +186,42 @@ export async function matchLearnedResponse(input: string): Promise<LearnedRespon
     }
   }
 
-  // RRF 1위.
   const sortedByRrf = [...passing].sort(
     (a, b) => (rrf.get(b.entry.id) ?? 0) - (rrf.get(a.entry.id) ?? 0),
   );
   return sortedByRrf[0].entry;
+}
+
+export async function matchLearnedResponse(input: string): Promise<LearnedResponse | null> {
+  if (!normalize(input)) return null;
+  const all = getLearnedSnapshot();
+  if (all.length === 0) return null;
+
+  // V6A: alias 변환 진입. Custom Dictionary 비어있으면 즉시 input 반환 (cost 0).
+  // "두쫀쿠 어때?" → "두바이 쫀득쿠키 어때?" 변환 후 매칭.
+  const resolved = await resolveAlias(input);
+
+  // V6A fix (2026-05-05): alias 변환 누수 보강.
+  //   문제: 사용자가 alias 등록 *전* 에 "두쫀쿠" 로 cloud 호출한 적 있으면
+  //         entry.userInput = "두쫀쿠" 로 박힘. 이후 alias 등록 → 다음
+  //         "두쫀쿠" 입력 시 resolved="두바이 쫀득쿠키" 로 매칭 시도하지만
+  //         entry 토큰은 "두쫀쿠" 의 bigram → BM25 = 0 → null → 또 cloud →
+  //         새 entry (userInput="두쫀쿠") 또 박힘. Local 학습 누적 X
+  //         (DOTS 정체성 약화).
+  //
+  //   해결: 변환 발생 시 두 번 매칭 시도.
+  //         1차: resolved 형태 ("두바이 쫀득쿠키") — 그 형태로 박힌 entry 우선
+  //         2차: 원본 input 형태 ("두쫀쿠") — alias 등록 전 박힌 entry 흡수
+  //         둘 다 미스 → null → cloud (정직).
+  //
+  //   변환 X (resolved === input) → 한 번만 시도 (기존 흐름).
+  if (resolved !== input) {
+    const primary = await matchOnce(resolved, all, "primary");
+    if (primary) return primary;
+    return matchOnce(input, all, "fallback");
+  }
+
+  return matchOnce(input, all, "primary");
 }
 
 // V5 verify-gate 헤드리스용. 점수 분포를 외부에서 살피기 위한 export.
