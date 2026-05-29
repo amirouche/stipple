@@ -31,3 +31,16 @@ export {
   subscribeDictionary,
   clearDictionary,
 } from "./dictionary";
+// Phase M0 선호 표현 인지 + 저장.
+export type { PreferenceResult } from "./preference";
+export { parsePreference } from "./preference";
+export type { PreferenceEntry } from "./preferences-store";
+export {
+  hydratePreferencesStore,
+  addPreference,
+  removePreference,
+  listPreferences,
+  listByType,
+  subscribePreferencesStore,
+  clearPreferences,
+} from "./preferences-store";

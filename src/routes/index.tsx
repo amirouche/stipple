@@ -47,6 +47,7 @@ import { topicParticle } from "@/lib/text/clean-noun";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import {
   addAlias,
+  addPreference,
   buildTopicSummary,
   extractTopic,
   incrementUsedCount,
@@ -54,6 +55,7 @@ import {
   matchLearnedResponse,
   matchLearnedTopicGroup,
   parseCommand,
+  parsePreference,
   rateLearned,
   removeAlias,
   saveLearned,
@@ -238,6 +240,49 @@ function ChatPage() {
         provider: "none",
         latencyMs: Date.now() - startTime,
         reason: `학습 명령 — ${cmd.command}`,
+      });
+      setBusy(false);
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({
+          top: scrollRef.current?.scrollHeight ?? 0,
+          behavior: "smooth",
+        });
+      });
+      return;
+    }
+
+    // ---- Stage 0.5 (Phase M0): 선호 표현 ("X 좋아해" / "X 싫어해").
+    // 매처 / 라우팅 / LLM 모두 skip — 사용자 자신에 대한 사실을 메모에 박는
+    // 행위. Cost 0. Tei 발견 ("나는 매운 음식을 좋아해" → Cooking Pack 매칭)
+    // 차단의 핵심. parsePreference 가 null 반환 = 일반 입력 → 기존 흐름.
+    const pref = parsePreference(text);
+    if (pref) {
+      const userId = crypto.randomUUID();
+      const asstId = crypto.randomUUID();
+      const entry = addPreference(pref.type, pref.subject);
+      const verb = pref.type === "like" ? "좋아하는" : "싫어하는";
+      const body = `알겠어. ${pref.subject} ${verb} 거 기억할게.`;
+      appendMessage(thread.id, { id: userId, role: "user", text });
+      renameThreadIfDefault(thread.id, text);
+      appendMessage(thread.id, {
+        id: asstId,
+        role: "assistant",
+        route: "local",
+        state: "found_local",
+        reason: "",
+        packName: "학습됨 · 선호 저장",
+        pending: false,
+        text: body,
+        provider: "learned",
+      });
+      addDemoTrace({
+        input: text,
+        intent: "casual",
+        route: "local",
+        externalCall: false,
+        provider: "none",
+        latencyMs: Date.now() - startTime,
+        reason: `선호 저장 — ${pref.type}:${entry.subject}`,
       });
       setBusy(false);
       requestAnimationFrame(() => {
