@@ -129,6 +129,52 @@ function findMarkerMessageId(messages: ThreadMsg[], dispatchTurnCount: number): 
   return undefined;
 }
 
+// Phase M0-4 옵션 풍부화: dislike filter 응답 측면 baek 측면 craving facet 옵션
+// 세트 측면 동일 박음. show-recipe (만들기) + 3 cloud llm-call (시켜먹기 / 비슷한
+// 메뉴 / cloud로 찾기). cloud 옵션 측면 dispatchLLMCall 측면 진입 → M0-5
+// USER_CONTEXT 자동 inject 박혀 dislike 측면 cloud 응답 측면 자동 반영.
+//
+// 단일 filtered: show-recipe 1 + cloud 3 = 4 버튼.
+// 다중 filtered: per-entry show-recipe (chooser) + cloud 3.
+type CookingMatch = { kind: "cooking-recipe"; recipe: PackRecipe; score: number };
+function buildFilteredOptions(
+  cookingFiltered: CookingMatch[],
+  requestedNoun?: string,
+): SuggestionOption[] {
+  if (cookingFiltered.length === 0) return [];
+  const head = cookingFiltered[0];
+  const headTitle = head.recipe.title;
+  const entryOpts: SuggestionOption[] = cookingFiltered.slice(0, 4).map((m) => ({
+    kind: "show-recipe",
+    label: cookingFiltered.length === 1 ? "만들기" : m.recipe.title,
+    recipeId: m.recipe.id,
+    action_area: "만들기",
+  }));
+  const cloudOpts: SuggestionOption[] = [
+    {
+      kind: "llm-call",
+      label: "시켜먹기",
+      prompt: `근처 한식당이나 배달앱에서 ${headTitle} 잘하는 곳 후보 3곳만 추천해줘. 한국어로 짧게.`,
+      action_area: "시켜먹기",
+    },
+    {
+      kind: "llm-call",
+      label: "비슷한 메뉴",
+      prompt: `${headTitle}랑 비슷한 결인데 살짝 다른 한식 추천해줘. 1-2개만.`,
+      action_area: "찾기",
+    },
+    {
+      kind: "llm-call",
+      label: "cloud로 찾기",
+      prompt: requestedNoun
+        ? `${requestedNoun}에 대해 알려줘. 한국어로 짧고 정확하게.`
+        : `${headTitle}랑 비슷한 다른 음식 추천해줘. 한국어로 짧고 정확하게.`,
+      action_area: "찾기",
+    },
+  ];
+  return [...entryOpts, ...cloudOpts];
+}
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -631,12 +677,10 @@ function ChatPage() {
           titles.length === 1
             ? `${dislikeLabel} 싫어한다고 했어서 — ${titles[0]} 어때?`
             : `${dislikeLabel} 싫어한다고 했어서 — ${titles.join(" 또는 ")} 중에 어떤 거?`;
-        const options = cookingFiltered.slice(0, 4).map<SuggestionOption>((m) => ({
-          kind: "show-recipe",
-          label: m.recipe.title,
-          recipeId: m.recipe.id,
-          action_area: "만들기",
-        }));
+        // 옵션 풍부화: baek-style 4-button set (만들기 + 시켜먹기 + 비슷한 메뉴 +
+        // cloud로 찾기). cloud 옵션 클릭 시 dispatchLLMCall → M0-5 USER_CONTEXT
+        // 자동 inject → dislike 측면 cloud 응답 자동 반영.
+        const options = buildFilteredOptions(cookingFiltered, matched.requestedNoun);
         appendMessage(thread.id, { id: userId, role: "user", text });
         renameThreadIfDefault(thread.id, text);
         appendMessage(thread.id, {
@@ -713,12 +757,11 @@ function ChatPage() {
             titles.length === 1
               ? `${dislikeLabel} 싫어한다고 했어서 — 비슷한 건 ${titles[0]} 어때?`
               : `${dislikeLabel} 싫어한다고 했어서 — 비슷한 건 ${titles.join(" 또는 ")} 중에 어떤 거?`;
-          const options = expandedCooking.slice(0, 4).map<SuggestionOption>((m) => ({
-            kind: "show-recipe",
-            label: m.recipe.title,
-            recipeId: m.recipe.id,
-            action_area: "만들기",
-          }));
+          // 옵션 풍부화 (M0-4 fix branch): baek-style 4-button set. cloud 옵션
+          // 측면 dispatchLLMCall → M0-5 USER_CONTEXT 측면 dislike 측면 자동
+          // 반영. requestedNoun (사용자 원본 의도 — 예 "된장찌개") 박혀 박혀
+          // 박힌 경우 "cloud로 찾기" prompt 측면 활용.
+          const options = buildFilteredOptions(expandedCooking, matched.requestedNoun);
           appendMessage(thread.id, { id: userId, role: "user", text });
           renameThreadIfDefault(thread.id, text);
           appendMessage(thread.id, {
