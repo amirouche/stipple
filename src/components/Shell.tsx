@@ -57,10 +57,18 @@ export function Shell({ children }: { children?: ReactNode }) {
   const sidebarInner = (
     <>
       <div className="px-5 pt-6 pb-4">
-        <Link to="/" className="flex items-baseline gap-2" onClick={() => setMobileOpen(false)}>
-          <span className="text-[20px] font-semibold tracking-tight">DOTS</span>
-          <span className="font-mono text-[10px] text-ink-soft uppercase tracking-[0.18em]">
-            v0.1
+        <Link to="/" className="block" onClick={() => setMobileOpen(false)}>
+          {/* "O" 자리 = bg-current rounded-full — 알파벳 색 그대로 채워진 점. */}
+          <div className="flex items-baseline gap-0.5">
+            <span className="text-[36px] font-bold leading-none">D</span>
+            <span
+              aria-hidden="true"
+              className="inline-block w-[14px] h-[14px] rounded-full bg-current self-center mb-1"
+            />
+            <span className="text-[36px] font-bold leading-none">TS</span>
+          </div>
+          <span className="mt-1.5 block text-[14px] font-semibold text-ink-soft">
+            AI Layer Core System v1
           </span>
         </Link>
       </div>
