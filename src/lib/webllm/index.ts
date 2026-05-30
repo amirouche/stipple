@@ -8,17 +8,44 @@
 // 모델 다운로드(1.8GB)까지 확장된 것.
 // 자동 다운로드 절대 X. 자동 추론 절대 X.
 //
-// downloadAndInitModel() and generateWithWebLLM() are the only entry
-// points; both are thin wrappers around engine.ts that also keep the
-// status store in sync so the UI sees state transitions.
+// ──── 안정성 정정 (2026-05-30) — WebLLM 측면 facade 측면 stub. ─────────────
+//
+// 배경: @mlc-ai/web-llm 측면 CommonJS 측면 runtime require 측면 박음 → TanStack
+// Start SSR 측면 ES module 측면 "require is not defined" 측면 throw → SSR 실패
+// → client-only fallback → preference store 측면 module instance 측면 분리 측면
+// hydrate timing 흐트러짐 (M0-4 dislike filter 측면 실 send() 측면 작동 X 의 원인).
+//
+// 조치:
+//   1. 정적 @mlc-ai/web-llm import 측면 제거 — engine.ts / worker.ts 측면 unreachable
+//      → tree-shaken → SSR bundle 측면 박혀 X.
+//   2. downloadAndInitModel / generateWithWebLLM 측면 stub — 호출 시 throw.
+//   3. status 측면 idle 측면 박혀 → 모든 caller (intent.ts / dispatch.ts) 측면
+//      이미 `isWebLLMReady()` 게이트 측면 박혀 자동 fallback (rule classify /
+//      Gemini) 측면 진입.
+//
+// 재활성 측면 (Phase L / M5 Max):
+//   1. 아래 commented import 두 줄 (`@mlc-ai/web-llm` + `./engine`) 측면 복원.
+//   2. downloadAndInitModel + generateWithWebLLM 측면 stub body 측면 git history
+//      측면 본체 측면 복원 (commit 측면 이 파일 측면 이 정정 직전 측면 박혀 있음).
+//   3. `__root.tsx` 측면 `tryAutoReloadWebLLM()` 호출 측면 복원.
+//   4. `vite.config.ts` 측면 `ssr.external` 측면 박힌 `@mlc-ai/web-llm` 측면 제거
+//      (또는 유지 — SSR 측면 import X 면 무해).
+// ───────────────────────────────────────────────────────────────────────────
 
-import { hasModelInCache, type ChatCompletionMessageParam } from "@mlc-ai/web-llm";
+// import { hasModelInCache, type ChatCompletionMessageParam } from "@mlc-ai/web-llm";
+// import { createWebLLMEngine, generateChat } from "./engine";
 
-import { getPreferences } from "@/lib/preferences";
 import { checkWebGPUSupport } from "./compat";
-import { createWebLLMEngine, generateChat } from "./engine";
-import { getEngineRef, getStatusSnapshot, setEngineRef, setStatus } from "./store";
+import { getStatusSnapshot, setStatus } from "./store";
 import type { WebLLMModelId } from "./types";
+
+// stub 측면 @mlc-ai/web-llm 측면 import 측면 X 박혀 — 메시지 shape 측면 동일.
+// 재활성 시 `import type { ChatCompletionMessageParam } from "@mlc-ai/web-llm"`
+// 측면 복원.
+type ChatCompletionMessageParam = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 
 // Last successfully-loaded model id, persisted to localStorage so a fresh
 // page load can auto-reload from IndexedDB cache without re-downloading
@@ -54,55 +81,17 @@ export { AVAILABLE_MODELS, DEFAULT_MODEL } from "./config";
 export { useWebLLMStatus, getStatusSnapshot as getWebLLMStatus } from "./store";
 export { checkWebGPUSupport } from "./compat";
 
-// Trigger the 1.8GB+ download + GPU compile for `modelId`. MUST be called
-// from a user click — never on mount, never speculatively.
-//
-// Idempotent for the same model: calling it again while state === "ready"
-// with the same modelId is a no-op so a careless re-render can't restart
-// a 2-minute compile.
+// Stub — 정정 (2026-05-30): @mlc-ai/web-llm 측면 SSR 측면 throw 차단용. 호출
+// 시 throw → 사용자 측면 다운로드 버튼 측면 에러 측면 박혀 가시화. UI 측면 button
+// 측면 사라진 측면 X 박혀 박혀 박혀 박힘 — 사용자 측면 명시 시도 측면 X 박힘.
+// 재활성 절차 측면 파일 상단 주석 참조.
 export async function downloadAndInitModel(modelId: WebLLMModelId): Promise<void> {
-  const current = getStatusSnapshot();
-  if (current.state === "ready" && current.model === modelId) return;
-  if (current.state === "loading") return; // download already in flight
-
-  const support = await checkWebGPUSupport();
-  if (!support.supported) {
-    setStatus(() => ({
-      state: "error",
-      error: support.reason ?? "WebGPU 미지원",
-    }));
-    throw new Error(support.reason ?? "WebGPU 미지원");
-  }
-
-  setStatus(() => ({ state: "loading", model: modelId }));
-
-  try {
-    const engine = await createWebLLMEngine(modelId, (report) => {
-      setStatus(() => ({
-        state: "loading",
-        model: modelId,
-        progress: {
-          progress: report.progress,
-          timeElapsed: report.timeElapsed,
-          text: report.text,
-        },
-      }));
-    });
-    setEngineRef(engine);
-    setStatus(() => ({ state: "ready", model: modelId }));
-    // Remember this model for the next page load. tryAutoReloadWebLLM()
-    // reads this back and skips the download dialog when the cache is
-    // still warm.
-    persistLastModel(modelId);
-  } catch (e) {
-    setEngineRef(null);
-    setStatus(() => ({
-      state: "error",
-      model: modelId,
-      error: String(e),
-    }));
-    throw e;
-  }
+  setStatus(() => ({
+    state: "error",
+    model: modelId,
+    error: "WebLLM 측면 일시 비활성화 (정정: SSR 호환 작업 진행 중)",
+  }));
+  throw new Error("WebLLM 측면 비활성. 재활성 측면 src/lib/webllm/index.ts 상단 주석 참조.");
 }
 
 // Quietly reload the last-used model on page mount when the cache is
@@ -126,40 +115,22 @@ export async function tryAutoReloadWebLLM(): Promise<void> {
   return;
 }
 
-// Get the active engine, or null if no model has been loaded. Callers
-// should treat null as "WebLLM unavailable" and route to whatever
-// fallback (Gemini, error, …) is appropriate for the call site —
-// 3단계에서 Gemini fallback이 이 위에 얹힘.
+// Stub — getEngine 측면 항상 null. caller (없음 — 현재 X) 측면 호출 시 fallback.
 export function getEngine() {
-  return getEngineRef();
+  return null;
 }
 
-// Run a chat completion against the active engine. Throws if no model
-// is loaded — the caller is expected to have checked status === "ready"
-// or to handle the throw as a fallback signal.
+// Stub — 정정 (2026-05-30): generate 호출 시 throw. caller (intent.ts /
+// dispatch.ts) 측면 `isWebLLMReady()` (= status.state === "ready") 측면
+// 게이트 측면 박혀 — status 측면 항상 "idle" 박혀 generate 측면 진입 X.
+// 만약 caller 측면 게이트 측면 우회 측면 호출 시 throw → fallback path.
 export async function generateWithWebLLM(
-  messages: ChatCompletionMessageParam[],
-  onToken: (delta: string, sofar: string) => void = () => {},
+  _messages: ChatCompletionMessageParam[],
+  _onToken: (delta: string, sofar: string) => void = () => {},
 ): Promise<string> {
-  const engine = getEngineRef();
-  if (!engine) {
-    throw new Error("WebLLM 엔진이 로드되지 않았어. 먼저 다운로드해야 해.");
-  }
-  const prev = getStatusSnapshot();
-  setStatus((s) => ({ ...s, state: "generating" }));
-  try {
-    const text = await generateChat(engine, messages, onToken);
-    // Restore the prior model id when returning to ready — `prev` is the
-    // snapshot from before we flipped to "generating", so the model field
-    // is intact.
-    setStatus(() => ({ state: "ready", model: prev.model }));
-    return text;
-  } catch (e) {
-    setStatus(() => ({
-      state: "error",
-      model: prev.model,
-      error: String(e),
-    }));
-    throw e;
-  }
+  void _messages;
+  void _onToken;
+  throw new Error(
+    "WebLLM 측면 비활성 (SSR 호환 작업 중). 재활성 측면 src/lib/webllm/index.ts 상단 주석 참조.",
+  );
 }
