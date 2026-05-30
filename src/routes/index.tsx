@@ -52,10 +52,14 @@ import {
   extractTopic,
   incrementUsedCount,
   listAliases,
+  listByType,
+  listPreferences,
   matchLearnedResponse,
   matchLearnedTopicGroup,
+  parseCalculation,
   parseCommand,
   parsePreference,
+  parseRecall,
   rateLearned,
   removeAlias,
   saveLearned,
@@ -251,6 +255,47 @@ function ChatPage() {
       return;
     }
 
+    // ---- Stage 0.4 (Phase Calc): 계산기 ("1+1" / "sqrt(16)" / "5 km to m").
+    // mathjs 측면 Local 평가 — Cloud 호출 0. parseCalculation 이 두 단계
+    // 게이트 (Hangul 차단 + operator/function 시그널 + mathjs try/catch) 로
+    // 일반 발화를 모두 reject 하므로 회귀 위험 0.
+    const calc = parseCalculation(text);
+    if (calc) {
+      const userId = crypto.randomUUID();
+      const asstId = crypto.randomUUID();
+      const body = `${calc.expression} = ${calc.result}`;
+      appendMessage(thread.id, { id: userId, role: "user", text });
+      renameThreadIfDefault(thread.id, text);
+      appendMessage(thread.id, {
+        id: asstId,
+        role: "assistant",
+        route: "local",
+        state: "found_local",
+        reason: "",
+        packName: "학습됨 · Calculator Pack",
+        pending: false,
+        text: body,
+        provider: "learned",
+      });
+      addDemoTrace({
+        input: text,
+        intent: "casual",
+        route: "local",
+        externalCall: false,
+        provider: "none",
+        latencyMs: Date.now() - startTime,
+        reason: `Calculator — ${calc.expression} = ${calc.result}`,
+      });
+      setBusy(false);
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({
+          top: scrollRef.current?.scrollHeight ?? 0,
+          behavior: "smooth",
+        });
+      });
+      return;
+    }
+
     // ---- Stage 0.5 (Phase M0): 선호 표현 ("X 좋아해" / "X 싫어해").
     // 매처 / 라우팅 / LLM 모두 skip — 사용자 자신에 대한 사실을 메모에 박는
     // 행위. Cost 0. Tei 발견 ("나는 매운 음식을 좋아해" → Cooking Pack 매칭)
@@ -283,6 +328,73 @@ function ChatPage() {
         provider: "none",
         latencyMs: Date.now() - startTime,
         reason: `선호 저장 — ${pref.type}:${entry.subject}`,
+      });
+      setBusy(false);
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({
+          top: scrollRef.current?.scrollHeight ?? 0,
+          behavior: "smooth",
+        });
+      });
+      return;
+    }
+
+    // ---- Stage 0.6 (Phase M0-3): 선호 회상 ("내가 뭘 좋아해?" / "내 선호 알려줘").
+    // 저장된 선호는 store 에 이미 박혀 있어 Cloud (Gemini) 호출 불필요.
+    // Tei 발견 — recall 질문이 Stage 3 까지 흘러가 외부 API 비용 발생.
+    // 인지 시 listPreferences/listByType 으로 즉시 응답. Cost 0.
+    const recall = parseRecall(text);
+    if (recall) {
+      const userId = crypto.randomUUID();
+      const asstId = crypto.randomUUID();
+      const likes = recall.type === "dislike" ? [] : listByType("like");
+      const dislikes = recall.type === "like" ? [] : listByType("dislike");
+      const likeSubjects = likes.map((e) => e.subject);
+      const dislikeSubjects = dislikes.map((e) => e.subject);
+      let body: string;
+      if (recall.type === "all") {
+        if (likeSubjects.length === 0 && dislikeSubjects.length === 0) {
+          body = "아직 너의 선호 정보가 없어. 알려줘.";
+        } else if (likeSubjects.length > 0 && dislikeSubjects.length > 0) {
+          body = `${likeSubjects.join(", ")} 좋아하고 ${dislikeSubjects.join(", ")} 싫어해.`;
+        } else if (likeSubjects.length > 0) {
+          body = `${likeSubjects.join(", ")} 좋아해.`;
+        } else {
+          body = `${dislikeSubjects.join(", ")} 싫어해.`;
+        }
+      } else if (recall.type === "like") {
+        body =
+          likeSubjects.length === 0
+            ? "아직 좋아하는 거 알려준 게 없어. 알려줘."
+            : `${likeSubjects.join(", ")} 좋아해.`;
+      } else {
+        body =
+          dislikeSubjects.length === 0
+            ? "아직 싫어하는 거 알려준 게 없어. 알려줘."
+            : `${dislikeSubjects.join(", ")} 싫어해.`;
+      }
+      appendMessage(thread.id, { id: userId, role: "user", text });
+      renameThreadIfDefault(thread.id, text);
+      appendMessage(thread.id, {
+        id: asstId,
+        role: "assistant",
+        route: "local",
+        state: "found_local",
+        reason: "",
+        packName: "학습됨 · 선호 회상",
+        pending: false,
+        text: body,
+        provider: "learned",
+      });
+      const totalCount = listPreferences().length;
+      addDemoTrace({
+        input: text,
+        intent: "casual",
+        route: "local",
+        externalCall: false,
+        provider: "none",
+        latencyMs: Date.now() - startTime,
+        reason: `선호 회상 — type=${recall.type}, 저장된 선호 ${totalCount}개`,
       });
       setBusy(false);
       requestAnimationFrame(() => {

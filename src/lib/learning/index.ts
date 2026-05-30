@@ -31,9 +31,12 @@ export {
   subscribeDictionary,
   clearDictionary,
 } from "./dictionary";
-// Phase M0 선호 표현 인지 + 저장.
-export type { PreferenceResult } from "./preference";
-export { parsePreference } from "./preference";
+// Phase M0 선호 표현 인지 + 저장 + 회상.
+export type { PreferenceResult, RecallResult } from "./preference";
+export { parsePreference, parseRecall } from "./preference";
+// Phase Calc Calculator Pack — mathjs 측면 Local 계산.
+export type { CalcResult } from "./calculator";
+export { parseCalculation } from "./calculator";
 export type { PreferenceEntry } from "./preferences-store";
 export {
   hydratePreferencesStore,
