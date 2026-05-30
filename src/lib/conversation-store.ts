@@ -73,6 +73,18 @@ export type LastPackEntry = {
   setAt: number;
 };
 
+// Multi-match phase: chooser 가 박힌 turn 의 카테고리 클러스터. 사용자가
+// "다른 레시피" 류 follow-up 박으면 servedRecipeIds 에 없는 다른 cluster
+// entry 로 rotate — Cloud 호출 회피. 모든 cluster entry 가 served 되면
+// 다음 turn 에서 자연 fall-through.
+export type MultiMatchCluster = {
+  packId: string;
+  packName: string;
+  recipeIds: string[];
+  term: string; // "김치찌개"
+  setAt: number;
+};
+
 export type Thread = {
   id: string;
   title: string;
@@ -81,6 +93,10 @@ export type Thread = {
   lastPackId?: string;
   // V5.0 Phase B2: 직전 pack 매칭 컨텍스트 (rejection 검출용).
   lastPackEntry?: LastPackEntry;
+  // Multi-match phase: 직전 카테고리 chooser 의 cluster (다음 turn "다른"
+  // rotation 용). chooser 응답 직후 set, rotation 한 번 발생 + 모든 entry served
+  // 되면 자동 clear.
+  multiMatchCluster?: MultiMatchCluster;
   // recipes already shown in this thread, so follow-ups can rotate to a new one
   servedRecipeIds: string[];
   messages: ThreadMsg[];
@@ -213,6 +229,12 @@ export function setThreadPack(threadId: string, packId?: string) {
 // exact hit 또는 매칭 실패 / 다른 stage 진입 시 undefined로 clear.
 export function setThreadLastEntry(threadId: string, entry: LastPackEntry | undefined) {
   updateThread(threadId, () => ({ lastPackEntry: entry }));
+}
+
+// Multi-match cluster setter. chooser 응답 직후 set, 모든 entry 가 served 되거나
+// 사용자가 다른 발화로 넘어가면 undefined.
+export function setThreadCluster(threadId: string, cluster: MultiMatchCluster | undefined) {
+  updateThread(threadId, () => ({ multiMatchCluster: cluster }));
 }
 
 export function markRecipeServed(threadId: string, recipeId: string) {

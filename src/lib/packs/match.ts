@@ -172,6 +172,12 @@ export type PackMatchResult = {
   // V5.0 lite Phase B3b: alias로 매칭된 경우 매칭된 alias 텍스트. confidence는
   // exact 또는 partial 그대로 유지. trace.reason 형식만 분기 (exact-alias).
   matchedAlias?: string;
+  // Multi-match phase: 같은 카테고리 (예: 김치찌개) 의 peer entry 가 2 이상
+  // 동시 매칭됐을 때 set. 값 = 사용자가 입력한 공통 키 (alias 또는 noun) — 빌더
+  // 가 "{key} 종류 N가지 있어. 어떤 거 볼래?" 응답 + 카드 선택 박음.
+  // matches.length > 1 이고 이 필드가 set 된 경우만 chooser. fuzzy 다중
+  // matches 는 이 필드 미박힘 → 기존 "비슷한 레시피 N개" 텍스트 유지.
+  multiMatchKey?: string;
 };
 
 function lower(s: string): string {
@@ -604,30 +610,77 @@ function isExactBoundary(text: string, name: string): boolean {
 // V5.0 Phase B3b: entryName 외에 aliases도 동일 priority로 검사. 가장 긴
 // 매칭 텍스트 (entry name 또는 alias) 우선. entry name과 alias가 동률이면
 // entry name 우선 (정렬 안정성). alias로 매칭되면 matchedAlias 기록.
+//
+// matchedText — 빌더가 peer 검출 + 카테고리 키로 쓰는 텍스트 (alias 또는 entryName).
 function findExactEntry(
   text: string,
   entries: EntryRef[],
-): { entry: EntryRef; matchedAlias?: string } | null {
-  let best: { entry: EntryRef; matchedAlias?: string; matchLength: number } | null = null;
+): { entry: EntryRef; matchedAlias?: string; matchedText: string } | null {
+  let best: {
+    entry: EntryRef;
+    matchedAlias?: string;
+    matchedText: string;
+    matchLength: number;
+  } | null = null;
 
   for (const e of entries) {
     // entry name 먼저 — 동률 시 우선.
     if (isExactBoundary(text, e.entryName)) {
       if (!best || e.entryName.length > best.matchLength) {
-        best = { entry: e, matchLength: e.entryName.length };
+        best = { entry: e, matchedText: e.entryName, matchLength: e.entryName.length };
       }
     }
     for (const alias of e.aliases) {
       if (isExactBoundary(text, alias)) {
         if (!best || alias.length > best.matchLength) {
-          best = { entry: e, matchedAlias: alias, matchLength: alias.length };
+          best = {
+            entry: e,
+            matchedAlias: alias,
+            matchedText: alias,
+            matchLength: alias.length,
+          };
         }
       }
     }
   }
 
   if (!best) return null;
-  return { entry: best.entry, matchedAlias: best.matchedAlias };
+  return { entry: best.entry, matchedAlias: best.matchedAlias, matchedText: best.matchedText };
+}
+
+// Multi-match 측면: best 가 잡힌 뒤 같은 pack 안의 다른 entry 중 matchedText 를
+// 자기 entryName 또는 alias 의 substring 으로 포함하는 entry 들. 동시에 best 가
+// 갖는 unique token (entryName + alias 중 어떤 peer 도 안 가지는 것) 이 query 에
+// 등장하면 specificity 신호로 보고 peers 를 떨굼 — 사용자가 best 를 명시했을
+// 가능성 ↑.
+function findPeers(
+  query: string,
+  best: EntryRef,
+  matchedText: string,
+  allEntries: EntryRef[],
+): EntryRef[] {
+  const needle = matchedText.toLowerCase();
+  const peerCandidates = allEntries.filter((e) => {
+    if (e === best) return false;
+    if (e.pack.id !== best.pack.id) return false; // 같은 pack 내에서만 묶음
+    if (e.entryName.toLowerCase().includes(needle)) return true;
+    return e.aliases.some((a) => a.toLowerCase().includes(needle));
+  });
+  if (peerCandidates.length === 0) return [];
+  const q = query.toLowerCase();
+  // best 의 모든 token (entryName + aliases) 중 어떤 peer 도 안 가진 것 = unique.
+  const bestTokens = [best.entryName, ...best.aliases];
+  const uniqueTokens = bestTokens.filter((t) => {
+    const tLower = t.toLowerCase();
+    return !peerCandidates.some(
+      (p) =>
+        p.entryName.toLowerCase().includes(tLower) ||
+        p.aliases.some((a) => a.toLowerCase().includes(tLower)),
+    );
+  });
+  // query 가 unique token 을 박고 있으면 user 가 best 를 명시 → peers 떨굼.
+  const hasUniqueSignal = uniqueTokens.some((t) => q.includes(t.toLowerCase()));
+  return hasUniqueSignal ? [] : peerCandidates;
 }
 
 // Step 2: 추출된 명사가 entry.title 또는 entry.aliases의 substring이면 partial.
@@ -636,30 +689,52 @@ function findExactEntry(
 // V5.0 Phase B3b: aliases도 검사. matchedAlias 기록 — partial-alias는 trace.
 // reason 형식 변경 X (현 spec 대로 [match=partial] 그대로). matchedAlias는
 // PackMatchResult에 박혀 향후 builder/B3c가 사용 가능.
+//
+// Multi-match: 같은 noun 으로 hit 한 모든 entry 를 모음. best (longest title) 가
+// head 로, 나머지는 peers — 빌더가 chooser 박음.
 function findPartialEntry(
   nouns: string[],
   entries: EntryRef[],
-): { entry: EntryRef; matchedNoun: string; matchedAlias?: string } | null {
+): {
+  entry: EntryRef;
+  matchedNoun: string;
+  matchedAlias?: string;
+  peers: EntryRef[];
+} | null {
   const sortedNouns = [...nouns].sort((a, b) => b.length - a.length);
   for (const noun of sortedNouns) {
-    let best: { entry: EntryRef; matchLength: number; matchedAlias?: string } | null = null;
+    const needle = noun.toLowerCase();
+    type Hit = { entry: EntryRef; matchLength: number; matchedAlias?: string };
+    const hits: Hit[] = [];
     for (const e of entries) {
-      if (e.entryName.toLowerCase().includes(noun.toLowerCase())) {
-        if (!best || e.entryName.length > best.matchLength) {
-          best = { entry: e, matchLength: e.entryName.length };
-        }
+      let entryHit: Hit | null = null;
+      if (e.entryName.toLowerCase().includes(needle)) {
+        entryHit = { entry: e, matchLength: e.entryName.length };
       }
       for (const alias of e.aliases) {
-        if (alias.toLowerCase().includes(noun.toLowerCase())) {
-          if (!best || alias.length > best.matchLength) {
-            best = { entry: e, matchLength: alias.length, matchedAlias: alias };
+        if (alias.toLowerCase().includes(needle)) {
+          if (!entryHit || alias.length > entryHit.matchLength) {
+            entryHit = { entry: e, matchLength: alias.length, matchedAlias: alias };
           }
         }
       }
+      if (entryHit) hits.push(entryHit);
     }
-    if (best) {
-      return { entry: best.entry, matchedNoun: noun, matchedAlias: best.matchedAlias };
-    }
+    if (hits.length === 0) continue;
+    hits.sort((a, b) => b.matchLength - a.matchLength);
+    const head = hits[0];
+    // peers — head 와 같은 pack 의 다른 hit 들. 다른 pack 이 peer 가 되면 chooser
+    // 가 cross-pack 으로 박힘 — 의도와 어긋남.
+    const peers = hits
+      .slice(1)
+      .filter((h) => h.entry.pack.id === head.entry.pack.id)
+      .map((h) => h.entry);
+    return {
+      entry: head.entry,
+      matchedNoun: noun,
+      matchedAlias: head.matchedAlias,
+      peers,
+    };
   }
   return null;
 }
@@ -689,17 +764,22 @@ export async function matchPackContent(
   // alias로 매칭되면 result.matchedAlias 박혀 trace.reason 분기에 사용.
   const exactHit = findExactEntry(query, allEntries);
   if (exactHit) {
+    const peers = findPeers(query, exactHit.entry, exactHit.matchedText, allEntries);
     const head = exactHit.entry.match;
-    const facet = pickFacetFromMatch(head, intent, facetOpts);
+    const multi = peers.length > 0;
+    // 카테고리 chooser 가 켜진 turn 은 entry 고유 facet 응답 (definition 등) 을
+    // 흘리지 않음 — 사용자가 선택지 박을 자리.
+    const facet = multi ? undefined : pickFacetFromMatch(head, intent, facetOpts);
     return {
       pack: exactHit.entry.pack,
       isActivePack: exactHit.entry.pack.id === activePackId,
       packLevel: false,
-      matches: [head],
+      matches: multi ? [head, ...peers.map((p) => p.match)] : [head],
       facet,
       topEntryName: exactHit.entry.entryName,
       confidence: "exact",
       matchedAlias: exactHit.matchedAlias,
+      multiMatchKey: multi ? exactHit.matchedText : undefined,
     };
   }
 
@@ -708,16 +788,18 @@ export async function matchPackContent(
   const partialHit = findPartialEntry(nouns, allEntries);
   if (partialHit) {
     const head = partialHit.entry.match;
-    const facet = pickFacetFromMatch(head, intent, facetOpts);
+    const multi = partialHit.peers.length > 0;
+    const facet = multi ? undefined : pickFacetFromMatch(head, intent, facetOpts);
     return {
       pack: partialHit.entry.pack,
       isActivePack: partialHit.entry.pack.id === activePackId,
       packLevel: false,
-      matches: [head],
+      matches: multi ? [head, ...partialHit.peers.map((p) => p.match)] : [head],
       facet,
       topEntryName: partialHit.entry.entryName,
       confidence: "partial",
       matchedAlias: partialHit.matchedAlias,
+      multiMatchKey: multi ? partialHit.matchedNoun : undefined,
     };
   }
 
@@ -993,10 +1075,28 @@ function buildCookingSuggestion(
   text: string;
   options: SuggestionOption[];
 } {
-  const { pack, packLevel, matches, facet, confidence, requestedNoun } = result;
+  const { pack, packLevel, matches, facet, confidence, requestedNoun, multiMatchKey } = result;
   const head = matches[0];
   if (head?.kind !== "cooking-recipe") {
     return { text: `${pack.name}에서 비슷한 게 보여.`, options: [] };
+  }
+
+  // 카테고리 chooser — "김치찌개" 같은 공통 키로 ≥ 2 entry 가 동시 매칭됐을 때.
+  // facet 응답 / "다른 음식" fallback 없이 entry 선택 카드 만으로 응답.
+  if (multiMatchKey && matches.length > 1) {
+    const chooserOptions = matches
+      .filter((m): m is ContentMatch & { kind: "cooking-recipe" } => m.kind === "cooking-recipe")
+      .slice(0, 4)
+      .map<SuggestionOption>((m) => ({
+        kind: "show-recipe",
+        label: m.recipe.title,
+        recipeId: m.recipe.id,
+        action_area: "만들기",
+      }));
+    return {
+      text: `${multiMatchKey} 종류 ${chooserOptions.length}가지 있어. 어떤 거 볼래?`,
+      options: chooserOptions,
+    };
   }
 
   let text: string;

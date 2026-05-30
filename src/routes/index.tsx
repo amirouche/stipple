@@ -20,6 +20,7 @@ import {
   markRecipeServed,
   patchMessage,
   renameThreadIfDefault,
+  setThreadCluster,
   setThreadLastEntry,
   setThreadPack,
   useConversationStore,
@@ -489,6 +490,60 @@ function ChatPage() {
       setThreadLastEntry(thread.id, undefined);
     }
 
+    // ---- Multi-match cluster rotation: chooser 이후 사용자가 "다른 레시피"
+    // 류 follow-up 박으면 같은 cluster 의 served 안 박힌 entry 로 즉시 rotate.
+    // Cloud 호출 회피. cluster 안의 모든 entry 가 served 면 fall-through —
+    // 일반 follow-up 흐름이 처리.
+    if (thread.multiMatchCluster && hasFollowUpIntent(text)) {
+      const cluster = thread.multiMatchCluster;
+      const unservedId = cluster.recipeIds.find((id) => !thread.servedRecipeIds.includes(id));
+      if (unservedId) {
+        const recipe = getCookingRecipe(unservedId);
+        if (recipe) {
+          const userId = crypto.randomUUID();
+          const asstId = crypto.randomUUID();
+          appendMessage(thread.id, { id: userId, role: "user", text });
+          renameThreadIfDefault(thread.id, text);
+          appendMessage(thread.id, {
+            id: asstId,
+            role: "assistant",
+            route: "local",
+            state: "found_local",
+            reason: "",
+            packName: cluster.packName,
+            pending: false,
+            text: `${cluster.term} 다른 레시피 — ${recipe.title}.`,
+            recipes: [recipe],
+          });
+          markRecipeServed(thread.id, recipe.id);
+          // cluster 의 마지막 entry 까지 rotate 한 turn 이면 clear.
+          const stillUnserved = cluster.recipeIds.filter(
+            (id) => id !== recipe.id && !thread.servedRecipeIds.includes(id),
+          );
+          if (stillUnserved.length === 0) setThreadCluster(thread.id, undefined);
+          addDemoTrace({
+            input: text,
+            intent,
+            route: "pack",
+            externalCall: false,
+            provider: "pack",
+            packId: cluster.packId,
+            packName: cluster.packName,
+            latencyMs: Date.now() - startTime,
+            reason: `cluster rotation — ${cluster.term} / ${recipe.title}`,
+          });
+          setBusy(false);
+          requestAnimationFrame(() => {
+            scrollRef.current?.scrollTo({
+              top: scrollRef.current?.scrollHeight ?? 0,
+              behavior: "smooth",
+            });
+          });
+          return;
+        }
+      }
+    }
+
     // ---- On-device match: runs FIRST, before the engine and before any
     // pending bubble. The whole "이 기기 안에서" promise breaks if the user
     // sees a fallback line ("이건 안에서는 안 잡혀…") flash before the
@@ -650,6 +705,24 @@ function ChatPage() {
         });
       } else {
         setThreadLastEntry(thread.id, undefined);
+      }
+      // Multi-match phase: chooser 박힌 turn 의 cluster 저장 → 다음 turn 의
+      // "다른 레시피" 류 follow-up 이 servedRecipeIds 안 박힌 sibling 으로
+      // rotation. 일반 single hit 은 cluster clear (다른 카테고리 발화 시
+      // 잔존 방지).
+      if (matched.multiMatchKey && matched.matches.length > 1) {
+        const recipeIds = matched.matches
+          .filter((m): m is typeof m & { kind: "cooking-recipe" } => m.kind === "cooking-recipe")
+          .map((m) => m.recipe.id);
+        setThreadCluster(thread.id, {
+          packId: matched.pack.id,
+          packName: matched.pack.name,
+          recipeIds,
+          term: matched.multiMatchKey,
+          setAt: Date.now(),
+        });
+      } else {
+        setThreadCluster(thread.id, undefined);
       }
       setBusy(false);
       scrollDown();
