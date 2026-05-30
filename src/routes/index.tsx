@@ -50,7 +50,9 @@ import {
   addAlias,
   addPreference,
   buildTopicSummary,
+  collectPackMatches,
   extractTopic,
+  filterMatchesByDislikes,
   incrementUsedCount,
   listAliases,
   listByType,
@@ -608,6 +610,169 @@ function ChatPage() {
     const matched = skipMatchStep
       ? null
       : await matchPackContent(text, eligibleInstalled, undefined, intent);
+
+    // ---- Phase M0-4: dislike memory filter. matched.matches 측면 사용자
+    // dislike subject 박힌 entry 떨굼. removed + filtered 둘 다 비비어 있으면
+    // 짧은 prefix 응답 — builder 우회 (사용자가 명시한 dislike 를 정직 반영).
+    // filtered 빈 박힘 (모두 dislike hit) 또는 removed 빈 박힘 (영향 0) 일
+    // 때는 원본 흐름 그대로.
+    if (matched) {
+      const filterResult = filterMatchesByDislikes(matched.matches);
+      const filterApplied = filterResult.removed.length > 0 && filterResult.filtered.length > 0;
+      if (filterApplied) {
+        const userId = crypto.randomUUID();
+        const asstId = crypto.randomUUID();
+        const dislikeLabel = filterResult.dislikes.join(", ");
+        const cookingFiltered = filterResult.filtered.filter(
+          (m): m is typeof m & { kind: "cooking-recipe" } => m.kind === "cooking-recipe",
+        );
+        const titles = cookingFiltered.map((m) => m.recipe.title);
+        const body =
+          titles.length === 1
+            ? `${dislikeLabel} 싫어한다고 했어서 — ${titles[0]} 어때?`
+            : `${dislikeLabel} 싫어한다고 했어서 — ${titles.join(" 또는 ")} 중에 어떤 거?`;
+        const options = cookingFiltered.slice(0, 4).map<SuggestionOption>((m) => ({
+          kind: "show-recipe",
+          label: m.recipe.title,
+          recipeId: m.recipe.id,
+          action_area: "만들기",
+        }));
+        appendMessage(thread.id, { id: userId, role: "user", text });
+        renameThreadIfDefault(thread.id, text);
+        appendMessage(thread.id, {
+          id: asstId,
+          role: "assistant",
+          route: "local",
+          state: "found_local",
+          reason: "",
+          packName: matched.pack.name,
+          pending: false,
+          text: body,
+          suggestion: {
+            matchedPackName: matched.pack.name,
+            matchedPackId: matched.pack.id,
+            options,
+            badge: "local",
+          },
+        });
+        if (import.meta.env.DEV) {
+          console.log("[setThreadPack]", {
+            from: "stage1-dislike-filter",
+            packId: matched.pack.id,
+            intent,
+          });
+        }
+        setThreadPack(thread.id, matched.pack.id);
+        setThreadLastEntry(thread.id, undefined);
+        // cluster 박음 — filtered 가 다수면 rotation 활성.
+        if (cookingFiltered.length > 1) {
+          setThreadCluster(thread.id, {
+            packId: matched.pack.id,
+            packName: matched.pack.name,
+            recipeIds: cookingFiltered.map((m) => m.recipe.id),
+            term: matched.multiMatchKey ?? dislikeLabel,
+            setAt: Date.now(),
+          });
+        } else {
+          setThreadCluster(thread.id, undefined);
+        }
+        const removedNames = filterResult.removed
+          .filter((m): m is typeof m & { kind: "cooking-recipe" } => m.kind === "cooking-recipe")
+          .map((m) => m.recipe.title)
+          .join(",");
+        addDemoTrace({
+          input: text,
+          intent,
+          route: "pack",
+          externalCall: false,
+          provider: "pack",
+          packId: matched.pack.id,
+          packName: matched.pack.name,
+          latencyMs: Date.now() - startTime,
+          reason: `dislike-filter: dislikes=[${filterResult.dislikes.join(",")}] removed=[${removedNames}] kept=${titles.length}`,
+        });
+        setBusy(false);
+        scrollDown();
+        return;
+      }
+      // ---- Phase M0-4 fix: matched 후보 가 모두 dislike 떨굼 (filtered=0,
+      // removed > 0) 일 때 — pack 의 전체 entry 측면 측면 다시 박아 살아남는
+      // alternative 측면 "비슷한 건" 응답. 기존 buildCookingSuggestion 의 fuzzy
+      // fallback ("비슷한 건 백종원식") 이 dislike 무시한 채 박히던 회귀 차단.
+      if (filterResult.removed.length > 0 && filterResult.filtered.length === 0) {
+        const expanded = filterMatchesByDislikes(collectPackMatches(matched.pack));
+        const expandedCooking = expanded.filtered.filter(
+          (m): m is typeof m & { kind: "cooking-recipe" } => m.kind === "cooking-recipe",
+        );
+        if (expandedCooking.length > 0) {
+          const userId = crypto.randomUUID();
+          const asstId = crypto.randomUUID();
+          const dislikeLabel = expanded.dislikes.join(", ");
+          const titles = expandedCooking.map((m) => m.recipe.title);
+          const body =
+            titles.length === 1
+              ? `${dislikeLabel} 싫어한다고 했어서 — 비슷한 건 ${titles[0]} 어때?`
+              : `${dislikeLabel} 싫어한다고 했어서 — 비슷한 건 ${titles.join(" 또는 ")} 중에 어떤 거?`;
+          const options = expandedCooking.slice(0, 4).map<SuggestionOption>((m) => ({
+            kind: "show-recipe",
+            label: m.recipe.title,
+            recipeId: m.recipe.id,
+            action_area: "만들기",
+          }));
+          appendMessage(thread.id, { id: userId, role: "user", text });
+          renameThreadIfDefault(thread.id, text);
+          appendMessage(thread.id, {
+            id: asstId,
+            role: "assistant",
+            route: "local",
+            state: "found_local",
+            reason: "",
+            packName: matched.pack.name,
+            pending: false,
+            text: body,
+            suggestion: {
+              matchedPackName: matched.pack.name,
+              matchedPackId: matched.pack.id,
+              options,
+              badge: "local",
+            },
+          });
+          setThreadPack(thread.id, matched.pack.id);
+          setThreadLastEntry(thread.id, undefined);
+          if (expandedCooking.length > 1) {
+            setThreadCluster(thread.id, {
+              packId: matched.pack.id,
+              packName: matched.pack.name,
+              recipeIds: expandedCooking.map((m) => m.recipe.id),
+              term: matched.requestedNoun ?? "비슷한 건",
+              setAt: Date.now(),
+            });
+          } else {
+            setThreadCluster(thread.id, undefined);
+          }
+          const removedNames = filterResult.removed
+            .filter((m): m is typeof m & { kind: "cooking-recipe" } => m.kind === "cooking-recipe")
+            .map((m) => m.recipe.title)
+            .join(",");
+          addDemoTrace({
+            input: text,
+            intent,
+            route: "pack",
+            externalCall: false,
+            provider: "pack",
+            packId: matched.pack.id,
+            packName: matched.pack.name,
+            latencyMs: Date.now() - startTime,
+            reason: `dislike-filter-fallback: matched-removed=[${removedNames}] expanded-kept=${titles.length} (requestedNoun=${matched.requestedNoun ?? "(none)"})`,
+          });
+          setBusy(false);
+          scrollDown();
+          return;
+        }
+        // expanded 도 모두 떨굼 (pack 전체 dislike hit) → 원본 흐름 fallback.
+      }
+    }
+
     // V5.0 Phase I-6: 사용자 발화의 negation-aware 행동 영역 인지. 매칭이 hit
     // 한 시점에 박음 — buildPackSuggestion 이 동일 영역 카드 drop. matchPackContent
     // 본체 흐름 변경 X. excludedActions 빈 배열이면 builder 가 기존 옵션 그대로.

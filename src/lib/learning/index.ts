@@ -37,6 +37,9 @@ export { parsePreference, parseRecall } from "./preference";
 // Phase Calc Calculator Pack — mathjs 측면 Local 계산.
 export type { CalcResult } from "./calculator";
 export { parseCalculation } from "./calculator";
+// Phase M0-4 Pack 매칭 + Memory 필터 통합.
+export type { DislikeFilterResult } from "./preference-filter";
+export { collectPackMatches, filterMatchesByDislikes } from "./preference-filter";
 export type { PreferenceEntry } from "./preferences-store";
 export {
   hydratePreferencesStore,
