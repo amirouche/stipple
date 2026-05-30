@@ -25,7 +25,11 @@ export interface RecallResult {
 }
 
 // 주어 prefix (있으면 떼어냄). 한국어 1인칭 변형 위주.
-const SUBJECT_PREFIXES = ["나는 ", "난 ", "저는 ", "전 ", "내가 ", "제가 "];
+// 공백 자유 — Tei 브라우저 검증 발견 (2026-05-29): "난매운걸 좋아해" 같이 prefix
+// 직후 공백 없이 박힌 입력이 strip 미동작 → subject 가 "난매운걸" 로 박혔었음.
+// SUBJECT_PREFIX_RE 의 `\s*` 로 0개 이상 공백 흡수해 "난 매운걸" / "난매운걸"
+// 둘 다 prefix 떨굼.
+const SUBJECT_PREFIX_RE = /^(?:나는|난|저는|전|내가|제가)\s*/;
 
 // dislike 패턴이 like 패턴보다 먼저 검사돼야 함 — "안 좋아해" 가 "좋아해" 정규식
 // 에 먼저 잡히면 like 로 오분류. 순서 의존.
@@ -46,10 +50,7 @@ function stripTrailingParticle(s: string): string {
 }
 
 function stripSubjectPrefix(s: string): string {
-  for (const p of SUBJECT_PREFIXES) {
-    if (s.startsWith(p)) return s.slice(p.length);
-  }
-  return s;
+  return s.replace(SUBJECT_PREFIX_RE, "");
 }
 
 export function parsePreference(input: string): PreferenceResult | null {
