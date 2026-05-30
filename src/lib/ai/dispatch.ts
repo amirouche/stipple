@@ -24,6 +24,8 @@ import type { Intent } from "@/lib/packs/intent";
 // 정리. callWebLLM / isWebLLMReady 같은 dead helper도 미래 재활성화를
 // 위해 그대로 둔다 (ESLint unused-vars off — CLAUDE.md 룰).
 import { generateWithWebLLM, getWebLLMStatus, type WebLLMStatus } from "@/lib/webllm";
+// Phase M0-5: Memory Activation — cloud 호출 시 사용자 선호 컨텍스트 inject.
+import { listPreferences } from "@/lib/learning";
 import { askGemini, type GeminiHistoryTurn } from "./gemini";
 // V5.0 Phase P-2: 통일 system prompt 빌더. compose + dispatch 2-layer 통합.
 import { buildSystemPrompt } from "./system-prompt";
@@ -124,6 +126,15 @@ export async function dispatchLLMCall(
   // (CLAUDE.md: @typescript-eslint/no-unused-vars off — 별도 disable 불필요.)
   onToken: (delta: string, sofar: string) => void = () => {},
 ): Promise<DispatchResult> {
+  // Phase M0-5: Memory Activation — 사용자 선호 (like/dislike) 측면 system
+  // prompt 측면 USER_CONTEXT 박혀 cloud 응답 측면 자동 반영. Local Pack 필터
+  // (preference-filter.ts) 측면 별도 — 본 분기 측면 cloud 만 적용.
+  const prefs = listPreferences();
+  const userPreferences = {
+    likes: prefs.filter((p) => p.type === "like").map((p) => p.subject),
+    dislikes: prefs.filter((p) => p.type === "dislike").map((p) => p.subject),
+  };
+
   // V5.0 Phase P-2: 단일 출구. compose의 buildSystemPrompt 결과를 받아 다시
   // prepend하던 2-layer 구조 제거. caller가 input.systemPrompt를 박으면
   // callerSystemPrompt 섹션으로 통합 (study LLM TUTOR_PERSONA, suggestion
@@ -137,6 +148,7 @@ export async function dispatchLLMCall(
     callerSystemPrompt: input.systemPrompt,
     summary: input.summary,
     cloudMode: input.cloudMode,
+    userPreferences,
   });
   const history = trimHistory(input.history);
 

@@ -59,6 +59,14 @@ export type SystemPromptContext = {
   // DOTS_CHARTER (정직성 헌법) 는 유지되며, callerSystemPrompt가 가장 마지막에
   // 추가 — LLM이 응답 결정 직전에 보는 위치.
   callerSystemPrompt?: string;
+  // Phase M0-5: 사용자 선호 (Memory Activation). dispatcher 가 listPreferences()
+  // 측면 박은 결과를 likes / dislikes 측면 분리해 박음. 비어 박혀 있으면 USER_
+  // PREFERENCES 섹션 X. dislike 측면 강하게 ("절대 추천 금지"), like 측면 우선
+  // 반영. cloud 만 적용 (Local Pack 필터는 별도 — preference-filter.ts).
+  userPreferences?: {
+    likes: string[];
+    dislikes: string[];
+  };
 };
 
 // DOTS 정직성 헌법 + 페르소나. 모든 provider, 모든 caller, 모든 호출에서 동일.
@@ -208,6 +216,42 @@ function buildSummarySection(summary: ConversationSummary): string {
   ].join("\n");
 }
 
+// Phase M0-5: 사용자 선호 (USER_CONTEXT) — Memory Activation 의 cloud 적용 핵심.
+//
+// 배경: Local Pack 필터 (preference-filter.ts) 측면 이미 ingredients 측면 dislike
+// 박힌 entry 떨굼 ✓. 단 cloud (Gemini) 측면 호출 시 system prompt 측면 사용자
+// 선호 컨텍스트 박혀 X — Gemini 가 "닭발 어때?" 같은 응답 (닭발 = 고기 → 사용자
+// dislike "고기" 위반) 박는 회귀.
+//
+// 해결: dispatchLLMCall 측면 listPreferences() 박혀 likes / dislikes 측면 system
+// prompt 의 MEMORY_CONTEXT 와 CALLER_OVERRIDE 사이 박음. LLM 응답 결정 직전에
+// 노출 — caller persona 직전 위치 측면 강한 영향.
+//
+// 디시플린 문구:
+//   - dislike: "절대 추천 금지" (강함 — 모순 시 dislike 우선).
+//   - like: "우선 반영" (약함 — 강제 X).
+//   - 음식 도메인 측면 명시 ("싫어하는 재료가 들어간 메뉴는 추천 금지") — Gemini
+//     측면 "닭발", "삼겹살" 같은 dish 측면 dislike "고기" 측면 transitive 측면
+//     인지 박혀야.
+//
+// 빈 박힘 (likes + dislikes 둘 다 빈) 시 섹션 X — 토큰 절약 + 회귀 위험 0.
+function buildUserPreferencesSection(prefs: { likes: string[]; dislikes: string[] }): string {
+  const { likes, dislikes } = prefs;
+  if (likes.length === 0 && dislikes.length === 0) return "";
+  const lines = ["[USER_CONTEXT]"];
+  if (likes.length > 0) {
+    lines.push(`- 사용자가 좋아함: ${likes.join(", ")}`);
+  }
+  if (dislikes.length > 0) {
+    lines.push(`- 사용자가 싫어함: ${dislikes.join(", ")}`);
+  }
+  lines.push("[/USER_CONTEXT]");
+  lines.push(
+    "추천할 때 사용자가 싫어하는 것은 절대 포함하지 말고, 좋아하는 것을 우선 반영해. 음식이면 싫어하는 재료가 들어간 메뉴는 추천 금지.",
+  );
+  return lines.join("\n");
+}
+
 function buildMemoryContext(lookup: LookupResult): string {
   const lines: string[] = ["[사용자의 로컬 메모리 컨텍스트]"];
   const memTopics = lookup.memoryMatches
@@ -275,6 +319,14 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
   // 보는 컨텍스트.
   if (ctx.memory && ctx.memory.totalScore > 0) {
     sections.push(buildMemoryContext(ctx.memory));
+  }
+
+  // Phase M0-5: 사용자 선호 (USER_CONTEXT). MEMORY_CONTEXT 다음, CALLER_OVERRIDE
+  // 직전 — 응답 결정 측면 영향력 ↑ 위치. dislike "절대 추천 금지" / like "우선
+  // 반영". 비어 박혀 있으면 빈 string 반환 → push 측면 effective skip.
+  if (ctx.userPreferences) {
+    const userPrefSection = buildUserPreferencesSection(ctx.userPreferences);
+    if (userPrefSection) sections.push(userPrefSection);
   }
 
   // Caller override — 가장 마지막. study LLM TUTOR_PERSONA, suggestion onClick
