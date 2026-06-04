@@ -25,7 +25,7 @@ import type { Intent } from "@/lib/packs/intent";
 // 위해 그대로 둔다 (ESLint unused-vars off — CLAUDE.md 룰).
 import { generateWithWebLLM, getWebLLMStatus, type WebLLMStatus } from "@/lib/webllm";
 // Phase M0-5: Memory Activation — cloud 호출 시 사용자 선호 컨텍스트 inject.
-import { listPreferences } from "@/lib/learning";
+import { getLastSudokuPlay, listPreferences } from "@/lib/learning";
 import { askGemini, type GeminiHistoryTurn } from "./gemini";
 // V5.0 Phase P-2: 통일 system prompt 빌더. compose + dispatch 2-layer 통합.
 import { buildSystemPrompt } from "./system-prompt";
@@ -130,9 +130,19 @@ export async function dispatchLLMCall(
   // prompt 측면 USER_CONTEXT 박혀 cloud 응답 측면 자동 반영. Local Pack 필터
   // (preference-filter.ts) 측면 별도 — 본 분기 측면 cloud 만 적용.
   const prefs = listPreferences();
+  // Sudoku Pack 직전 결과 — 같은 USER_CONTEXT 슬롯에 한 줄로 inject. 채팅에서
+  // "스도쿠 어때?" 류 입력 시 LLM 이 이 줄을 보고 자연스럽게 회상.
+  const lastSudoku = getLastSudokuPlay();
   const userPreferences = {
     likes: prefs.filter((p) => p.type === "like").map((p) => p.subject),
     dislikes: prefs.filter((p) => p.type === "dislike").map((p) => p.subject),
+    sudokuLastPlay: lastSudoku
+      ? {
+          difficulty: lastSudoku.difficulty,
+          mistakes: lastSudoku.mistakes,
+          timeSeconds: lastSudoku.timeSeconds,
+        }
+      : undefined,
   };
 
   // V5.0 Phase P-2: 단일 출구. compose의 buildSystemPrompt 결과를 받아 다시

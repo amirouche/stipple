@@ -11,6 +11,7 @@ import {
   hydrateDictionary,
   hydrateLearned,
   hydratePreferencesStore,
+  hydrateSudokuStore,
   setupLearningDebug,
 } from "@/lib/learning";
 import { hydrateDemoTraces } from "@/lib/demo/trace";
@@ -71,6 +72,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
     hydrateLearned();
     hydrateDictionary();
     hydratePreferencesStore();
+    hydrateSudokuStore();
     hydrateDemoTraces();
     if (import.meta.env.DEV) setupLearningDebug();
     void hydrateMemoryStore().then(() => {

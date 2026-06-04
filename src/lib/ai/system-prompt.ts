@@ -66,6 +66,13 @@ export type SystemPromptContext = {
   userPreferences?: {
     likes: string[];
     dislikes: string[];
+    // Sudoku Pack — 직전 판 기록 (sudoku-store). 채팅이 사용자의 게임 실력을
+    // 인지하는 통로. 박혀 있으면 USER_CONTEXT 에 한 줄 추가.
+    sudokuLastPlay?: {
+      difficulty: string;
+      mistakes: number;
+      timeSeconds: number;
+    };
   };
 };
 
@@ -235,9 +242,13 @@ function buildSummarySection(summary: ConversationSummary): string {
 //     인지 박혀야.
 //
 // 빈 박힘 (likes + dislikes 둘 다 빈) 시 섹션 X — 토큰 절약 + 회귀 위험 0.
-function buildUserPreferencesSection(prefs: { likes: string[]; dislikes: string[] }): string {
-  const { likes, dislikes } = prefs;
-  if (likes.length === 0 && dislikes.length === 0) return "";
+function buildUserPreferencesSection(prefs: {
+  likes: string[];
+  dislikes: string[];
+  sudokuLastPlay?: { difficulty: string; mistakes: number; timeSeconds: number };
+}): string {
+  const { likes, dislikes, sudokuLastPlay } = prefs;
+  if (likes.length === 0 && dislikes.length === 0 && !sudokuLastPlay) return "";
   const lines = ["[USER_CONTEXT]"];
   if (likes.length > 0) {
     lines.push(`- 사용자가 좋아함: ${likes.join(", ")}`);
@@ -245,10 +256,18 @@ function buildUserPreferencesSection(prefs: { likes: string[]; dislikes: string[
   if (dislikes.length > 0) {
     lines.push(`- 사용자가 싫어함: ${dislikes.join(", ")}`);
   }
+  if (sudokuLastPlay) {
+    const minutes = Math.floor(sudokuLastPlay.timeSeconds / 60);
+    lines.push(
+      `- 최근 스도쿠 기록: ${sudokuLastPlay.difficulty} 난이도, 오답 ${sudokuLastPlay.mistakes}개, ${minutes}분`,
+    );
+  }
   lines.push("[/USER_CONTEXT]");
-  lines.push(
-    "추천할 때 사용자가 싫어하는 것은 절대 포함하지 말고, 좋아하는 것을 우선 반영해. 음식이면 싫어하는 재료가 들어간 메뉴는 추천 금지.",
-  );
+  if (likes.length > 0 || dislikes.length > 0) {
+    lines.push(
+      "추천할 때 사용자가 싫어하는 것은 절대 포함하지 말고, 좋아하는 것을 우선 반영해. 음식이면 싫어하는 재료가 들어간 메뉴는 추천 금지.",
+    );
+  }
   return lines.join("\n");
 }
 

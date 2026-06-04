@@ -120,10 +120,30 @@ export const PACKS: Pack[] = [
     excluded_domains: ["엔터테인먼트"],
   },
   {
+    id: "sudoku",
+    name: "Sudoku",
+    category: "Lifestyle",
+    installed: true,
+    short: "온디바이스 스도쿠 — 풀이 실력에 따라 난이도 자동 조정.",
+    behavior:
+      "전용 화면에서 9×9 보드를 풀고, 직전 판의 오답/시간을 기억해 다음 판 난이도를 한 단계씩 올리거나 내려.",
+    triggers: ["sudoku", "스도쿠", "퍼즐"],
+    voice: "퍼즐 코치",
+    tone: "짧고 담백 — 결과만 한 줄로",
+    systemPrompt: [
+      "지금 당신은 퍼즐 코치 모드입니다.",
+      "- 답변은 짧고 담백하게. 결과/감만 한 줄로.",
+      "- 사용자의 최근 스도쿠 기록(난이도·오답·시간)이 USER_CONTEXT에 박혀 있으면 자연스럽게 참조하세요.",
+    ].join("\n"),
+    folderRoute: "/sudoku",
+    domain: ["스도쿠", "퍼즐"],
+    excluded_domains: ["요리", "학습"],
+  },
+  {
     id: "morning-routine",
     name: "Morning Routine",
     category: "Lifestyle",
-    installed: true,
+    installed: false,
     short: "Local, fast answers for your daily rhythm.",
     behavior:
       "Handles weather, schedule, and reminders from on-device memory without going to the cloud.",

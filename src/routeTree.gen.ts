@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SudokuRouteImport } from './routes/sudoku'
 import { Route as StudyRouteImport } from './routes/study'
 import { Route as StoreRouteImport } from './routes/store'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -17,6 +18,11 @@ import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as DemoRouteImport } from './routes/demo'
 import { Route as IndexRouteImport } from './routes/index'
 
+const SudokuRoute = SudokuRouteImport.update({
+  id: '/sudoku',
+  path: '/sudoku',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StudyRoute = StudyRouteImport.update({
   id: '/study',
   path: '/study',
@@ -61,6 +67,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/store': typeof StoreRoute
   '/study': typeof StudyRoute
+  '/sudoku': typeof SudokuRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -70,6 +77,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/store': typeof StoreRoute
   '/study': typeof StudyRoute
+  '/sudoku': typeof SudokuRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -80,6 +88,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/store': typeof StoreRoute
   '/study': typeof StudyRoute
+  '/sudoku': typeof SudokuRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,8 +100,17 @@ export interface FileRouteTypes {
     | '/settings'
     | '/store'
     | '/study'
+    | '/sudoku'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/demo' | '/memory' | '/packs' | '/settings' | '/store' | '/study'
+  to:
+    | '/'
+    | '/demo'
+    | '/memory'
+    | '/packs'
+    | '/settings'
+    | '/store'
+    | '/study'
+    | '/sudoku'
   id:
     | '__root__'
     | '/'
@@ -102,6 +120,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/store'
     | '/study'
+    | '/sudoku'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -112,10 +131,18 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   StoreRoute: typeof StoreRoute
   StudyRoute: typeof StudyRoute
+  SudokuRoute: typeof SudokuRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sudoku': {
+      id: '/sudoku'
+      path: '/sudoku'
+      fullPath: '/sudoku'
+      preLoaderRoute: typeof SudokuRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/study': {
       id: '/study'
       path: '/study'
@@ -176,6 +203,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   StoreRoute: StoreRoute,
   StudyRoute: StudyRoute,
+  SudokuRoute: SudokuRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

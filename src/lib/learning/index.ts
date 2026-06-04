@@ -50,3 +50,13 @@ export {
   subscribePreferencesStore,
   clearPreferences,
 } from "./preferences-store";
+// Sudoku Pack — 직전 판 결과 영구 저장 (preferences-store 와 같은 패턴, 다른 키).
+export type { SudokuPlayEntry, SudokuDifficulty } from "./sudoku-store";
+export {
+  hydrateSudokuStore,
+  recordSudokuPlay,
+  listSudokuPlays,
+  getLastSudokuPlay,
+  clearSudokuPlays,
+  subscribeSudokuStore,
+} from "./sudoku-store";
