@@ -59,7 +59,28 @@ export function parseCalculation(input: string): CalcResult | null {
     // 변수 할당 ("x = 5") 도 식으로 받아 undefined 를 반환할 수 있음.
     if (value === undefined || value === null) return null;
     if (typeof value === "function") return null;
-    const result = format(value, { precision: 14 });
+    // mathjs format 기본 notation 은 "auto" — 지수 ≥ 5 또는 ≤ -3 인 number 를
+    // 지수표기 (9.273564e+6 / 5e-5) 로 떨군다. number 한정으로 toLocaleString
+    // 으로 우회. Unit / Fraction / BigNumber 는 기존 format 유지 — 그쪽은
+    // notation:'fixed' 강제 시 자릿수 폭주 / 단위 표시 손실 위험.
+    let result: string;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) {
+        result = String(value);
+      } else if (Number.isInteger(value)) {
+        result = value.toLocaleString("en-US", {
+          useGrouping: false,
+          maximumFractionDigits: 0,
+        });
+      } else {
+        result = value.toLocaleString("en-US", {
+          useGrouping: false,
+          maximumFractionDigits: 14,
+        });
+      }
+    } else {
+      result = format(value, { precision: 14 });
+    }
     return { expression: text, result };
   } catch {
     return null;
