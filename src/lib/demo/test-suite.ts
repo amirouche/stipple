@@ -323,7 +323,7 @@ export const TEST_SUITE: TestCase[] = [
     input: "오늘 집중 시간",
     expectedRoute: "cloud",
     expectedExternalCall: true,
-    description: "Focus Writer 후보 — 트리거 미설정",
+    description: "어느 팩에도 안 잡히는 입력 → cloud fallback 확인",
   },
   {
     id: "rout-4",
@@ -331,7 +331,7 @@ export const TEST_SUITE: TestCase[] = [
     input: "와인 추천해줘",
     expectedRoute: "cloud",
     expectedExternalCall: true,
-    description: "Wine Cellar 후보 — 트리거 미설정",
+    description: "어느 팩에도 안 잡히는 입력 → cloud fallback 확인",
   },
 
   // ── Repeat 4 (학습 캐시 효과 증명) ──────────────────────────────────

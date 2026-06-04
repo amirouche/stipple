@@ -49,10 +49,8 @@ const DEFAULTS: Preferences = {
   packOrder: [
     "cooking-essentials",
     "study-companion",
+    "sudoku",
     "morning-routine",
-    "focus-writer",
-    "wine-cellar",
-    "code-review",
   ],
   pitch: { enabled: false, categories: [] },
   llmProvider: "gemini-only",

@@ -25,7 +25,7 @@ export type StorePack = {
 export const STORE_PACKS: StorePack[] = [
   {
     id: "sat-english-5",
-    name: "SAT 영어 5문제",
+    name: "SAT 영어",
     category: "학습",
     short: "기본 독해 5문제로 SAT 영어 페이스를 잡아.",
     contentCount: "5문제",
@@ -36,7 +36,7 @@ export const STORE_PACKS: StorePack[] = [
   },
   {
     id: "toefl-speaking-10",
-    name: "TOEFL 스피킹 10문제",
+    name: "TOEFL 스피킹",
     category: "학습",
     short: "iBT 형식 그대로, 답안 자동 분석 포함.",
     contentCount: "10문제",
@@ -47,7 +47,7 @@ export const STORE_PACKS: StorePack[] = [
   },
   {
     id: "japanese-conversation-50",
-    name: "일본어 회화 50개",
+    name: "일본어 회화",
     category: "학습",
     short: "여행·일상·비즈니스 상황별 회화 50개.",
     contentCount: "50개 대화",
@@ -80,7 +80,7 @@ export const STORE_PACKS: StorePack[] = [
   },
   {
     id: "morning-stretch-5",
-    name: "5분 스트레칭 루틴",
+    name: "스트레칭 루틴",
     category: "라이프스타일",
     short: "아침에 5분, 저녁에 5분. 영상 없이 텍스트 가이드.",
     contentCount: "12 루틴",
@@ -124,7 +124,7 @@ export const STORE_PACKS: StorePack[] = [
   },
   {
     id: "indie-music-2026",
-    name: "2026 인디 뮤직 큐레이션",
+    name: "인디 뮤직 큐레이션",
     category: "엔터테인먼트",
     short: "월간 업데이트되는 한국 인디 신곡 모음.",
     contentCount: "월 30곡",

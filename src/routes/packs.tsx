@@ -17,23 +17,20 @@ export const Route = createFileRoute("/packs")({
   component: PacksPage,
 });
 
-const CATEGORIES = ["전체", "Cooking", "Education", "Lifestyle", "Work"] as const;
+const CATEGORIES = ["전체", "Game", "Education", "Lifestyle"] as const;
 
 const CATEGORY_KO: Record<Pack["category"], string> = {
-  Cooking: "요리",
-  Education: "공부",
-  Lifestyle: "생활",
-  Work: "일",
+  Game: "게임",
+  Education: "학습",
+  Lifestyle: "라이프",
 };
 
 // One-line "what does this change" — stronger than the long behavior copy.
 const BEHAVIOR_LINE: Record<string, string> = {
   "cooking-essentials": "요리 질문을 재료·순서·시간으로 바로 정리해줘.",
   "study-companion": "설명 대신 단계로 풀고, 막힌 지점을 먼저 물어봐.",
+  sudoku: "한 판 풀면 직전 결과 보고 다음 판 난이도를 한 단계 조정해.",
   "morning-routine": "오늘 일정·날씨를 기기 안에서 바로 답해.",
-  "focus-writer": "긴 글에서 더하기보다 빼는 쪽으로 제안해.",
-  "wine-cellar": "냉장고에 있는 걸 기준으로 페어링을 골라.",
-  "code-review": "팀 컨벤션을 로컬 팩으로 읽고 그 기준으로 봐.",
 };
 
 function PacksPage() {

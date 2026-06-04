@@ -137,7 +137,12 @@ function StoreBody({
 
       <div className="px-4 sm:px-8 md:px-12 py-8">
         {packs.length === 0 ? (
-          <p className="text-[13px] text-ink-soft">검색 결과가 없어. 다른 단어로 시도해봐.</p>
+          <div className="max-w-xl">
+            <p className="text-[13.5px] text-ink leading-relaxed">지금은 추가 가능한 팩이 없어.</p>
+            <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">
+              실제 동작하는 팩만 진열하기로 정리했어. 곧 새 팩이 도착할 거야.
+            </p>
+          </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl">
             {packs.map((p) => (

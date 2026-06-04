@@ -15,7 +15,7 @@ export type PackContentRef =
 export type Pack = {
   id: string;
   name: string;
-  category: "Cooking" | "Education" | "Lifestyle" | "Work";
+  category: "Game" | "Education" | "Lifestyle";
   installed: boolean;
   short: string;
   behavior: string;
@@ -55,11 +55,11 @@ export const PACKS: Pack[] = [
   {
     id: "cooking-essentials",
     name: "Cooking Essentials",
-    category: "Cooking",
+    category: "Lifestyle",
     installed: true,
-    short: "Recipes returned as structured execution units.",
+    short: "요리 질문을 재료·순서·시간 단위로 정리해서 답해.",
     behavior:
-      "Reformats any food question into ingredients, steps, timing, and tips. Remembers your spice tolerance and household size.",
+      "음식 질문을 재료·조리법·타이밍·팁 카드로 재조립해. 매운 정도와 인분 수 같은 기호도 기억해 다음 추천에 반영.",
     triggers: [
       "recipe",
       "cook",
@@ -95,8 +95,9 @@ export const PACKS: Pack[] = [
     name: "Study Companion",
     category: "Education",
     installed: true,
-    short: "Adapts explanations to your current level.",
-    behavior: "Breaks complex topics into a 3-layer scaffold and quizzes you instead of lecturing.",
+    short: "설명 대신 단계로 풀고, 막힌 지점을 먼저 물어봐.",
+    behavior:
+      "어려운 주제를 비유 → 예시 → 핵심 정리 3단계로 쪼개고, 강의 대신 작은 퀴즈로 이해도를 확인해.",
     triggers: ["explain", "what is", "study", "homework", "설명", "공부", "뭐야"],
     voice: "학습 코치",
     tone: "단계적이고 차분 — 비유 → 예시 → 핵심 정리 3단계",
@@ -122,7 +123,7 @@ export const PACKS: Pack[] = [
   {
     id: "sudoku",
     name: "Sudoku",
-    category: "Lifestyle",
+    category: "Game",
     installed: true,
     short: "온디바이스 스도쿠 — 풀이 실력에 따라 난이도 자동 조정.",
     behavior:
@@ -143,10 +144,10 @@ export const PACKS: Pack[] = [
     id: "morning-routine",
     name: "Morning Routine",
     category: "Lifestyle",
-    installed: false,
-    short: "Local, fast answers for your daily rhythm.",
+    installed: true,
+    short: "오늘 일정·날씨·컨디션을 기기 안에서 짧게 답해.",
     behavior:
-      "Handles weather, schedule, and reminders from on-device memory without going to the cloud.",
+      "아침 흐름에 맞춰 날씨·일정·리마인더를 1~2 문장으로 짚어줘. cloud 호출 없이 온디바이스 메모리만 사용.",
     triggers: ["weather", "schedule", "today", "remind", "날씨", "오늘", "일정"],
     voice: "아침 루틴 동반자",
     tone: "짧고 부드러움 — 1~2 문장, 에너지는 끌어올리되 과하지 않게",
@@ -160,57 +161,6 @@ export const PACKS: Pack[] = [
     // routine은 짧은 일정/컨디션 응답 전용이라 cooking/study 매처 우회.
     domain: ["루틴", "일상"],
     excluded_domains: ["요리", "학습"],
-  },
-  {
-    id: "focus-writer",
-    name: "Focus Writer",
-    category: "Work",
-    installed: false,
-    short: "Calm, opinionated editing for long-form writing.",
-    behavior: "Suggests cuts before additions. Refuses to pad prose. Tracks your typical voice.",
-    triggers: ["edit", "rewrite", "draft"],
-    voice: "글쓰기 편집자",
-    tone: "간결하고 단호 — 추가보다 삭제 먼저, 칭찬·아이스브레이커 없음",
-    systemPrompt: [
-      "지금 당신은 글쓰기 편집자 모드입니다.",
-      "- 답변은 간결하고 단호하게. 칭찬·아이스브레이커는 빼세요.",
-      "- 추가보다 삭제를 먼저 제안하세요. 늘어진 문장은 거부하세요.",
-      "- 사용자의 평소 목소리를 유지하면서 군더더기만 정리하세요.",
-    ].join("\n"),
-  },
-  {
-    id: "wine-cellar",
-    name: "Wine & Pairing",
-    category: "Lifestyle",
-    installed: false,
-    short: "Pairings tuned to what's actually in your kitchen.",
-    behavior: "Combines pack heuristics with dormant memory of your past meals.",
-    triggers: ["wine", "pair", "drink"],
-    voice: "와인 큐레이터",
-    tone: "감각적이지만 구체적 — 가격대·지역·페어링까지 좁혀서",
-    systemPrompt: [
-      "지금 당신은 와인 큐레이터 모드입니다.",
-      "- 답변은 감각적이지만 구체적으로. 가격대·지역·페어링을 정확히 제시하세요.",
-      "- 추천할 땐 사용자의 음식, 기분, 예산에 맞춰서 좁히세요.",
-      "- 모호한 질문도 와인·페어링·테이스팅 관점으로 풀어서 답하세요.",
-    ].join("\n"),
-  },
-  {
-    id: "code-review",
-    name: "Code Review",
-    category: "Work",
-    installed: false,
-    short: "Reviews diffs against your team's conventions.",
-    behavior: "Loads your repo style as a local pack so reviews stay consistent.",
-    triggers: ["review", "diff", "pr"],
-    voice: "시니어 엔지니어",
-    tone: "직설적이고 기술적 — 문제 → 개선 → 트레이드오프 순서",
-    systemPrompt: [
-      "지금 당신은 시니어 엔지니어 모드입니다.",
-      "- 답변은 직설적이고 기술적으로. 과한 칭찬은 빼세요.",
-      "- 코드를 받으면 — 문제점 → 개선안 → 트레이드오프 순서로 답하세요.",
-      "- 모호한 질문도 엔지니어링·아키텍처·코드 품질 관점으로 풀어서 답하세요.",
-    ].join("\n"),
   },
 ];
 
