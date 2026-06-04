@@ -66,26 +66,30 @@ const SYSTEM_PROMPT = [
 //   3. follow-up (앞 카드 받은 뒤 행동)
 //   4. search (조리 / 레시피 / 방법)
 //   5. recommend (가장 broad, 마지막)
+// Phase EN-3: 영어 패턴은 한국어 패턴과 같은 우선순위 자리(casual→definition→
+// follow-up→search→recommend)에 append. 정규식 의도적으로 분리 — 한국어 회귀 0.
+// "I had a rough day" / "I'm so tired" 같은 일상 영어는 어느 패턴에도 매칭 X
+// → unknown 으로 떨어져 일반 라우팅.
 const PATTERNS: Array<{ intent: Intent; re: RegExp }> = [
   {
     intent: "casual",
-    re: /^(안녕|하이|반가워|고마|감사|수고|잘 ?했|hello|hi|thanks|thank you)/i,
+    re: /^(안녕|하이|반가워|고마|감사|수고|잘 ?했|hello|hi|hey|good (?:morning|evening|afternoon)|thanks|thank you)/i,
   },
   {
     intent: "definition",
-    re: /뭐(야|지|예요|에요|냐)|뭔(가|지|데)|설명|어떤 (거|것|음식|건)|처음 들어|모르(는데|겠어)|잘 모르|무엇|what['\s]+is|what's|explain|never heard|don't know/i,
+    re: /뭐(야|지|예요|에요|냐)|뭔(가|지|데)|설명|어떤 (거|것|음식|건)|처음 들어|모르(는데|겠어)|잘 모르|무엇|what['\s]+is|what's|what does|what are|explain|never heard|don't know/i,
   },
   {
     intent: "follow-up",
-    re: /더 자세|더 알려|더 줘|또\?|또요|또 해|새 ?(문제|거)|다른 ?(거|음식)|다음 ?(거|문제)|받아 ?줘|부탁/,
+    re: /더 자세|더 알려|더 줘|또\?|또요|또 해|새 ?(문제|거)|다른 ?(거|음식)|다음 ?(거|문제)|받아 ?줘|부탁|\b(?:another|next|else|one more|something else)\b/i,
   },
   {
     intent: "search",
-    re: /만들(기|어|까)?|레시피|조리법?|어떻게 (만|해)|방법/,
+    re: /만들(기|어|까)?|레시피|조리법?|어떻게 (만|해)|방법|how (?:do i|to) (?:make|cook|do)|recipe for|how about/i,
   },
   {
     intent: "recommend",
-    re: /추천|뭐 (먹|마|좋|할까)|고민|메뉴|뭘 (먹|할)/,
+    re: /추천|뭐 (먹|마|좋|할까)|고민|메뉴|뭘 (먹|할)|\b(?:recommend|suggest)\b|what should i (?:eat|try|do)|any (?:good|nice)\b/i,
   },
 ];
 
@@ -225,9 +229,14 @@ export function classifyRejection(text: string): boolean {
 //   "먹으러" — "먹으러 가자"/"먹으러 갈까"
 const CRAVING_TOKENS = ["먹고싶", "먹고 싶", "당기", "먹으러"];
 
+// Phase EN-3: 영어 craving 보조 신호. 다어 토큰만 — 짧은 "want"/"hungry" 단독은
+// 식욕 외 일상 발화 ("I'm hungry for knowledge") 충돌. 매칭 시 substring 검사.
+const CRAVING_TOKENS_EN = ["want to eat", "craving", "hungry for"];
+
 export function classifyCraving(text: string): boolean {
   const q = text.toLowerCase();
-  return CRAVING_TOKENS.some((t) => q.includes(t.toLowerCase()));
+  if (CRAVING_TOKENS.some((t) => q.includes(t.toLowerCase()))) return true;
+  return CRAVING_TOKENS_EN.some((t) => q.includes(t));
 }
 
 // V4.1 종합 의도 (memo summary). 사용자가 "지금까지 양자역학으로 모은

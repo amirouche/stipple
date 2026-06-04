@@ -21,6 +21,68 @@ import {
 import { explainMistake, generateVariant } from "@/lib/packs/study/llm";
 import type { SATMathProblem } from "@/lib/packs/study/types";
 import { useUserSATProblems } from "@/lib/packs/study/user-store";
+import { usePreferences } from "@/lib/preferences";
+
+// Phase EN-4: 라벨 사전. preferences.language 기준.
+const LABELS = {
+  ko: {
+    packFolder: "팩 폴더",
+    packShortSuffix: "답안 검증은 이 기기 안에서. 더 깊은 설명만 클라우드로 넘어가.",
+    backToChat: "← 채팅으로",
+    backToFolder: "← 폴더",
+    problemsSuffix: (n: number) => `SAT 수학 · ${n}문제`,
+    newProblem: "새 문제",
+    retry: "다시 풀기",
+    showHint: "힌트 보기",
+    hint: "힌트",
+    correct: "정답",
+    incorrect: "오답",
+    chosenLabel: "선택",
+    correctLabel: "정답",
+    showSolution: "정답 풀이 보기",
+    matchedLocal: "· 이 기기 안에서 매칭됨",
+    cloudFallback: "자주 틀리는 답 목록엔 안 잡혀. 더 깊게 보려면 클라우드로 넘길게.",
+    moreExplain: "더 자세한 설명 보기",
+    loadingExplain: "설명 가져오는 중…",
+    makeVariant: "변형 문제 만들어줘",
+    loadingVariant: "변형 문제 만드는 중…",
+    moreExplainSection: "추가 설명",
+    variantSection: "변형 문제",
+    cloudFailed: "클라우드 호출 실패",
+    cloudBadge: "클라우드",
+    menuOpen: "메뉴 열기",
+    metaPrefix: "SAT 수학",
+  },
+  en: {
+    packFolder: "Pack folder",
+    packShortSuffix:
+      "Answer checking runs on this device. Cloud only kicks in for deeper explanations.",
+    backToChat: "← Back to chat",
+    backToFolder: "← Folder",
+    problemsSuffix: (n: number) => `SAT Math · ${n} problem${n === 1 ? "" : "s"}`,
+    newProblem: "New",
+    retry: "Try again",
+    showHint: "Show hint",
+    hint: "Hint",
+    correct: "Correct",
+    incorrect: "Incorrect",
+    chosenLabel: "Chosen",
+    correctLabel: "Correct",
+    showSolution: "Show solution",
+    matchedLocal: "· Matched on this device",
+    cloudFallback: "Not in the common-mistakes table. Want a deeper look from the cloud?",
+    moreExplain: "Get a detailed explanation",
+    loadingExplain: "Fetching explanation…",
+    makeVariant: "Make a variant",
+    loadingVariant: "Generating variant…",
+    moreExplainSection: "Detailed explanation",
+    variantSection: "Variant problem",
+    cloudFailed: "Cloud call failed",
+    cloudBadge: "Cloud",
+    menuOpen: "Open menu",
+    metaPrefix: "SAT Math",
+  },
+};
 
 export const Route = createFileRoute("/study")({
   head: () => ({
@@ -39,6 +101,7 @@ export const Route = createFileRoute("/study")({
 function StudyPage() {
   const [openProblemId, setOpenProblemId] = useState<string | null>(null);
   const studyPack = PACKS.find((p) => p.id === "study-companion");
+  const lang = usePreferences().language;
   // The pack ships with 5 base problems; user/LLM-generated problems live
   // in the reactive user store and stack onto the end. Both are picked up
   // here in one merged list so the folder view stays simple.
@@ -50,13 +113,14 @@ function StudyPage() {
   return (
     <Shell>
       {openProblem ? (
-        <ProblemView problem={openProblem} onBack={() => setOpenProblemId(null)} />
+        <ProblemView problem={openProblem} onBack={() => setOpenProblemId(null)} lang={lang} />
       ) : (
         <FolderView
           packName={studyPack?.name ?? "Study"}
           packShort={studyPack?.short ?? ""}
           problems={problems}
           onOpen={(id) => setOpenProblemId(id)}
+          lang={lang}
         />
       )}
     </Shell>
@@ -72,14 +136,17 @@ function FolderView({
   packShort,
   problems,
   onOpen,
+  lang,
 }: {
   packName: string;
   packShort: string;
   problems: SATMathProblem[];
   onOpen: (id: string) => void;
+  lang: "ko" | "en";
 }) {
   const navigate = useNavigate();
   const shell = useShell();
+  const L = LABELS[lang];
 
   return (
     <div className="flex flex-col">
@@ -89,7 +156,7 @@ function FolderView({
             type="button"
             onClick={() => shell?.openMobile()}
             className="md:hidden shrink-0 h-9 w-9 -ml-1 inline-flex items-center justify-center rounded-md text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors"
-            aria-label="메뉴 열기"
+            aria-label={L.menuOpen}
           >
             <svg
               width="18"
@@ -108,27 +175,27 @@ function FolderView({
           </button>
           <div className="flex-1 min-w-0">
             <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft">
-              팩 폴더
+              {L.packFolder}
             </p>
             <h1 className="mt-1 text-[24px] sm:text-[28px] font-semibold tracking-tight text-ink">
               {packName}
             </h1>
             <p className="mt-1 text-[13px] text-ink-soft max-w-xl">
-              {packShort} 답안 검증은 이 기기 안에서. 더 깊은 설명만 클라우드로 넘어가.
+              {packShort} {L.packShortSuffix}
             </p>
           </div>
           <button
             onClick={() => navigate({ to: "/" })}
             className="shrink-0 h-9 px-3 rounded-md border border-border text-[12.5px] text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors"
           >
-            ← 채팅으로
+            {L.backToChat}
           </button>
         </div>
       </header>
 
       <div className="px-4 sm:px-8 md:px-12 py-8">
         <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft mb-4">
-          SAT 수학 · {problems.length}문제
+          {L.problemsSuffix(problems.length)}
         </p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-5xl">
           {problems.map((p) => {
@@ -141,15 +208,15 @@ function FolderView({
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                    {topicLabel(p.topic)}
+                    {topicLabel(p.topic, lang)}
                   </span>
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/50">
                     ·
                   </span>
-                  <DifficultyChip d={p.difficulty} />
+                  <DifficultyChip d={p.difficulty} lang={lang} />
                   {isUserGen && (
                     <span className="ml-auto font-mono text-[9.5px] uppercase tracking-[0.14em] text-primary">
-                      새 문제
+                      {L.newProblem}
                     </span>
                   )}
                 </div>
@@ -166,11 +233,11 @@ function FolderView({
   );
 }
 
-function DifficultyChip({ d }: { d: SATMathProblem["difficulty"] }) {
+function DifficultyChip({ d, lang }: { d: SATMathProblem["difficulty"]; lang: "ko" | "en" }) {
   const tone = d === "easy" ? "text-primary" : d === "medium" ? "text-ink" : "text-destructive";
   return (
     <span className={`font-mono text-[10px] uppercase tracking-[0.14em] ${tone}`}>
-      {difficultyLabel(d)}
+      {difficultyLabel(d, lang)}
     </span>
   );
 }
@@ -185,7 +252,16 @@ type LlmState =
   | { kind: "result"; for: "explain" | "variant"; text: string }
   | { kind: "error"; for: "explain" | "variant"; message: string };
 
-function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () => void }) {
+function ProblemView({
+  problem,
+  onBack,
+  lang,
+}: {
+  problem: SATMathProblem;
+  onBack: () => void;
+  lang: "ko" | "en";
+}) {
+  const L = LABELS[lang];
   const [result, setResult] = useState<CheckResult | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [llm, setLlm] = useState<LlmState>({ kind: "idle" });
@@ -239,18 +315,18 @@ function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () 
             onClick={onBack}
             className="shrink-0 h-9 px-3 rounded-md border border-border text-[12.5px] text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors"
           >
-            ← 폴더
+            {L.backToFolder}
           </button>
           <div className="flex-1 min-w-0">
             <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft">
-              SAT 수학 · {problem.id}
+              {L.metaPrefix} · {problem.id}
             </p>
             <div className="mt-1 flex items-center gap-2">
               <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-soft">
-                {topicLabel(problem.topic)}
+                {topicLabel(problem.topic, lang)}
               </span>
               <span className="font-mono text-[10px] text-ink-soft/50">·</span>
-              <DifficultyChip d={problem.difficulty} />
+              <DifficultyChip d={problem.difficulty} lang={lang} />
             </div>
           </div>
           {result && (
@@ -258,7 +334,7 @@ function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () 
               onClick={reset}
               className="shrink-0 h-9 px-3 rounded-md border border-border text-[12.5px] text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors"
             >
-              다시 풀기
+              {L.retry}
             </button>
           )}
         </div>
@@ -293,12 +369,12 @@ function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () 
                   <span className="flex-1">{c}</span>
                   {showState && isCorrect && (
                     <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-primary">
-                      정답
+                      {L.correctLabel}
                     </span>
                   )}
                   {showState && picked && !isCorrect && (
                     <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-destructive">
-                      선택
+                      {L.chosenLabel}
                     </span>
                   )}
                 </span>
@@ -314,12 +390,12 @@ function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () 
                 onClick={() => setShowHint(true)}
                 className="text-[12.5px] text-ink-soft underline-offset-4 hover:underline"
               >
-                힌트 보기
+                {L.showHint}
               </button>
             ) : (
               <div className="px-4 py-3 rounded-md border border-border bg-surface text-[13px] text-ink-soft leading-relaxed">
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/70 block mb-1">
-                  힌트
+                  {L.hint}
                 </span>
                 {problem.hint}
               </div>
@@ -328,7 +404,7 @@ function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () 
         )}
 
         {result?.kind === "correct" && (
-          <ResultBlock tone="correct" title="정답">
+          <ResultBlock tone="correct" title={L.correct}>
             <pre className="text-[13.5px] text-ink leading-relaxed whitespace-pre-wrap font-sans">
               {problem.solution}
             </pre>
@@ -338,31 +414,27 @@ function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () 
                 disabled={llm.kind === "loading"}
                 className="h-9 px-3 rounded-md bg-ink text-background text-[12.5px] font-medium disabled:opacity-40"
               >
-                {llm.kind === "loading" && llm.for === "variant"
-                  ? "변형 문제 만드는 중…"
-                  : "변형 문제 만들어줘"}
+                {llm.kind === "loading" && llm.for === "variant" ? L.loadingVariant : L.makeVariant}
               </button>
-              <CloudBadge />
+              <CloudBadge lang={lang} />
             </div>
           </ResultBlock>
         )}
 
         {result?.kind === "incorrect" && (
-          <ResultBlock tone="incorrect" title="오답">
+          <ResultBlock tone="incorrect" title={L.incorrect}>
             {result.mistakeExplanation ? (
               <>
                 <p className="text-[13.5px] text-ink leading-relaxed">
                   {result.mistakeExplanation}
                 </p>
                 <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-soft">
-                  · 이 기기 안에서 매칭됨
+                  {L.matchedLocal}
                 </p>
               </>
             ) : (
               <>
-                <p className="text-[13.5px] text-ink leading-relaxed">
-                  자주 틀리는 답 목록엔 안 잡혀. 더 깊게 보려면 클라우드로 넘길게.
-                </p>
+                <p className="text-[13.5px] text-ink leading-relaxed">{L.cloudFallback}</p>
                 <div className="mt-4">
                   <button
                     onClick={askExplain}
@@ -370,8 +442,8 @@ function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () 
                     className="h-9 px-3 rounded-md bg-ink text-background text-[12.5px] font-medium disabled:opacity-40"
                   >
                     {llm.kind === "loading" && llm.for === "explain"
-                      ? "설명 가져오는 중…"
-                      : "더 자세한 설명 보기"}
+                      ? L.loadingExplain
+                      : L.moreExplain}
                   </button>
                 </div>
               </>
@@ -379,7 +451,7 @@ function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () 
 
             <details className="mt-5 group">
               <summary className="cursor-pointer text-[11px] font-mono uppercase tracking-[0.14em] text-ink-soft hover:text-ink list-none">
-                정답 풀이 보기
+                {L.showSolution}
               </summary>
               <pre className="mt-3 text-[13.5px] text-ink leading-relaxed whitespace-pre-wrap font-sans">
                 {problem.solution}
@@ -392,9 +464,9 @@ function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () 
           <div className="mt-6 px-4 py-4 rounded-md border border-border bg-surface">
             <div className="flex items-center justify-between mb-2">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                {llm.for === "explain" ? "추가 설명" : "변형 문제"}
+                {llm.for === "explain" ? L.moreExplainSection : L.variantSection}
               </span>
-              <CloudBadge />
+              <CloudBadge lang={lang} />
             </div>
             <pre className="text-[13.5px] text-ink leading-relaxed whitespace-pre-wrap font-sans">
               {llm.text}
@@ -404,7 +476,7 @@ function ProblemView({ problem, onBack }: { problem: SATMathProblem; onBack: () 
 
         {llm.kind === "error" && (
           <div className="mt-6 px-4 py-3 rounded-md border border-destructive/40 bg-destructive/10 text-[13px] text-ink">
-            클라우드 호출 실패: {llm.message}
+            {L.cloudFailed}: {llm.message}
           </div>
         )}
       </div>
@@ -439,11 +511,11 @@ function ResultBlock({
   );
 }
 
-function CloudBadge() {
+function CloudBadge({ lang }: { lang: "ko" | "en" }) {
   return (
     <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
       <span className="h-1.5 w-1.5 rounded-full bg-ink-soft/50" />
-      클라우드
+      {LABELS[lang].cloudBadge}
     </span>
   );
 }

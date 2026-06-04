@@ -44,6 +44,22 @@ const DISLIKE_PATTERNS: RegExp[] = [
 
 const LIKE_PATTERNS: RegExp[] = [/^(.+?)\s*(?:은|는|이|가|을|를)?\s*좋아(?:해|함)$/];
 
+// Phase EN-3: 영어 선호 패턴. Korean과 동일 원칙 — dislike 먼저 검사. "I don't
+// like" 가 "I like" regex 에 먼저 잡히면 like 로 오분류되므로 순서 의존.
+// 그룹 1 = subject. 끝의 마침표/감탄/물음표는 후처리로 떨굼.
+const DISLIKE_PATTERNS_EN: RegExp[] = [
+  /^(?:really\s+)?(?:hate|dislike|can'?t\s+stand)\s+(.+?)[.!?]*$/i,
+  /^don'?t\s+(?:like|enjoy|want|eat)\s+(.+?)[.!?]*$/i,
+];
+
+const LIKE_PATTERNS_EN: RegExp[] = [
+  /^(?:really\s+)?(?:like|love|enjoy)\s+(.+?)[.!?]*$/i,
+  /^(.+?)\s+is\s+my\s+favou?rite[.!?]*$/i,
+];
+
+// 영어 1인칭 prefix ("I "). 한국어 1인칭 (나는/난) 과 같은 역할.
+const SUBJECT_PREFIX_EN_RE = /^i\s+/i;
+
 // 끝에 남은 한국어 조사 한 글자 떨굼. "매운 음식을" → "매운 음식".
 function stripTrailingParticle(s: string): string {
   return s.replace(/\s*(?:은|는|이|가|을|를)$/, "").trim();
@@ -53,30 +69,71 @@ function stripSubjectPrefix(s: string): string {
   return s.replace(SUBJECT_PREFIX_RE, "");
 }
 
+function stripSubjectPrefixEn(s: string): string {
+  return s.replace(SUBJECT_PREFIX_EN_RE, "").trim();
+}
+
 export function parsePreference(input: string): PreferenceResult | null {
   const text = input.trim();
   if (!text) return null;
-  // 빠른 path — "좋아"/"싫어"/"별로" 어느 키워드도 박혀 있지 않으면 즉시 통과.
-  // 일반 발화 ("스트레스 받아", "오늘 뭐 먹지") 가 정규식 비용 안 치르도록.
-  if (!/(좋아|싫어|별로)/.test(text)) return null;
-  // M0-3: 질문 (의문사 박힘) 은 statement 가 아니라 recall — parseRecall 이
-  // 따로 처리. 가드 없으면 "내가 뭐 좋아해" 가 subject="뭐" 인 like 로 박혀
-  // store 에 garbage 가 들어감. 의문사 좌측 모든 입력은 statement 후보 X.
-  if (/(뭐|뭘)/.test(text)) return null;
 
-  const body = stripSubjectPrefix(text);
+  // Phase EN-3: 한글 박혀 있으면 Korean path, 없으면 English path. 혼재
+  // ("kimchi 좋아해") 는 Korean — Korean 어미가 있어야 정규식 매칭.
+  const isKorean = /[가-힣]/.test(text);
 
-  for (const re of DISLIKE_PATTERNS) {
+  if (isKorean) {
+    // 빠른 path — "좋아"/"싫어"/"별로" 어느 키워드도 박혀 있지 않으면 즉시 통과.
+    // 일반 발화 ("스트레스 받아", "오늘 뭐 먹지") 가 정규식 비용 안 치르도록.
+    if (!/(좋아|싫어|별로)/.test(text)) return null;
+    // M0-3: 질문 (의문사 박힘) 은 statement 가 아니라 recall — parseRecall 이
+    // 따로 처리. 가드 없으면 "내가 뭐 좋아해" 가 subject="뭐" 인 like 로 박혀
+    // store 에 garbage 가 들어감. 의문사 좌측 모든 입력은 statement 후보 X.
+    if (/(뭐|뭘)/.test(text)) return null;
+
+    const body = stripSubjectPrefix(text);
+
+    for (const re of DISLIKE_PATTERNS) {
+      const m = re.exec(body);
+      if (m) {
+        const subject = stripTrailingParticle(m[1]);
+        if (subject) return { type: "dislike", subject };
+      }
+    }
+    for (const re of LIKE_PATTERNS) {
+      const m = re.exec(body);
+      if (m) {
+        const subject = stripTrailingParticle(m[1]);
+        if (subject) return { type: "like", subject };
+      }
+    }
+    return null;
+  }
+
+  // English path. 빠른 path — preference verb 미박힘 → 즉시 통과.
+  if (
+    !/\b(?:like|love|hate|dislike|enjoy|favou?rite|can'?t\s+stand|don'?t\s+(?:like|enjoy|want|eat))\b/i.test(
+      text,
+    )
+  ) {
+    return null;
+  }
+  // 질문 가드 — recall 영역.
+  if (/\bwhat\b/i.test(text)) return null;
+
+  // "I " prefix 떨굼. "I love spicy food" → "love spicy food".
+  const body = stripSubjectPrefixEn(text);
+
+  for (const re of DISLIKE_PATTERNS_EN) {
     const m = re.exec(body);
-    if (m) {
-      const subject = stripTrailingParticle(m[1]);
+    if (m && m[1]) {
+      const subject = m[1].trim();
       if (subject) return { type: "dislike", subject };
     }
   }
-  for (const re of LIKE_PATTERNS) {
+  for (const re of LIKE_PATTERNS_EN) {
     const m = re.exec(body);
-    if (m) {
-      const subject = stripTrailingParticle(m[1]);
+    if (m && m[1]) {
+      const subject = m[1].trim();
       if (subject) return { type: "like", subject };
     }
   }
@@ -100,18 +157,38 @@ export function parsePreference(input: string): PreferenceResult | null {
 export function parseRecall(input: string): RecallResult | null {
   const text = input.trim();
   if (!text) return null;
-  // 빠른 path — preference verb 미박힘 → 즉시 통과.
-  if (!/(좋아|싫어|선호)/.test(text)) return null;
-  // interrogative or "알려줘" 미박힘 → statement 후보 (parsePreference 영역).
-  if (!/(뭐|뭘|알려\s*줘)/.test(text)) return null;
 
-  const hasLike = /좋아/.test(text);
-  const hasDislike = /싫어/.test(text);
-  const hasPref = /선호/.test(text);
+  const isKorean = /[가-힣]/.test(text);
 
-  if (hasPref) return { type: "all" };
-  if (hasLike && hasDislike) return { type: "all" };
-  if (hasLike) return { type: "like" };
-  if (hasDislike) return { type: "dislike" };
+  if (isKorean) {
+    // 빠른 path — preference verb 미박힘 → 즉시 통과.
+    if (!/(좋아|싫어|선호)/.test(text)) return null;
+    // interrogative or "알려줘" 미박힘 → statement 후보 (parsePreference 영역).
+    if (!/(뭐|뭘|알려\s*줘)/.test(text)) return null;
+
+    const hasLike = /좋아/.test(text);
+    const hasDislike = /싫어/.test(text);
+    const hasPref = /선호/.test(text);
+
+    if (hasPref) return { type: "all" };
+    if (hasLike && hasDislike) return { type: "all" };
+    if (hasLike) return { type: "like" };
+    if (hasDislike) return { type: "dislike" };
+    return null;
+  }
+
+  // Phase EN-3: English recall.
+  //   - "what do I like"           → like
+  //   - "what foods do I hate"     → dislike
+  //   - "what are my preferences"  → all
+  //   - "tell me what I like"      → like
+  // 둘 다 박힘 (like + hate/dislike) → all.
+  if (!/\bwhat\b/i.test(text) && !/\btell me\b/i.test(text)) return null;
+  if (/\bpreferences?\b/i.test(text)) return { type: "all" };
+  const hasLikeEn = /\b(?:like|love|enjoy|favou?rite)\b/i.test(text);
+  const hasDislikeEn = /\b(?:hate|dislike|don'?t\s+(?:like|enjoy|want|eat))\b/i.test(text);
+  if (hasLikeEn && hasDislikeEn) return { type: "all" };
+  if (hasLikeEn) return { type: "like" };
+  if (hasDislikeEn) return { type: "dislike" };
   return null;
 }

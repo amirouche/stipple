@@ -87,3 +87,87 @@ export function extractNouns(text: string): string[] {
 
   return result;
 }
+
+// Phase EN-3: 영어 명사 추출. 공백 split + stopword 필터로 단순화 — partial
+// step 의 entry name 부분 매칭에 사용. 형태소 분석 없이도 데모 흐름 충분.
+const STOPWORDS_EN = new Set([
+  "a",
+  "an",
+  "the",
+  "i",
+  "is",
+  "are",
+  "am",
+  "was",
+  "were",
+  "do",
+  "does",
+  "did",
+  "have",
+  "has",
+  "had",
+  "you",
+  "he",
+  "she",
+  "we",
+  "they",
+  "it",
+  "this",
+  "that",
+  "these",
+  "those",
+  "to",
+  "of",
+  "for",
+  "in",
+  "on",
+  "at",
+  "by",
+  "with",
+  "from",
+  "and",
+  "or",
+  "but",
+  "my",
+  "your",
+  "his",
+  "her",
+  "its",
+  "our",
+  "their",
+  "can",
+  "could",
+  "would",
+  "should",
+  "will",
+  "shall",
+  "may",
+  "might",
+  "must",
+  "not",
+  "no",
+  "so",
+  "as",
+  "if",
+  "when",
+  "what",
+  "which",
+  "who",
+  "how",
+  "why",
+  "me",
+  "us",
+  "them",
+  "him",
+  "be",
+  "been",
+  "being",
+]);
+
+export function extractNounsEn(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s'-]/g, " ") // 구두점 제거 (apostrophe·하이픈은 토큰 일부로 살림)
+    .split(/\s+/)
+    .filter((t) => t.length > 1 && !STOPWORDS_EN.has(t));
+}

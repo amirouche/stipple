@@ -67,6 +67,9 @@ export type DispatchInput = {
   // V5.0 Phase I-5: cloud-direct 모드. 박혀 있으면 pack 컨텍스트는 단순 참고로
   // 변환 + CLOUD_DISCIPLINE 박힘 (Pack 이름 언급 X). 미박힘 = pack identity.
   cloudMode?: boolean;
+  // Phase EN-1: 입력 언어. "en" → buildSystemPrompt가 모든 섹션을 영어 미러로
+  // 교체. 미박힘 또는 "ko" → 기존 한국어 그대로.
+  lang?: "ko" | "en";
 };
 
 export type DispatchResult = {
@@ -159,6 +162,7 @@ export async function dispatchLLMCall(
     summary: input.summary,
     cloudMode: input.cloudMode,
     userPreferences,
+    lang: input.lang,
   });
   const history = trimHistory(input.history);
 

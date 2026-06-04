@@ -14,7 +14,8 @@ import type { ActionArea } from "@/lib/dots-data";
 import type { Intent } from "@/lib/packs/intent";
 import { classifyCraving } from "@/lib/packs/intent";
 import { cleanRequestedNoun } from "@/lib/text/clean-noun";
-import { extractNouns } from "@/lib/text/extract-nouns";
+import { extractNouns, extractNounsEn } from "@/lib/text/extract-nouns";
+import { detectLanguage, type Lang } from "@/lib/text/detect-language";
 import {
   cosineSimilarity,
   embed,
@@ -70,9 +71,30 @@ const STUDY_DOMAIN = [
 // 같은 입력이 SAT 수학으로 잘못 잡히던 버그를 막는다.
 const STUDY_GENERIC = ["문제", "퀴즈", "테스트", "problem", "quiz", "test"];
 
+// Phase EN-3: 영어 specific 키워드 추가. "kimchi stew" / "kimchi jjigae" / "baek"
+// 같은 다어 / 이름 형식만 — 단어 "tuna" / "tofu" / "pork" 단독은 식문화 무관
+// 발화 ("tuna fishing" / "pork barrel") 충돌 위험으로 제외.
 const COOKING_RECIPE_KEYWORDS: Record<string, string[]> = {
-  "baek-kimchi-jjigae": ["김치찌개", "김치", "찌개", "백종원", "돼지"],
-  "tuna-kimchi-jjigae": ["김치찌개", "김치", "찌개", "참치", "두부"],
+  "baek-kimchi-jjigae": [
+    "김치찌개",
+    "김치",
+    "찌개",
+    "백종원",
+    "돼지",
+    "kimchi stew",
+    "kimchi jjigae",
+    "baek",
+  ],
+  "tuna-kimchi-jjigae": [
+    "김치찌개",
+    "김치",
+    "찌개",
+    "참치",
+    "두부",
+    "tuna kimchi",
+    "tuna kimchi stew",
+    "tuna jjigae",
+  ],
 };
 
 // Cooking-domain substrings — any single hit counts as a cooking signal.
@@ -82,6 +104,10 @@ const COOKING_RECIPE_KEYWORDS: Record<string, string[]> = {
 // Note: "국" / "밥" / "면" are very short Korean tokens and can collide
 // (e.g. "한국어" contains "국"). Kept per spec — if false positives show
 // up in production we narrow to compounds like "국밥" / "찌개국" instead.
+// Phase EN-3: 영어 도메인 키워드는 보수적으로 — "kimchi" / "korean food" /
+// "korean recipe" 같은 식문화 specific 토큰만. "soup" / "dish" / "meal" /
+// "food" 단독은 일상 영어에 흔히 박혀 ("I had a rough day" 같은 무관 입력이
+// cooking 으로 끌려가는 회귀) 의도적 제외.
 const COOKING_DOMAIN = [
   "요리",
   "레시피",
@@ -98,6 +124,9 @@ const COOKING_DOMAIN = [
   "재료",
   "양념",
   "백종원",
+  "kimchi",
+  "korean food",
+  "korean recipe",
 ];
 
 // Cooking-generic — too broad to match alone. Only counts when a
@@ -172,6 +201,9 @@ export type PackMatchResult = {
   // V5.0 lite Phase B3b: alias로 매칭된 경우 매칭된 alias 텍스트. confidence는
   // exact 또는 partial 그대로 유지. trace.reason 형식만 분기 (exact-alias).
   matchedAlias?: string;
+  // Phase EN-3: 입력 언어. 빌더가 영어 응답 분기에 사용 (Step 4). 매처 본체
+  // 동작은 lang 무관 — partial step 의 명사 추출만 lang 따라 갈림.
+  lang: Lang;
   // Multi-match phase: 같은 카테고리 (예: 김치찌개) 의 peer entry 가 2 이상
   // 동시 매칭됐을 때 set. 값 = 사용자가 입력한 공통 키 (alias 또는 noun) — 빌더
   // 가 "{key} 종류 N가지 있어. 어떤 거 볼래?" 응답 + 카드 선택 박음.
@@ -758,6 +790,9 @@ export async function matchPackContent(
   // V5.0 Phase B3c: craving 신호 한 번 계산해 모든 facet 분기에 공통 전달.
   const craving = classifyCraving(query);
   const facetOpts = { craving };
+  // Phase EN-3: 입력 언어 한 번만 감지 → 결과에 박아 빌더에 전달 (Step 4 영어
+  // 응답 분기). partial step 의 명사 추출도 lang 따라 분기.
+  const lang = detectLanguage(query);
 
   // ── Step 1: exact match ───────────────────────────────────────────
   // V5.0 Phase B3b: findExactEntry는 이제 entry name + aliases 둘 다 검사.
@@ -780,11 +815,14 @@ export async function matchPackContent(
       confidence: "exact",
       matchedAlias: exactHit.matchedAlias,
       multiMatchKey: multi ? exactHit.matchedText : undefined,
+      lang,
     };
   }
 
   // ── Step 2: partial match ─────────────────────────────────────────
-  const nouns = extractNouns(query);
+  // Phase EN-3: 영어 입력은 공백 split + stopword 필터로 명사 추출. 한국어는
+  // 기존 조사/어미 제거 path.
+  const nouns = lang === "en" ? extractNounsEn(query) : extractNouns(query);
   const partialHit = findPartialEntry(nouns, allEntries);
   if (partialHit) {
     const head = partialHit.entry.match;
@@ -800,6 +838,7 @@ export async function matchPackContent(
       confidence: "partial",
       matchedAlias: partialHit.matchedAlias,
       multiMatchKey: multi ? partialHit.matchedNoun : undefined,
+      lang,
     };
   }
 
@@ -855,6 +894,7 @@ export async function matchPackContent(
     topEntryName: getEntryNameForTrace(head),
     confidence: "fuzzy",
     requestedNoun,
+    lang,
   };
 }
 
@@ -944,6 +984,26 @@ const SAT_TOPIC_LABEL: Record<SATMathProblem["topic"], string> = {
   trigonometry: "삼각함수",
 };
 
+// Phase EN-4: 영어 라벨 (빌더가 result.lang === "en" 일 때 사용).
+const SAT_TOPIC_LABEL_EN: Record<SATMathProblem["topic"], string> = {
+  algebra: "Algebra",
+  geometry: "Geometry",
+  statistics: "Probability & Stats",
+  trigonometry: "Trigonometry",
+};
+
+const SAT_DIFFICULTY_LABEL_EN: Record<SATMathProblem["difficulty"], string> = {
+  easy: "Easy",
+  medium: "Medium",
+  hard: "Hard",
+};
+
+const SAT_DIFFICULTY_LABEL_KO: Record<SATMathProblem["difficulty"], string> = {
+  easy: "쉬움",
+  medium: "보통",
+  hard: "어려움",
+};
+
 // V5.0 Phase I-6: action_options 박힌 후 사용자 발화의 negation-aware
 // 영역 제외 처리. excludedActions 박힌 영역의 카드 모두 drop. 모두 drop이면
 // 빈 배열 반환 — caller (buildCooking/buildSATMath) 가 fallback 박음.
@@ -958,7 +1018,17 @@ function filterByExcludedActions(
 // 빈 카드 박힐 때 fallback. cloud 옵션 + 일반 다른 거 — 사용자가 박은 영역
 // 외 escape 경로 보장. 핵심: 사용자가 모든 옵션을 부정해도 응답이 카드 0개로
 // 무력화되지 X.
-function buildExclusionFallback(): SuggestionOption[] {
+function buildExclusionFallback(lang: Lang): SuggestionOption[] {
+  if (lang === "en") {
+    return [
+      {
+        kind: "llm-call",
+        label: "Search in cloud",
+        prompt: "Help me from a different angle. Keep it short.",
+        action_area: "찾기",
+      },
+    ];
+  }
   return [
     {
       kind: "llm-call",
@@ -976,92 +1046,145 @@ function buildSATMathSuggestion(
   text: string;
   options: SuggestionOption[];
 } {
-  const { pack, packLevel, matches, facet, confidence, requestedNoun } = result;
+  const { pack, packLevel, matches, facet, confidence, requestedNoun, lang } = result;
   const head = matches[0];
   if (head?.kind !== "sat-math") {
-    return { text: `${pack.name}에서 비슷한 게 보여.`, options: [] };
+    const fallbackText =
+      lang === "en"
+        ? `Found something similar in ${pack.name}.`
+        : `${pack.name}에서 비슷한 게 보여.`;
+    return { text: fallbackText, options: [] };
   }
 
-  // V5.0 Phase B1: fuzzy 정직 응답. 모든 pack 범용 — buildCookingSuggestion
-  // 과 동일 패턴.
-  // V5.0 lite Phase A.5: facet 분기 추가 (cooking과 동일 패턴). exact/partial일
-  // 때 facet이 있으면 facet 텍스트 노출. 없으면 기존 "문제 풀어볼래" 톤 유지.
-  // Phase 2 (Entry miss 정직): fuzzy + packLevel = domain hit but no specific
-  // entry. Surface honest "domain matches but no entry" instead of pretending
-  // the closest topic is "비슷한 건". Specific-hit fuzzy still shows the
-  // closest entry as before.
   const entryMiss = confidence === "fuzzy" && packLevel;
   let text: string;
-  if (entryMiss) {
-    text = `${pack.name}의 도메인은 맞지만, ${requestedNoun ?? "이 주제"} 정확한 문제로는 없어. cloud로 찾아볼까?`;
-  } else if (confidence === "fuzzy") {
-    text = `${pack.name}에 ${requestedNoun ?? "그건"} 정확히 없어. 비슷한 건 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제. 다른 거 원하면 cloud로 찾아볼까?`;
-  } else if (facet) {
-    const body =
-      facet.kind === "definition" && facet.pack_context
-        ? `${facet.text}\n\n${facet.pack_context}`
-        : facet.text;
-    text = confidence === "partial" ? `${body}\n\n(비슷한 entry로 매칭됐어.)` : body;
-  } else if (packLevel) {
-    text = `${pack.name}에 SAT 수학 ${matches.length}문제 있어. 풀어볼래? 아니면 새 문제 받을래?`;
+  if (lang === "en") {
+    const topicEn = SAT_TOPIC_LABEL_EN[head.problem.topic];
+    const diffEn = SAT_DIFFICULTY_LABEL_EN[head.problem.difficulty];
+    if (entryMiss) {
+      text = `${pack.name} matches the domain, but ${requestedNoun ?? "this topic"} isn't here exactly. Search in cloud?`;
+    } else if (confidence === "fuzzy") {
+      text = `${pack.name} doesn't have ${requestedNoun ?? "that"} exactly. Closest is one ${topicEn} problem. Try cloud for something else?`;
+    } else if (facet) {
+      // facet 텍스트는 entry 의 한국어 데이터 — 영어 모드에선 노출 X. 일반
+      // packLevel 톤으로 fallthrough.
+      text = `${pack.name} has ${matches.length} SAT math problem${matches.length === 1 ? "" : "s"}. Want to solve one? Or get a new one?`;
+    } else if (packLevel) {
+      text = `${pack.name} has ${matches.length} SAT math problem${matches.length === 1 ? "" : "s"}. Want to solve one? Or get a new one?`;
+    } else {
+      text = `${pack.name} has one ${topicEn} problem (${diffEn}). Want to try it?`;
+    }
   } else {
-    text = `${pack.name}에 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제(${head.problem.difficulty === "easy" ? "쉬움" : head.problem.difficulty === "medium" ? "보통" : "어려움"}) 있어. 풀어볼래?`;
+    if (entryMiss) {
+      text = `${pack.name}의 도메인은 맞지만, ${requestedNoun ?? "이 주제"} 정확한 문제로는 없어. cloud로 찾아볼까?`;
+    } else if (confidence === "fuzzy") {
+      text = `${pack.name}에 ${requestedNoun ?? "그건"} 정확히 없어. 비슷한 건 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제. 다른 거 원하면 cloud로 찾아볼까?`;
+    } else if (facet) {
+      const body =
+        facet.kind === "definition" && facet.pack_context
+          ? `${facet.text}\n\n${facet.pack_context}`
+          : facet.text;
+      text = confidence === "partial" ? `${body}\n\n(비슷한 entry로 매칭됐어.)` : body;
+    } else if (packLevel) {
+      text = `${pack.name}에 SAT 수학 ${matches.length}문제 있어. 풀어볼래? 아니면 새 문제 받을래?`;
+    } else {
+      text = `${pack.name}에 ${SAT_TOPIC_LABEL[head.problem.topic]} 문제(${SAT_DIFFICULTY_LABEL_KO[head.problem.difficulty]}) 있어. 풀어볼래?`;
+    }
   }
 
   const cloudOption: SuggestionOption | null =
     confidence === "fuzzy"
-      ? {
-          kind: "llm-call",
-          label: "cloud로 찾기",
-          prompt: requestedNoun
-            ? `${requestedNoun}에 대해 알려줘. 한국어로 짧고 정확하게.`
-            : "이 주제에 대해 알려줘. 한국어로 짧고 정확하게.",
-        }
+      ? lang === "en"
+        ? {
+            kind: "llm-call",
+            label: "Search in cloud",
+            prompt: requestedNoun
+              ? `Tell me about ${requestedNoun}. Keep it short and clear.`
+              : "Tell me about this topic. Keep it short and clear.",
+          }
+        : {
+            kind: "llm-call",
+            label: "cloud로 찾기",
+            prompt: requestedNoun
+              ? `${requestedNoun}에 대해 알려줘. 한국어로 짧고 정확하게.`
+              : "이 주제에 대해 알려줘. 한국어로 짧고 정확하게.",
+          }
       : null;
 
-  // V5.0 Phase B3c: facet 별 action_options 가 entry에 박혀 있으면 우선 사용.
-  // 미정의 facet은 기존 hardcoded fallback (학습 폴더 + 새 문제 생성 옵션).
-  // Phase 2: entry-miss 면 fuzzy entry 제안 X — 사용자가 입력한 noun 과 매칭된
-  // 문제 사이 의미 거리가 ↑ (단지 도메인만 맞음). "Pack 다른 문제 보기" 만 노출.
-  const entryOptions = facet ? head.problem.action_options?.[facet.kind] : undefined;
+  // 영어 모드에선 entry 한국어 action_options 노출 X — hardcoded fallback 사용.
+  const entryOptions =
+    lang === "en" ? undefined : facet ? head.problem.action_options?.[facet.kind] : undefined;
 
-  // V5.0 Phase I-6: excludedActions 박힘 → 해당 영역 카드 drop → 빈 배열이면
-  // fallback. cloudOption 은 별도 fuzzy 분기 옵션이라 excluded 적용 X (사용자가
-  // 모든 영역 부정해도 cloud escape 보존).
-  const baseOptions: SuggestionOption[] = entryMiss
-    ? [{ kind: "open-folder", label: "Pack 다른 문제 보기", target: "/study", action_area: "찾기" }]
-    : entryOptions
-      ? [...entryOptions]
-      : [
-          { kind: "open-folder", label: "풀어볼래", target: "/study", action_area: "만들기" },
-          {
-            kind: "llm-call",
-            label: "새 문제 받을래",
-            // systemPrompt overrides whatever pack persona the thread is in. SAT
-            // math under a cooking persona would just make Gemini refuse.
-            systemPrompt:
-              "당신은 SAT 수학 튜터입니다. 한국어로 친절하지만 간결하게 답하세요. 사용자가 요청한 형식을 정확히 지키세요.",
-            prompt: [
-              "SAT 수학 객관식 문제 1개를 새로 만들어 주세요. 다음 형식을 정확히 지켜주세요.",
-              "",
-              "문제: [한 두 문장의 문제]",
-              "① [보기 1]",
-              "② [보기 2]",
-              "③ [보기 3]",
-              "④ [보기 4]",
-              "정답: [번호]",
-              "풀이: [두세 줄의 짧은 풀이]",
-            ].join("\n"),
-            // Tells the chat handler to parse the response and store it in the
-            // Study pack rather than showing raw text in chat.
-            postAction: "save-as-sat-problem",
-            action_area: "찾기",
-          },
-        ];
+  const baseOptions: SuggestionOption[] =
+    lang === "en"
+      ? entryMiss
+        ? [
+            {
+              kind: "open-folder",
+              label: "Other problems in this pack",
+              target: "/study",
+              action_area: "찾기",
+            },
+          ]
+        : [
+            { kind: "open-folder", label: "Solve it", target: "/study", action_area: "만들기" },
+            {
+              kind: "llm-call",
+              label: "New problem",
+              systemPrompt:
+                "You are an SAT math tutor. Reply in English, friendly but concise. Follow the exact format the user requested.",
+              prompt: [
+                "Create one new SAT math multiple-choice problem. Follow this exact format.",
+                "",
+                "Problem: [one or two sentences]",
+                "① [choice 1]",
+                "② [choice 2]",
+                "③ [choice 3]",
+                "④ [choice 4]",
+                "Answer: [number]",
+                "Solution: [two or three short lines]",
+              ].join("\n"),
+              postAction: "save-as-sat-problem",
+              action_area: "찾기",
+            },
+          ]
+      : entryMiss
+        ? [
+            {
+              kind: "open-folder",
+              label: "Pack 다른 문제 보기",
+              target: "/study",
+              action_area: "찾기",
+            },
+          ]
+        : entryOptions
+          ? [...entryOptions]
+          : [
+              { kind: "open-folder", label: "풀어볼래", target: "/study", action_area: "만들기" },
+              {
+                kind: "llm-call",
+                label: "새 문제 받을래",
+                systemPrompt:
+                  "당신은 SAT 수학 튜터입니다. 한국어로 친절하지만 간결하게 답하세요. 사용자가 요청한 형식을 정확히 지키세요.",
+                prompt: [
+                  "SAT 수학 객관식 문제 1개를 새로 만들어 주세요. 다음 형식을 정확히 지켜주세요.",
+                  "",
+                  "문제: [한 두 문장의 문제]",
+                  "① [보기 1]",
+                  "② [보기 2]",
+                  "③ [보기 3]",
+                  "④ [보기 4]",
+                  "정답: [번호]",
+                  "풀이: [두세 줄의 짧은 풀이]",
+                ].join("\n"),
+                postAction: "save-as-sat-problem",
+                action_area: "찾기",
+              },
+            ];
 
   const filteredOptions = filterByExcludedActions(baseOptions, excludedActions);
   const options: SuggestionOption[] = [
-    ...(filteredOptions.length === 0 ? buildExclusionFallback() : filteredOptions),
+    ...(filteredOptions.length === 0 ? buildExclusionFallback(lang) : filteredOptions),
     ...(cloudOption ? [cloudOption] : []),
   ];
 
@@ -1075,14 +1198,18 @@ function buildCookingSuggestion(
   text: string;
   options: SuggestionOption[];
 } {
-  const { pack, packLevel, matches, facet, confidence, requestedNoun, multiMatchKey } = result;
+  const { pack, packLevel, matches, facet, confidence, requestedNoun, multiMatchKey, lang } =
+    result;
   const head = matches[0];
   if (head?.kind !== "cooking-recipe") {
-    return { text: `${pack.name}에서 비슷한 게 보여.`, options: [] };
+    const fallbackText =
+      lang === "en"
+        ? `Found something similar in ${pack.name}.`
+        : `${pack.name}에서 비슷한 게 보여.`;
+    return { text: fallbackText, options: [] };
   }
 
-  // 카테고리 chooser — "김치찌개" 같은 공통 키로 ≥ 2 entry 가 동시 매칭됐을 때.
-  // facet 응답 / "다른 음식" fallback 없이 entry 선택 카드 만으로 응답.
+  // 카테고리 chooser — 같은 키로 2 entry 이상 동시 매칭됐을 때.
   if (multiMatchKey && matches.length > 1) {
     const chooserOptions = matches
       .filter((m): m is ContentMatch & { kind: "cooking-recipe" } => m.kind === "cooking-recipe")
@@ -1093,39 +1220,52 @@ function buildCookingSuggestion(
         recipeId: m.recipe.id,
         action_area: "만들기",
       }));
-    return {
-      text: `${multiMatchKey} 종류 ${chooserOptions.length}가지 있어. 어떤 거 볼래?`,
-      options: chooserOptions,
-    };
+    const chooserText =
+      lang === "en"
+        ? `Found ${chooserOptions.length} ${multiMatchKey} versions. Which one?`
+        : `${multiMatchKey} 종류 ${chooserOptions.length}가지 있어. 어떤 거 볼래?`;
+    return { text: chooserText, options: chooserOptions };
   }
 
-  let text: string;
-  // V5.0 lite Phase B1: fuzzy 분기는 정직 응답으로 분기.
-  //   "정확히 없어 — 비슷한 entry: <name>. 다른 거 원하면 cloud."
-  // partial은 facet 응답 + 작은 confidence 표시.
-  // exact는 facet 응답 그대로.
-  // Phase 2 (Entry miss 정직): fuzzy + packLevel = domain hit but no specific
-  // recipe entry. Don't surface "비슷한 건 X" as if X is close — meaning
-  // distance is high. Specific-hit fuzzy still shows the closest recipe.
   const entryMiss = confidence === "fuzzy" && packLevel;
-  if (entryMiss) {
-    const requestedLabel = requestedNoun ?? "이 주제";
-    text = `${pack.name}의 도메인은 맞지만, ${requestedLabel} 정확한 레시피로는 없어. cloud로 찾아볼까?`;
-  } else if (confidence === "fuzzy") {
-    const requestedLabel = requestedNoun ?? "그건";
-    text = `${pack.name}에 ${requestedLabel} 정확히 없어. 비슷한 건 ${head.recipe.title}. 다른 거 원하면 cloud로 찾아볼까?`;
-  } else if (facet) {
-    const body =
-      facet.kind === "definition" && facet.pack_context
-        ? `${facet.text}\n\n${facet.pack_context}`
-        : facet.text;
-    text = confidence === "partial" ? `${body}\n\n(비슷한 entry로 매칭됐어.)` : body;
-  } else if (packLevel) {
-    text = `${pack.name}에 레시피 ${matches.length}개 있어. 보여줄까?`;
-  } else if (matches.length === 1) {
-    text = `${pack.name}에 ${head.recipe.title} 레시피 있어. 보여줄까? 아니면 다른 음식?`;
+  let text: string;
+  if (lang === "en") {
+    if (entryMiss) {
+      const label = requestedNoun ?? "this";
+      text = `${pack.name} matches the domain, but ${label} isn't here exactly. Search in cloud?`;
+    } else if (confidence === "fuzzy") {
+      const label = requestedNoun ?? "that";
+      text = `${pack.name} doesn't have ${label} exactly. Closest is ${head.recipe.title}. Try cloud for something else?`;
+    } else if (facet) {
+      // facet 텍스트는 entry 의 한국어 데이터. 영어 모드에선 노출 X — packLevel 톤.
+      text = `${pack.name} has ${matches.length} recipe${matches.length === 1 ? "" : "s"}. Want to see?`;
+    } else if (packLevel) {
+      text = `${pack.name} has ${matches.length} recipe${matches.length === 1 ? "" : "s"}. Want to see?`;
+    } else if (matches.length === 1) {
+      text = `${pack.name} has ${head.recipe.title}. Want to see? Or something else?`;
+    } else {
+      text = `${pack.name} has ${matches.length} similar recipes. Which one?`;
+    }
   } else {
-    text = `${pack.name}에 비슷한 레시피 ${matches.length}개 있어. 어떤 거 볼래?`;
+    if (entryMiss) {
+      const requestedLabel = requestedNoun ?? "이 주제";
+      text = `${pack.name}의 도메인은 맞지만, ${requestedLabel} 정확한 레시피로는 없어. cloud로 찾아볼까?`;
+    } else if (confidence === "fuzzy") {
+      const requestedLabel = requestedNoun ?? "그건";
+      text = `${pack.name}에 ${requestedLabel} 정확히 없어. 비슷한 건 ${head.recipe.title}. 다른 거 원하면 cloud로 찾아볼까?`;
+    } else if (facet) {
+      const body =
+        facet.kind === "definition" && facet.pack_context
+          ? `${facet.text}\n\n${facet.pack_context}`
+          : facet.text;
+      text = confidence === "partial" ? `${body}\n\n(비슷한 entry로 매칭됐어.)` : body;
+    } else if (packLevel) {
+      text = `${pack.name}에 레시피 ${matches.length}개 있어. 보여줄까?`;
+    } else if (matches.length === 1) {
+      text = `${pack.name}에 ${head.recipe.title} 레시피 있어. 보여줄까? 아니면 다른 음식?`;
+    } else {
+      text = `${pack.name}에 비슷한 레시피 ${matches.length}개 있어. 어떤 거 볼래?`;
+    }
   }
 
   const recipeOptions: SuggestionOption[] = matches
@@ -1133,59 +1273,78 @@ function buildCookingSuggestion(
     .slice(0, 2)
     .map((m) => ({
       kind: "show-recipe",
-      label: matches.length === 1 ? "보여줘" : m.recipe.title,
+      label: matches.length === 1 ? (lang === "en" ? "Show me" : "보여줘") : m.recipe.title,
       recipeId: m.recipe.id,
-      // V5.0 Phase I-6: hardcoded fallback recipe option 도 만들기 영역 — user
-      // 가 직접 요리하는 행동이라 entry action_options 의 craving/how_to 와 동일.
       action_area: "만들기",
     }));
 
-  // V5.0 Phase B1: fuzzy 분기에는 cloud 진입 옵션을 명시. 사용자가 "정확히
-  // 없다"는 응답을 보고 cloud로 escalate할 수 있게.
   const cloudOption: SuggestionOption | null =
     confidence === "fuzzy"
-      ? {
-          kind: "llm-call",
-          label: "cloud로 찾기",
-          prompt: requestedNoun
-            ? `${requestedNoun}에 대해 알려줘. 한국어로 짧고 정확하게.`
-            : "이 주제에 대해 알려줘. 한국어로 짧고 정확하게.",
-        }
+      ? lang === "en"
+        ? {
+            kind: "llm-call",
+            label: "Search in cloud",
+            prompt: requestedNoun
+              ? `Tell me about ${requestedNoun}. Keep it short and clear.`
+              : "Tell me about this. Keep it short and clear.",
+          }
+        : {
+            kind: "llm-call",
+            label: "cloud로 찾기",
+            prompt: requestedNoun
+              ? `${requestedNoun}에 대해 알려줘. 한국어로 짧고 정확하게.`
+              : "이 주제에 대해 알려줘. 한국어로 짧고 정확하게.",
+          }
       : null;
 
-  // V5.0 Phase B3c: facet 별 action_options 가 entry에 박혀 있으면 우선 사용.
-  // 미정의 facet (또는 facet undefined) 은 기존 hardcoded recipeOptions + 다른
-  // 음식 옵션 fallback.
-  // Phase 2: entry-miss 면 recipeOptions 제안 X — 사용자가 입력한 noun 과 매칭된
-  // recipe 사이 의미 거리가 ↑. "다른 레시피 보기" 만 노출 + cloud.
-  const entryOptions = facet ? head.recipe.action_options?.[facet.kind] : undefined;
+  // 영어 모드에선 entry 한국어 action_options 노출 X — hardcoded fallback 사용.
+  const entryOptions =
+    lang === "en" ? undefined : facet ? head.recipe.action_options?.[facet.kind] : undefined;
 
-  // V5.0 Phase I-6: excludedActions 박힘 → 해당 영역 카드 drop → 빈 배열이면
-  // fallback. cloudOption 은 fuzzy 전용이라 excluded 적용 X.
-  const baseOptions: SuggestionOption[] = entryMiss
-    ? [
-        {
-          kind: "llm-call",
-          label: "Pack 다른 레시피 보기",
-          prompt: `${pack.name}에 어떤 레시피가 있는지 보여줘.`,
-          action_area: "찾기",
-        },
-      ]
-    : entryOptions
-      ? [...entryOptions]
-      : [
-          ...recipeOptions,
-          {
-            kind: "llm-call",
-            label: "다른 음식",
-            prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
-            action_area: "찾기",
-          },
-        ];
+  const baseOptions: SuggestionOption[] =
+    lang === "en"
+      ? entryMiss
+        ? [
+            {
+              kind: "llm-call",
+              label: "Other recipes in this pack",
+              prompt: `Show me what's in ${pack.name}.`,
+              action_area: "찾기",
+            },
+          ]
+        : [
+            ...recipeOptions,
+            {
+              kind: "llm-call",
+              label: "Something else",
+              prompt: "Recommend one different dish — similar vibe, slightly different.",
+              action_area: "찾기",
+            },
+          ]
+      : entryMiss
+        ? [
+            {
+              kind: "llm-call",
+              label: "Pack 다른 레시피 보기",
+              prompt: `${pack.name}에 어떤 레시피가 있는지 보여줘.`,
+              action_area: "찾기",
+            },
+          ]
+        : entryOptions
+          ? [...entryOptions]
+          : [
+              ...recipeOptions,
+              {
+                kind: "llm-call",
+                label: "다른 음식",
+                prompt: "다른 요리 하나 추천해줘. 비슷한 결인데 살짝 다른 걸로.",
+                action_area: "찾기",
+              },
+            ];
 
   const filteredOptions = filterByExcludedActions(baseOptions, excludedActions);
   const options: SuggestionOption[] = [
-    ...(filteredOptions.length === 0 ? buildExclusionFallback() : filteredOptions),
+    ...(filteredOptions.length === 0 ? buildExclusionFallback(lang) : filteredOptions),
     ...(cloudOption ? [cloudOption] : []),
   ];
 

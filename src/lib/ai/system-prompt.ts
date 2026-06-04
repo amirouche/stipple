@@ -24,8 +24,12 @@ import type { AnswerPayload, Pack } from "@/lib/dots-data";
 import type { LookupResult } from "@/lib/memory/lookup";
 import type { ConversationSummary } from "@/lib/memory/types";
 import type { Intent } from "@/lib/packs/intent";
+import type { Lang } from "@/lib/text/detect-language";
 
 export type SystemPromptContext = {
+  // Phase EN-1: 입력 언어. "en"이면 모든 섹션을 영어 미러로 교체. 미박힘 또는
+  // "ko"이면 기존 한국어 그대로 (default — Korean 회귀 0).
+  lang?: Lang;
   // 사용자 현재 입력. 키워드 기반 의도 fallback (hasRecommendationIntent) 에 사용.
   query: string;
   // 활성 팩 (cooking-essentials / study-companion / ...). voice/tone/systemPrompt
@@ -108,12 +112,42 @@ const DOTS_CHARTER = [
   "답: 사과는 장미과 사과나무 열매. 비타민 C와 식이섬유가 풍부하고 한국에서 많이 먹는 과일이야.",
 ].join("\n");
 
+// Phase EN-1: DOTS_CHARTER 영어 미러. DOTS 캐릭터(군더더기 없음·직설적·로컬
+// 우선·솔직)를 영어 톤으로 그대로 살림. 기계번역 톤("an artificial intelligence
+// assistant designed to...") 회피.
+const DOTS_CHARTER_EN = [
+  "You are DOTS — an AI assistant grounded in the user's local memory.",
+  "",
+  "Principles (honesty constitution):",
+  "- Reply in English only. Don't mix Korean / Japanese / Chinese words.",
+  "- If you don't know, say \"I don't know\" plainly. No guessing, no hallucinating.",
+  "- Real-time info (weather, prices, news) and location-based info (nearby shops, delivery) — say you don't have it. Don't fake it.",
+  "- Answer exactly what the user asked. Don't drift onto other topics.",
+  "- Keep it short and natural, no formal tone. 1-3 sentences is enough.",
+  "- For a single-word input → give the definition + one or two key sentences.",
+  "- Don't ask back. Don't tag follow-up questions unless the user asks for more.",
+  "- If local memory context is given, weave it in naturally. For unfamiliar topics, stay neutral.",
+  "",
+  "Examples:",
+  "User: quantum mechanics",
+  "Reply: Quantum mechanics is the physics of the subatomic world — particles can behave like waves and exist in multiple states at once.",
+  "",
+  "User: apple",
+  "Reply: An apple is the fruit of the apple tree, in the rose family. Rich in vitamin C and fiber, one of the most common fruits worldwide.",
+].join("\n");
+
 // V3 casual: "안녕"/"고마워" 같은 인사에 정의·메모리 인용 X. DOTS_CHARTER의
 // "단어 한 개 → 정의" 룰을 의도적으로 override (중복 X — 의도된 우선순위 덮어씀).
 const CASUAL_OVERRIDE = [
   "[현재 상황: 사용자가 인사 또는 감사 표현]",
   '- 1 문장으로 짧고 친근하게. 예: "안녕!", "천만에!", "잘 지내?"',
   "- 정의 설명 / 도움 제안 / 추가 질문 X. 인사로만 응답.",
+].join("\n");
+
+const CASUAL_OVERRIDE_EN = [
+  "[Current state: user greeting or thanks]",
+  '- One short, friendly sentence. e.g. "Hey!", "You\'re welcome!", "How\'s it going?"',
+  "- No definitions, no offers to help, no follow-up questions. Just the greeting.",
 ].join("\n");
 
 // 추천 의도: 사용자가 "메뉴 추천"·"뭐 먹지" 류. 카탈로그 / 옵션 나열 X — 한 가지
@@ -123,6 +157,13 @@ const RECOMMENDATION_OVERRIDE = [
   "- 한 가지 구체적 제안만 (예: 음식 이름 하나).",
   "- 짧은 이유 한 줄 (시간/날씨/기분/상황 중 하나).",
   "- 카탈로그 / 옵션 나열 X. 친구처럼 자연스럽게.",
+].join("\n");
+
+const RECOMMENDATION_OVERRIDE_EN = [
+  "[Current state: recommendation request]",
+  "- One specific suggestion only (e.g. one dish name).",
+  "- One short reason (pick one: time, weather, mood, situation).",
+  "- No catalogs, no option lists. Talk like a friend.",
 ].join("\n");
 
 // 키워드 기반 추천 의도 fallback. V3 분류기가 recommend 외로 분류했어도
@@ -150,7 +191,22 @@ const CARD_FOLLOWUP_NOTE = [
   "1-2 문장의 짧은 인사·맥락만 작성하세요. 사용자가 전에 좋아한 재료나 흐름이 있으면 자연스럽게 언급하세요.",
 ].join("\n");
 
-function buildPackPersona(pack: Pack): string {
+const CARD_FOLLOWUP_NOTE_EN = [
+  "[Important] A recipe card will render right below your reply. Don't repeat ingredients, steps, or timing.",
+  "Write only a 1-2 sentence intro or context. If the user has past preferences worth referencing, slip them in naturally.",
+].join("\n");
+
+function buildPackPersona(pack: Pack, lang: Lang): string {
+  if (lang === "en") {
+    // English mode: voice/tone descriptors stay Korean (data field), so skip
+    // the explicit voice/tone line — the systemPromptEn copy already conveys
+    // tone conversationally. Fall back to Korean systemPrompt if the pack
+    // hasn't been mirrored (defensive — 4 working packs all have En).
+    const persona = pack.systemPromptEn ?? pack.systemPrompt;
+    const lines: string[] = [`[Active Pack: ${pack.name}]`];
+    if (persona) lines.push(persona);
+    return lines.join("\n");
+  }
   const lines: string[] = [`[활성 팩: ${pack.name}]`];
   if (pack.voice && pack.tone) {
     lines.push(`너는 "${pack.voice}"로서 답한다. 톤: ${pack.tone}`);
@@ -168,7 +224,13 @@ function buildPackPersona(pack: Pack): string {
 // 사용 케이스: matchPackContent miss 후 Stage 3 cloud — thread.lastPackId
 // 으로 composePack 박혀 있어도 사용자가 cloud 일반 답변을 기대하는 흐름.
 // 예: "맥주 ... 짜장면 ..." 같이 pack 외부 영역 입력.
-function buildPackReference(pack: Pack): string {
+function buildPackReference(pack: Pack, lang: Lang): string {
+  if (lang === "en") {
+    return [
+      `[Reference context — previous conversation area: ${pack.name}]`,
+      "This is just context. Answer this turn from general cloud knowledge.",
+    ].join("\n");
+  }
   return [
     `[참고 컨텍스트 — 이전 대화 영역: ${pack.name}]`,
     `해당 영역의 voice="${pack.voice}", tone="${pack.tone}".`,
@@ -210,11 +272,35 @@ const CLOUD_DISCIPLINE = [
   "- 다음 행동·후속 질문은 사용자가 박은 다음 query 에서 결정 — cloud 가 미리 박지 X.",
 ].join("\n");
 
+const CLOUD_DISCIPLINE_EN = [
+  "[Current state: cloud reply — outside Pack scope]",
+  '- Don\'t name Packs (e.g. "Cooking Essentials", "Study Companion").',
+  "- Don't say \"the Pack doesn't have ...\" — don't imitate the Pack tone.",
+  "- Answer from general cloud knowledge. If you don't know, say \"I don't know\" plainly.",
+  '- If you must flag this is outside Pack scope, one short line at the start (e.g. "Pulled this from cloud"). Body stays in general cloud tone.',
+  "",
+  "[User-led flow — cloud doesn't steer]",
+  "- Answer only the area and question the user asked. Don't push them toward another area.",
+  '- No "How about a recipe?" / "Want to try making it?" / "What about X from your Pack?" suggestions.',
+  '- No "Maybe ~?" / "Want to ~?" / "How about ~ instead?" transitions.',
+  "- Reply = the direct answer to the user's question. That's it.",
+  '- Suggest or recommend only if the user explicitly asked ("recommend", "what should I eat", "what\'s good").',
+  "- The next move belongs to the user's next query — don't pre-empt it.",
+].join("\n");
+
 // V5.0 Phase M-1: thread-level 요약 섹션. dispatch가 이 함수의 결과를 system
 // prompt에 박으면서 history는 recent N 만 보냄 — summary가 [0..N) 메시지를
 // 대체. Tei 스펙 보존 측면 4가지 (정보·영역·미해결·톤) 가 들어와 LLM이 그대로
 // 활용. "이전 대화 요약" 라벨은 사용자가 보는 라벨이 아닌 LLM 인지용.
-function buildSummarySection(summary: ConversationSummary): string {
+function buildSummarySection(summary: ConversationSummary, lang: Lang): string {
+  if (lang === "en") {
+    return [
+      `[Previous conversation summary — covers ${summary.sourceMessagesCount} messages]`,
+      summary.content,
+      "",
+      "Messages after this summary continue in the multi-turn format below. Combine the summary with the recent turns to answer.",
+    ].join("\n");
+  }
   return [
     `[이전 대화 요약 — ${summary.sourceMessagesCount} 메시지 분]`,
     summary.content,
@@ -242,14 +328,34 @@ function buildSummarySection(summary: ConversationSummary): string {
 //     인지 박혀야.
 //
 // 빈 박힘 (likes + dislikes 둘 다 빈) 시 섹션 X — 토큰 절약 + 회귀 위험 0.
-function buildUserPreferencesSection(prefs: {
-  likes: string[];
-  dislikes: string[];
-  sudokuLastPlay?: { difficulty: string; mistakes: number; timeSeconds: number };
-}): string {
+function buildUserPreferencesSection(
+  prefs: {
+    likes: string[];
+    dislikes: string[];
+    sudokuLastPlay?: { difficulty: string; mistakes: number; timeSeconds: number };
+  },
+  lang: Lang,
+): string {
   const { likes, dislikes, sudokuLastPlay } = prefs;
   if (likes.length === 0 && dislikes.length === 0 && !sudokuLastPlay) return "";
   const lines = ["[USER_CONTEXT]"];
+  if (lang === "en") {
+    if (likes.length > 0) lines.push(`- User likes: ${likes.join(", ")}`);
+    if (dislikes.length > 0) lines.push(`- User dislikes: ${dislikes.join(", ")}`);
+    if (sudokuLastPlay) {
+      const minutes = Math.floor(sudokuLastPlay.timeSeconds / 60);
+      lines.push(
+        `- Recent Sudoku: ${sudokuLastPlay.difficulty}, ${sudokuLastPlay.mistakes} mistake(s), ${minutes} min`,
+      );
+    }
+    lines.push("[/USER_CONTEXT]");
+    if (likes.length > 0 || dislikes.length > 0) {
+      lines.push(
+        "When recommending, never include what the user dislikes; prefer what they like. For food, never suggest dishes containing disliked ingredients.",
+      );
+    }
+    return lines.join("\n");
+  }
   if (likes.length > 0) {
     lines.push(`- 사용자가 좋아함: ${likes.join(", ")}`);
   }
@@ -271,7 +377,27 @@ function buildUserPreferencesSection(prefs: {
   return lines.join("\n");
 }
 
-function buildMemoryContext(lookup: LookupResult): string {
+function buildMemoryContext(lookup: LookupResult, lang: Lang): string {
+  if (lang === "en") {
+    const lines: string[] = ["[User's local memory context]"];
+    const memTopics = lookup.memoryMatches
+      .slice(0, 5)
+      .map(
+        (m) =>
+          `- ${m.record.topic} (${m.record.state}, mentioned ${m.record.accessCount}x, score=${m.score.toFixed(2)})`,
+      );
+    if (memTopics.length > 0) {
+      lines.push("Recent memory:", ...memTopics);
+    }
+    const archTopics = lookup.archiveMatches.slice(0, 3).map((m) => {
+      const topicList = m.matchedTopics.map((t) => `${t.topic}×${t.count}`).join(", ");
+      return `- ${topicList} (${m.entry.granularity} archive)`;
+    });
+    if (archTopics.length > 0) {
+      lines.push("Archive:", ...archTopics);
+    }
+    return lines.join("\n");
+  }
   const lines: string[] = ["[사용자의 로컬 메모리 컨텍스트]"];
   const memTopics = lookup.memoryMatches
     .slice(0, 5)
@@ -293,7 +419,10 @@ function buildMemoryContext(lookup: LookupResult): string {
 }
 
 export function buildSystemPrompt(ctx: SystemPromptContext): string {
-  const sections: string[] = [DOTS_CHARTER];
+  // Phase EN-1: 입력 언어 분기. "en"이면 모든 섹션이 영어 미러로 교체.
+  // default "ko" — Korean 회귀 0.
+  const lang: Lang = ctx.lang ?? "ko";
+  const sections: string[] = [lang === "en" ? DOTS_CHARTER_EN : DOTS_CHARTER];
 
   // Pack persona — 활성 팩의 voice/tone/systemPrompt를 DOTS 헌법 위에 layer.
   // callerSystemPrompt가 박힌 경우는 caller가 의도적으로 pack 페르소나 우회한
@@ -306,45 +435,45 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
   // 도 박혀 pack 이름 언급 / pack 톤 흉내 차단.
   if (ctx.pack) {
     if (ctx.cloudMode) {
-      sections.push(buildPackReference(ctx.pack));
+      sections.push(buildPackReference(ctx.pack, lang));
     } else {
-      sections.push(buildPackPersona(ctx.pack));
+      sections.push(buildPackPersona(ctx.pack, lang));
     }
   }
   if (ctx.cloudMode) {
-    sections.push(CLOUD_DISCIPLINE);
+    sections.push(lang === "en" ? CLOUD_DISCIPLINE_EN : CLOUD_DISCIPLINE);
   }
 
   // Intent override — DOTS_CHARTER의 일부 룰을 의도적으로 덮어씀. casual이
   // 가장 우선 (인사에 정의·추천 답하면 깬다).
   if (ctx.intent === "casual") {
-    sections.push(CASUAL_OVERRIDE);
+    sections.push(lang === "en" ? CASUAL_OVERRIDE_EN : CASUAL_OVERRIDE);
   } else if (ctx.intent === "recommend" || hasRecommendationIntent(ctx.query)) {
-    sections.push(RECOMMENDATION_OVERRIDE);
+    sections.push(lang === "en" ? RECOMMENDATION_OVERRIDE_EN : RECOMMENDATION_OVERRIDE);
   }
 
   // Payload-specific — 카드가 뒤에 붙는 경우 LLM이 같은 정보 다시 적지 X.
   if (ctx.payloadKind === "recipe" || ctx.payloadKind === "memory-recipes") {
-    sections.push(CARD_FOLLOWUP_NOTE);
+    sections.push(lang === "en" ? CARD_FOLLOWUP_NOTE_EN : CARD_FOLLOWUP_NOTE);
   }
 
   // V5.0 Phase M-1: thread-level 요약을 cross-thread memory보다 위에 박는다.
   // 같은 thread의 직전 흐름이 cross-thread memory보다 더 가까운 컨텍스트.
   if (ctx.summary) {
-    sections.push(buildSummarySection(ctx.summary));
+    sections.push(buildSummarySection(ctx.summary, lang));
   }
 
   // Memory context — pack 페르소나 / intent override 다음. LLM이 응답 직전에
   // 보는 컨텍스트.
   if (ctx.memory && ctx.memory.totalScore > 0) {
-    sections.push(buildMemoryContext(ctx.memory));
+    sections.push(buildMemoryContext(ctx.memory, lang));
   }
 
   // Phase M0-5: 사용자 선호 (USER_CONTEXT). MEMORY_CONTEXT 다음, CALLER_OVERRIDE
   // 직전 — 응답 결정 측면 영향력 ↑ 위치. dislike "절대 추천 금지" / like "우선
   // 반영". 비어 박혀 있으면 빈 string 반환 → push 측면 effective skip.
   if (ctx.userPreferences) {
-    const userPrefSection = buildUserPreferencesSection(ctx.userPreferences);
+    const userPrefSection = buildUserPreferencesSection(ctx.userPreferences, lang);
     if (userPrefSection) sections.push(userPrefSection);
   }
 

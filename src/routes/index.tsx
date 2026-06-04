@@ -45,6 +45,7 @@ import {
   classifySummaryIntent,
 } from "@/lib/packs/intent";
 import { topicParticle } from "@/lib/text/clean-noun";
+import { detectLanguage } from "@/lib/text/detect-language";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import {
   addAlias,
@@ -304,6 +305,11 @@ function ChatPage() {
       return;
     }
 
+    // Phase EN-1: 입력 언어 감지. preference / recall / Stage 3 cloud 모두 lang
+    // 분기를 쓰므로 가장 일찍 박음. 계산기 (parseCalculation) 는 lang 무관 (식
+    // 그대로 출력) 이라 그 앞 / 뒤 어디에 박혀도 OK.
+    const lang = detectLanguage(text);
+
     // ---- Stage 0.4 (Phase Calc): 계산기 ("1+1" / "sqrt(16)" / "5 km to m").
     // mathjs 측면 Local 평가 — Cloud 호출 0. parseCalculation 이 두 단계
     // 게이트 (Hangul 차단 + operator/function 시그널 + mathjs try/catch) 로
@@ -354,8 +360,14 @@ function ChatPage() {
       const userId = crypto.randomUUID();
       const asstId = crypto.randomUUID();
       const entry = addPreference(pref.type, pref.subject);
-      const verb = pref.type === "like" ? "좋아하는" : "싫어하는";
-      const body = `알겠어. ${pref.subject} ${verb} 거 기억할게.`;
+      // Phase EN-4: 입력 언어 기준 응답 분기. 한국어 회귀 그대로 (lang === "ko"
+      // 이면 기존 톤 유지).
+      const body =
+        lang === "en"
+          ? pref.type === "like"
+            ? `Got it — I'll remember you like ${pref.subject}.`
+            : `Got it — I'll remember you don't like ${pref.subject}.`
+          : `알겠어. ${pref.subject} ${pref.type === "like" ? "좋아하는" : "싫어하는"} 거 기억할게.`;
       appendMessage(thread.id, { id: userId, role: "user", text });
       renameThreadIfDefault(thread.id, text);
       appendMessage(thread.id, {
@@ -401,7 +413,30 @@ function ChatPage() {
       const likeSubjects = likes.map((e) => e.subject);
       const dislikeSubjects = dislikes.map((e) => e.subject);
       let body: string;
-      if (recall.type === "all") {
+      // Phase EN-4: 입력 언어 기준 응답 분기.
+      if (lang === "en") {
+        if (recall.type === "all") {
+          if (likeSubjects.length === 0 && dislikeSubjects.length === 0) {
+            body = "I don't know your preferences yet. Tell me.";
+          } else if (likeSubjects.length > 0 && dislikeSubjects.length > 0) {
+            body = `You like ${likeSubjects.join(", ")} and don't like ${dislikeSubjects.join(", ")}.`;
+          } else if (likeSubjects.length > 0) {
+            body = `You like ${likeSubjects.join(", ")}.`;
+          } else {
+            body = `You don't like ${dislikeSubjects.join(", ")}.`;
+          }
+        } else if (recall.type === "like") {
+          body =
+            likeSubjects.length === 0
+              ? "You haven't told me what you like yet. Tell me."
+              : `You like ${likeSubjects.join(", ")}.`;
+        } else {
+          body =
+            dislikeSubjects.length === 0
+              ? "You haven't told me what you don't like yet. Tell me."
+              : `You don't like ${dislikeSubjects.join(", ")}.`;
+        }
+      } else if (recall.type === "all") {
         if (likeSubjects.length === 0 && dislikeSubjects.length === 0) {
           body = "아직 너의 선호 정보가 없어. 알려줘.";
         } else if (likeSubjects.length > 0 && dislikeSubjects.length > 0) {
@@ -462,6 +497,7 @@ function ChatPage() {
       console.log("[send]", {
         input: text,
         intent,
+        lang,
         confidence: intentResult.confidence,
         lastPackId: thread.lastPackId,
         lastEntry: thread.lastPackEntry?.entryName,
@@ -560,8 +596,12 @@ function ChatPage() {
             reason: "",
             packName: cluster.packName,
             pending: false,
-            text: `${cluster.term} 다른 레시피 — ${recipe.title}.`,
+            text:
+              lang === "en"
+                ? `Another ${cluster.term} — ${recipe.title}.`
+                : `${cluster.term} 다른 레시피 — ${recipe.title}.`,
             recipes: [recipe],
+            lang,
           });
           markRecipeServed(thread.id, recipe.id);
           // cluster 의 마지막 entry 까지 rotate 한 turn 이면 clear.
@@ -1168,6 +1208,7 @@ function ChatPage() {
         pitch: payload.kind === "pack-suggestion" ? undefined : payload.pitch,
         suggestion,
         provider,
+        lang,
       });
       setBusy(false);
       scrollDown();
@@ -1245,6 +1286,8 @@ function ChatPage() {
       // pack identity 흉내 X — 일반 cloud 톤. Tei 발견 ("Cooking Essentials에는
       // ... 정보는 없어") 누수 차단.
       cloudMode: true,
+      // Phase EN-1: 사용자 입력 언어 → 영어 system prompt 분기.
+      lang,
     }).then(({ payload, provider, summaryUsed, summaryGenerated }) => {
       renderPayload(payload, provider);
       // Stage 3 trace는 composeAnswer 결과가 돌아온 시점에. provider가
@@ -1311,6 +1354,9 @@ function ChatPage() {
       const r = getCookingRecipe(option.recipeId);
       if (!r) return;
       const id = crypto.randomUUID();
+      // Phase EN-4: show-recipe 호출은 사용자가 SuggestionBlock 버튼을 누른 결과.
+      // option.label 의 언어로 카드 라벨 결정 (영어 빌더가 박은 영어 옵션이면 EN).
+      const optLang = detectLanguage(option.label);
       appendMessage(thread.id, {
         id,
         role: "assistant",
@@ -1320,6 +1366,7 @@ function ChatPage() {
         packName: matchedPack?.name,
         pending: false,
         recipes: [r],
+        lang: optLang,
       });
       markRecipeServed(thread.id, r.id);
       requestAnimationFrame(() => {
@@ -1425,6 +1472,8 @@ function ChatPage() {
             userMessage: option.prompt,
             systemPrompt: option.systemPrompt,
             history: threadHistory(thread.messages),
+            // Phase EN-1: option.prompt 언어로 응답 언어 결정.
+            lang: detectLanguage(option.prompt),
           },
           streamToken,
         )
@@ -1461,6 +1510,9 @@ function ChatPage() {
           // 위 분기 (option.systemPrompt — 예: SAT 출제) 는 ad-hoc 페르소나라
           // summary 비활성 (의도된 omit).
           threadId: thread.id,
+          // Phase EN-1: option.prompt 언어로 응답 언어 결정. action_options
+          // 영어 미러가 박히면 (Step 4) 자동으로 영어 응답으로 따라감.
+          lang: detectLanguage(option.prompt),
         })
           .then(({ payload, provider, summaryUsed, summaryGenerated }) => {
             onDoneTextWithProvider(payload.kind === "text" ? payload.text : "", provider);
@@ -1749,7 +1801,8 @@ function AssistantBubble({
               onAction={(opt) => onSuggestionAction(opt, m.suggestion?.matchedPackId)}
             />
           )}
-          {!m.pending && m.recipes?.map((r) => <RecipeCard key={r.id} recipe={r} />)}
+          {!m.pending &&
+            m.recipes?.map((r) => <RecipeCard key={r.id} recipe={r} lang={m.lang ?? "ko"} />)}
           {!m.pending && m.pitch && <PitchCard pitch={m.pitch} />}
         </div>
       )}

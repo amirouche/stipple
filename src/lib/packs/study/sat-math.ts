@@ -297,6 +297,8 @@ export function checkAnswer(problemId: string, selected: string): CheckResult | 
   };
 }
 
+type StudyTopic_ = SATMathProblem["topic"];
+
 const TOPIC_KO: Record<StudyTopic_, string> = {
   algebra: "대수",
   geometry: "기하",
@@ -304,10 +306,16 @@ const TOPIC_KO: Record<StudyTopic_, string> = {
   trigonometry: "삼각함수",
 };
 
-type StudyTopic_ = SATMathProblem["topic"];
+// Phase EN-4: 영어 라벨.
+const TOPIC_EN: Record<StudyTopic_, string> = {
+  algebra: "Algebra",
+  geometry: "Geometry",
+  statistics: "Probability & Stats",
+  trigonometry: "Trigonometry",
+};
 
-export function topicLabel(t: SATMathProblem["topic"]): string {
-  return TOPIC_KO[t];
+export function topicLabel(t: SATMathProblem["topic"], lang: "ko" | "en" = "ko"): string {
+  return lang === "en" ? TOPIC_EN[t] : TOPIC_KO[t];
 }
 
 const DIFFICULTY_KO: Record<SATMathProblem["difficulty"], string> = {
@@ -316,6 +324,12 @@ const DIFFICULTY_KO: Record<SATMathProblem["difficulty"], string> = {
   hard: "어려움",
 };
 
-export function difficultyLabel(d: SATMathProblem["difficulty"]): string {
-  return DIFFICULTY_KO[d];
+const DIFFICULTY_EN: Record<SATMathProblem["difficulty"], string> = {
+  easy: "Easy",
+  medium: "Medium",
+  hard: "Hard",
+};
+
+export function difficultyLabel(d: SATMathProblem["difficulty"], lang: "ko" | "en" = "ko"): string {
+  return lang === "en" ? DIFFICULTY_EN[d] : DIFFICULTY_KO[d];
 }

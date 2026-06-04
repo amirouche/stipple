@@ -59,6 +59,10 @@ export type ThreadMsg =
       // 미박힘 = pack identity 응답 (suggestion onClick 등) 또는 cloud 호출
       // 미발생.
       cloudMode?: boolean;
+      // Phase EN-4: 메시지 응답 언어. 사용자 입력 detectLanguage 결과 박힘.
+      // RecipeCard / SuggestionBlock 등 카드 렌더 시 라벨 분기. 미박힘 = 한국어
+      // (Korean 회귀 default).
+      lang?: "ko" | "en";
     };
 
 // V5.0 lite Phase B2: 직전 pack 매칭의 confidence·entry·요청 명사구를 보존.

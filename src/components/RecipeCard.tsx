@@ -23,13 +23,18 @@ export const KIMCHI_STEW: Recipe = {
   tip: "설탕 한 꼬집이 신맛을 잡아줘.",
 };
 
-export function RecipeCard({ recipe }: { recipe: Recipe }) {
+// Phase EN-4: lang prop. 라벨 (재료/순서/팁/분)만 영어 분기 — 레시피 데이터
+// 본문 (한국 요리 제목 / 재료 / 단계) 은 Korean 그대로. 한국 요리 컨텍스트라
+// 영어 번역하면 어색 ("묵은지" → "aged kimchi" 등).
+export function RecipeCard({ recipe, lang = "ko" }: { recipe: Recipe; lang?: "ko" | "en" }) {
+  const L =
+    lang === "en"
+      ? { ingredients: "Ingredients", steps: "Steps", tips: "Tips", minSuffix: " min" }
+      : { ingredients: "재료", steps: "순서", tips: "팁", minSuffix: "분" };
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden max-w-2xl">
       <div className="px-5 py-4 border-b border-border">
-        <h3 className="text-[16px] font-semibold tracking-tight text-ink">
-          {recipe.title}
-        </h3>
+        <h3 className="text-[16px] font-semibold tracking-tight text-ink">{recipe.title}</h3>
         <p className="text-[12px] text-ink-soft mt-0.5">
           {recipe.serves} · {recipe.total}
         </p>
@@ -38,7 +43,7 @@ export function RecipeCard({ recipe }: { recipe: Recipe }) {
       <div className="grid md:grid-cols-[180px_1fr] gap-x-8 gap-y-6 px-5 py-5">
         <section>
           <h4 className="text-[10.5px] uppercase tracking-[0.14em] text-ink-soft mb-3">
-            재료
+            {L.ingredients}
           </h4>
           <ul className="space-y-2">
             {recipe.ingredients.map((i) => (
@@ -52,7 +57,7 @@ export function RecipeCard({ recipe }: { recipe: Recipe }) {
 
         <section>
           <h4 className="text-[10.5px] uppercase tracking-[0.14em] text-ink-soft mb-3">
-            순서
+            {L.steps}
           </h4>
           <ol className="space-y-3">
             {recipe.steps.map((s, idx) => (
@@ -64,7 +69,8 @@ export function RecipeCard({ recipe }: { recipe: Recipe }) {
                   <p className="text-[13.5px] text-ink leading-relaxed">{s.t}</p>
                   {s.minutes && (
                     <p className="font-mono text-[10.5px] text-ink-soft mt-0.5">
-                      {s.minutes}분
+                      {s.minutes}
+                      {L.minSuffix}
                     </p>
                   )}
                 </div>
@@ -74,7 +80,7 @@ export function RecipeCard({ recipe }: { recipe: Recipe }) {
 
           <div className="mt-6 pt-5 border-t border-border">
             <h4 className="text-[10.5px] uppercase tracking-[0.14em] text-ink-soft mb-2">
-              팁
+              {L.tips}
             </h4>
             <p className="text-[12.5px] text-ink-soft leading-relaxed pl-3 border-l border-border">
               {recipe.tip}

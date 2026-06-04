@@ -47,6 +47,9 @@ export type ComposeArgs = {
   // suggestion onClick 분기 (사용자 명시 pack 클릭) 는 미박힘 — pack identity
   // 유지.
   cloudMode?: boolean;
+  // Phase EN-1: 입력 언어. dispatch까지 thread → buildSystemPrompt가 영어 미러
+  // 사용. overload fallback 메시지도 영어 분기.
+  lang?: "ko" | "en";
 };
 
 export type ComposeResult = {
@@ -123,6 +126,7 @@ export async function composeAnswer(args: ComposeArgs): Promise<ComposeResult> {
         payloadKind: args.fallback.kind,
         summary: summary ?? undefined,
         cloudMode: args.cloudMode,
+        lang: args.lang,
       },
       args.onToken,
     );
@@ -153,10 +157,14 @@ export async function composeAnswer(args: ComposeArgs): Promise<ComposeResult> {
     // 명확한 "지금 클라우드 혼잡" 메시지를 노출. 사용자에게 원인이 보이게.
     const isOverloaded = /\b503\b|overload|UNAVAILABLE|혼잡/i.test(message);
     if (isOverloaded) {
+      const overloadText =
+        args.lang === "en"
+          ? "The cloud is overloaded right now. Try again in a moment."
+          : "지금 클라우드 서버가 혼잡해. 잠시 후 다시 시도해줘.";
       return {
         payload: {
           kind: "text",
-          text: "지금 클라우드 서버가 혼잡해. 잠시 후 다시 시도해줘.",
+          text: overloadText,
         },
       };
     }

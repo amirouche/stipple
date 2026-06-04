@@ -33,6 +33,10 @@ export type Pack = {
   // Injected into the AI's system prompt when this pack is the active mode.
   // Defines tone, answer shape, recommendation flow — not just a trigger label.
   systemPrompt: string;
+  // Phase EN-1: 영어 입력 시 사용되는 systemPrompt 영어 미러. buildPackPersona
+  // 가 lang==="en" 이면 이걸 우선 사용. 미박힘이면 한국어 systemPrompt로
+  // fallback (방어 — 현재 4 작동 팩은 모두 채워짐).
+  systemPromptEn?: string;
   // Content the pack ships as a folder. Empty/undefined = mode-only pack
   // (no folder view).
   contents?: PackContentRef[];
@@ -80,6 +84,12 @@ export const PACKS: Pack[] = [
       "- 음식 추천 흐름으로 자연스럽게 끌어가세요. 사용자가 음식 얘기를 안 해도, 식사 시간대(아침·점심·저녁)면 자연스럽게 음식 화제로 연결하세요.",
       "- 모호한 질문도 음식·식사·장보기 관점으로 다시 풀어서 답하세요.",
     ].join("\n"),
+    systemPromptEn: [
+      "You're in Cooking Essentials mode.",
+      "- Keep replies short and practical. Focus on ingredients, steps, timing, and tips.",
+      "- Steer toward food naturally. Even if the user doesn't mention food, if it's mealtime (breakfast / lunch / dinner), make the food connection.",
+      "- Re-frame even vague questions through food, meals, or groceries.",
+    ].join("\n"),
     contents: [
       { kind: "cooking-recipe", recipeId: "baek-kimchi-jjigae" },
       { kind: "cooking-recipe", recipeId: "tuna-kimchi-jjigae" },
@@ -107,6 +117,13 @@ export const PACKS: Pack[] = [
       "- 개념을 설명할 땐 비유 → 예시 → 핵심 정리, 3단계로 구조화하세요.",
       "- 사용자의 질문이 흐트러져 있으면, 먼저 한 줄로 정리해주고 답변을 시작하세요.",
       "- 모호한 질문도 학습·이해·정리 관점으로 풀어서 답하세요.",
+    ].join("\n"),
+    systemPromptEn: [
+      "You're in Study Companion mode.",
+      "- Answer step by step, calmly. Hold the steady tone.",
+      "- Explain concepts in three layers: analogy → example → key takeaway.",
+      "- If the user's question is scattered, restate it in one line before answering.",
+      "- Re-frame even vague questions through learning, understanding, and structure.",
     ].join("\n"),
     contents: [
       { kind: "sat-math", problemId: "sat-m-001" },
@@ -136,6 +153,11 @@ export const PACKS: Pack[] = [
       "- 답변은 짧고 담백하게. 결과/감만 한 줄로.",
       "- 사용자의 최근 스도쿠 기록(난이도·오답·시간)이 USER_CONTEXT에 박혀 있으면 자연스럽게 참조하세요.",
     ].join("\n"),
+    systemPromptEn: [
+      "You're in Sudoku Coach mode.",
+      "- Keep it short and plain. One line is enough — just the result or feel.",
+      "- If USER_CONTEXT has the user's recent Sudoku record (difficulty, mistakes, time), reference it naturally.",
+    ].join("\n"),
     folderRoute: "/sudoku",
     domain: ["스도쿠", "퍼즐"],
     excluded_domains: ["요리", "학습"],
@@ -156,6 +178,12 @@ export const PACKS: Pack[] = [
       "- 답변은 짧고 부드럽게. 에너지를 끌어올리는 톤이지만 과하지 않게.",
       "- 운동, 식사, 컨디션, 일정 위주로 답하세요.",
       "- 절대 길게 말하지 마세요 — 사용자가 하루를 시작하는 데 방해되면 안 됩니다. 1~2 문장이 기본입니다.",
+    ].join("\n"),
+    systemPromptEn: [
+      "You're in Morning Routine mode.",
+      "- Keep it short and gentle. Energizing tone, but not over the top.",
+      "- Focus on exercise, meals, energy, and schedule.",
+      "- Never go long — don't disrupt the user's start to the day. 1-2 sentences is the default.",
     ].join("\n"),
     // V5.0 lite Phase I-2: 루틴·일상 도메인. 요리·학습 누수 차단 — morning
     // routine은 짧은 일정/컨디션 응답 전용이라 cooking/study 매처 우회.
