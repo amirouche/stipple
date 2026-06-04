@@ -41,7 +41,10 @@ function isToday(ts: number) {
   return Date.now() - ts < ONE_DAY;
 }
 
-function continuationFor(theme: ThreadTheme, title: string): { label: string; sub: string; prompt: string } {
+function continuationFor(
+  theme: ThreadTheme,
+  title: string,
+): { label: string; sub: string; prompt: string } {
   switch (theme) {
     case "cooking":
       return {
@@ -70,10 +73,7 @@ function continuationFor(theme: ThreadTheme, title: string): { label: string; su
   }
 }
 
-export function buildContinuations(
-  threads: Thread[],
-  installedPacks: Pack[]
-): ContinueCard[] {
+export function buildContinuations(threads: Thread[], installedPacks: Pack[]): ContinueCard[] {
   const cards = new Map<string, ContinueCard>();
 
   // ---- 1. Recent conversations -------------------------------------------
@@ -103,12 +103,7 @@ export function buildContinuations(
   });
 
   // ---- 2. Repeated recent topics -----------------------------------------
-  const topics = Array.from(
-    new Set([
-      ...LOCAL_MEMORY.recentTopics,
-      ...Object.keys(TOPIC_COUNT),
-    ])
-  );
+  const topics = Array.from(new Set([...LOCAL_MEMORY.recentTopics, ...Object.keys(TOPIC_COUNT)]));
 
   for (const topic of topics) {
     const count = TOPIC_COUNT[topic] ?? 0;
