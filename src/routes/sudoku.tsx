@@ -18,6 +18,7 @@ import {
   type SudokuPlayEntry,
 } from "@/lib/learning";
 import { usePreferences } from "@/lib/preferences";
+import { useT, type Messages } from "@/lib/i18n";
 
 export const Route = createFileRoute("/sudoku")({
   head: () => ({
@@ -109,50 +110,9 @@ type CheckResult =
   | { kind: "incomplete"; emptyCount: number }
   | { kind: "scored"; mistakes: number; entry: SudokuPlayEntry; nextDifficulty: SudokuDifficulty };
 
-// Phase EN-4: 라벨 사전. preferences.language 기준 (navigator 자동 감지 +
-// localStorage 유지). chat 흐름이 없는 화면이라 입력 detectLanguage 미사용.
-const LABELS = {
-  ko: {
-    title: "스도쿠",
-    description:
-      "한 판 풀면 직전 결과를 기억해 다음 판 난이도를 한 단계 올리거나 내려. 채팅과 같은 기억 레이어 — 화면이 달라도 DOTS 는 너를 따라가.",
-    difficulty: "난이도",
-    demoBoard: "데모 보드",
-    demoTooltip: "3칸만 채우면 끝나는 데모 보드 — 촬영용",
-    newGame: "새 게임",
-    check: "확인",
-    nextGame: "다음 게임",
-    clearTooltip: "지우기",
-    incomplete: (n: number) => `아직 빈칸이 ${n}개 남았어. 다 채운 뒤 확인을 눌러.`,
-    solved: (time: string) => `맞췄어. 오답 0개, ${time}.`,
-    mistakes: (n: number, time: string) => `오답 ${n}개, ${time}.`,
-    nextAdjust: (diff: string) => `다음 판은 ${diff} 로 조정.`,
-    nextHold: (diff: string) => `다음 판도 ${diff} 유지.`,
-  },
-  en: {
-    title: "Sudoku",
-    description:
-      "Solve one puzzle, DOTS remembers the result and adjusts the next puzzle's difficulty one step up or down. Same memory layer as chat — different screens, DOTS still follows you.",
-    difficulty: "Difficulty",
-    demoBoard: "Demo Board",
-    demoTooltip: "Demo board with only 3 empty cells — for recording",
-    newGame: "New Game",
-    check: "Check",
-    nextGame: "Next Game",
-    clearTooltip: "Clear",
-    incomplete: (n: number) =>
-      `${n} empty ${n === 1 ? "cell" : "cells"} remaining. Fill the board first.`,
-    solved: (time: string) => `Solved. 0 mistakes, ${time}.`,
-    mistakes: (n: number, time: string) => `${n} mistake${n === 1 ? "" : "s"}, ${time}.`,
-    nextAdjust: (diff: string) => `Next round adjusted to ${diff}.`,
-    nextHold: (diff: string) => `Holding at ${diff}.`,
-  },
-};
-
 function SudokuPage() {
-  const prefs = usePreferences();
-  const lang = prefs.language;
-  const L = LABELS[lang];
+  const lang = usePreferences().language;
+  const L = useT().sudoku;
   const [board, setBoard] = useState<Board>(() =>
     fetchBoard(pickNextDifficulty(getLastSudokuPlay())),
   );
@@ -282,7 +242,7 @@ function SudokuPage() {
             <Keypad
               onEnter={onEnterNumber}
               disabled={selectedIdx === null || result !== null}
-              lang={lang}
+              t={L}
             />
 
             <div className="mt-6 flex items-center justify-between">
@@ -311,6 +271,7 @@ function SudokuPage() {
                 elapsedSeconds={elapsedSeconds}
                 board={board}
                 lang={lang}
+                t={L}
               />
             )}
           </div>
@@ -385,11 +346,11 @@ function Board({
 function Keypad({
   onEnter,
   disabled,
-  lang,
+  t,
 }: {
   onEnter: (n: number | null) => void;
   disabled: boolean;
-  lang: "ko" | "en";
+  t: Messages["sudoku"];
 }) {
   return (
     <div className="mt-5 grid grid-cols-10 gap-1.5 max-w-md mx-auto">
@@ -409,7 +370,7 @@ function Keypad({
         onClick={() => onEnter(null)}
         disabled={disabled}
         className="h-10 rounded-md border border-border text-[12px] text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        title={LABELS[lang].clearTooltip}
+        title={t.clearTooltip}
       >
         ⌫
       </button>
@@ -422,13 +383,15 @@ function ResultBanner({
   elapsedSeconds,
   board,
   lang,
+  t,
 }: {
   result: CheckResult;
   elapsedSeconds: number;
   board: Board;
   lang: "ko" | "en";
+  t: Messages["sudoku"];
 }) {
-  const L = LABELS[lang];
+  const L = t;
   if (result.kind === "incomplete") {
     return (
       <div className="mt-5 rounded-md border border-border bg-surface px-4 py-3 text-[13px] text-ink-soft">

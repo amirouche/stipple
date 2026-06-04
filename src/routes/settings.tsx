@@ -36,6 +36,7 @@ import {
   type WakeTone,
 } from "@/lib/wake";
 import { getMemorySnapshot } from "@/lib/memory";
+import { useT } from "@/lib/i18n";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -50,29 +51,9 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-const HOME_PRIORITY: { id: HomePriority; title: string; desc: string }[] = [
-  {
-    id: "memory-first",
-    title: "기억 우선",
-    desc: "전에 얘기한 것부터 꺼내. 같은 주제 반복이 잦을 때 좋아.",
-  },
-  {
-    id: "packs-first",
-    title: "팩 우선",
-    desc: "활성 팩의 결과를 먼저 보여줘. 새 일에 빠르게 들어갈 때.",
-  },
-  {
-    id: "balanced",
-    title: "균형",
-    desc: "그 순간 가장 자연스러운 쪽으로. 기본값.",
-  },
-];
-
-const DEFAULT_MODE: { id: DefaultMode; title: string; desc: string }[] = [
-  { id: "calm", title: "차분한 모드", desc: "짧고 부드럽게. 끼어들지 않게." },
-  { id: "fast", title: "빠른 모드", desc: "한 줄 답을 먼저. 필요하면 더 풀어줄게." },
-  { id: "deep", title: "깊은 모드", desc: "단계적으로 풀어. 시간이 조금 더 걸려." },
-];
+// HomePriority / DefaultMode 옵션 — title/desc 는 t 사전 키 참조 (id 별 매핑).
+const HOME_PRIORITY_IDS: HomePriority[] = ["memory-first", "packs-first", "balanced"];
+const DEFAULT_MODE_IDS: DefaultMode[] = ["calm", "fast", "deep"];
 
 const WAKE_KIND_LABEL: Record<WakeKind, string> = {
   morning: "아침 인사",
@@ -97,6 +78,18 @@ function SettingsPage() {
   const wakeAlarms = useWakeAlarms();
   const [telemetry, setTelemetry] = useState(false);
   const speechOK = isSpeechSupported();
+  const ts = useT().settings;
+  // HomePriority / DefaultMode id → t 사전 객체 매핑.
+  const HOME_PRIORITY_T = {
+    "memory-first": ts.homePriority.memoryFirst,
+    "packs-first": ts.homePriority.packsFirst,
+    balanced: ts.homePriority.balanced,
+  } as const;
+  const DEFAULT_MODE_T = {
+    calm: ts.defaultMode.calm,
+    fast: ts.defaultMode.fast,
+    deep: ts.defaultMode.deep,
+  } as const;
 
   const orderedPacks = [...PACKS].sort((a, b) => {
     const ai = prefs.packOrder.indexOf(a.id);
@@ -108,46 +101,54 @@ function SettingsPage() {
     <Shell>
       <div className="flex flex-col">
         <header className="px-8 md:px-12 pt-10 pb-8 border-b border-border">
-          <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft">환경</p>
-          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-ink">설정</h1>
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft">
+            {ts.eyebrow}
+          </p>
+          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-ink">{ts.title}</h1>
         </header>
 
         <div className="px-8 md:px-12 py-10 max-w-2xl space-y-6">
           {/* Home priority */}
           <section className="rounded-xl border border-border bg-card p-6">
             <h2 className="text-[15px] font-semibold tracking-tight text-ink mb-1">
-              홈에서 먼저 보여줄 흐름
+              {ts.homePriority.title}
             </h2>
-            <p className="text-[12.5px] text-ink-soft mb-4">
-              DOTS가 새 대화를 열 때 어디서부터 시작할지.
-            </p>
+            <p className="text-[12.5px] text-ink-soft mb-4">{ts.homePriority.desc}</p>
             <div className="space-y-2">
-              {HOME_PRIORITY.map((opt) => (
-                <PickOption
-                  key={opt.id}
-                  active={prefs.homePriority === opt.id}
-                  title={opt.title}
-                  desc={opt.desc}
-                  onClick={() => setPreferences({ homePriority: opt.id })}
-                />
-              ))}
+              {HOME_PRIORITY_IDS.map((id) => {
+                const opt = HOME_PRIORITY_T[id];
+                return (
+                  <PickOption
+                    key={id}
+                    active={prefs.homePriority === id}
+                    title={opt.title}
+                    desc={opt.desc}
+                    onClick={() => setPreferences({ homePriority: id })}
+                  />
+                );
+              })}
             </div>
           </section>
 
           {/* Default mode */}
           <section className="rounded-xl border border-border bg-card p-6">
-            <h2 className="text-[15px] font-semibold tracking-tight text-ink mb-1">기본 모드</h2>
-            <p className="text-[12.5px] text-ink-soft mb-4">답의 길이와 속도의 기본값.</p>
+            <h2 className="text-[15px] font-semibold tracking-tight text-ink mb-1">
+              {ts.defaultMode.title}
+            </h2>
+            <p className="text-[12.5px] text-ink-soft mb-4">{ts.defaultMode.desc}</p>
             <div className="space-y-2">
-              {DEFAULT_MODE.map((opt) => (
-                <PickOption
-                  key={opt.id}
-                  active={prefs.defaultMode === opt.id}
-                  title={opt.title}
-                  desc={opt.desc}
-                  onClick={() => setPreferences({ defaultMode: opt.id })}
-                />
-              ))}
+              {DEFAULT_MODE_IDS.map((id) => {
+                const opt = DEFAULT_MODE_T[id];
+                return (
+                  <PickOption
+                    key={id}
+                    active={prefs.defaultMode === id}
+                    title={opt.title}
+                    desc={opt.desc}
+                    onClick={() => setPreferences({ defaultMode: id })}
+                  />
+                );
+              })}
             </div>
           </section>
 
@@ -190,10 +191,10 @@ function SettingsPage() {
 
           {/* Pack order */}
           <section className="rounded-xl border border-border bg-card p-6">
-            <h2 className="text-[15px] font-semibold tracking-tight text-ink mb-1">팩 우선순위</h2>
-            <p className="text-[12.5px] text-ink-soft mb-4">
-              위에 있는 팩이 라이브러리와 홈에서 먼저 보여.
-            </p>
+            <h2 className="text-[15px] font-semibold tracking-tight text-ink mb-1">
+              {ts.packOrder.title}
+            </h2>
+            <p className="text-[12.5px] text-ink-soft mb-4">{ts.packOrder.desc}</p>
             <ul className="divide-y divide-border border border-border rounded-lg overflow-hidden">
               {orderedPacks.map((p, i) => (
                 <li key={p.id} className="px-3 py-2.5 flex items-center gap-3 bg-card">
@@ -203,7 +204,7 @@ function SettingsPage() {
                   <span className="flex-1 min-w-0">
                     <span className="block text-[13px] text-ink truncate">{p.name}</span>
                     <span className="block text-[11px] text-ink-soft">
-                      {p.installed ? "설치됨" : "설치 안 됨"}
+                      {p.installed ? ts.packOrder.installed : ts.packOrder.notInstalled}
                     </span>
                   </span>
                   <div className="flex gap-1">
@@ -211,7 +212,7 @@ function SettingsPage() {
                       onClick={() => movePack(p.id, "up")}
                       disabled={i === 0}
                       className="h-7 w-7 rounded-md border border-border text-ink-soft hover:text-ink hover:bg-surface-2 disabled:opacity-30 transition-colors text-[12px]"
-                      aria-label="위로"
+                      aria-label={ts.packOrder.moveUp}
                     >
                       ↑
                     </button>
@@ -219,7 +220,7 @@ function SettingsPage() {
                       onClick={() => movePack(p.id, "down")}
                       disabled={i === orderedPacks.length - 1}
                       className="h-7 w-7 rounded-md border border-border text-ink-soft hover:text-ink hover:bg-surface-2 disabled:opacity-30 transition-colors text-[12px]"
-                      aria-label="아래로"
+                      aria-label={ts.packOrder.moveDown}
                     >
                       ↓
                     </button>
@@ -232,23 +233,20 @@ function SettingsPage() {
           {/* Privacy */}
           <section className="rounded-xl border border-border bg-card p-6">
             <div className="flex items-baseline justify-between mb-3">
-              <h2 className="text-[15px] font-semibold tracking-tight text-ink">프라이버시</h2>
+              <h2 className="text-[15px] font-semibold tracking-tight text-ink">
+                {ts.privacy.title}
+              </h2>
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
-                기기 안
+                {ts.privacy.badge}
               </span>
             </div>
-            <p className="text-[13.5px] text-ink leading-relaxed">
-              개인화된 데이터는 이 기기 안에 머물러.
-            </p>
-            <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">
-              기억, 팩 설정, 학습된 습관은 로컬에 저장돼. 더 깊은 추론이 필요할 때만 프롬프트와 팩
-              시그니처가 베이스 모델로 가.
-            </p>
+            <p className="text-[13.5px] text-ink leading-relaxed">{ts.privacy.line1}</p>
+            <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">{ts.privacy.line2}</p>
 
             <div className="mt-5 pt-5 border-t border-border flex items-center justify-between">
               <div>
-                <p className="text-[13.5px] text-ink">익명 사용 통계</p>
-                <p className="text-[12px] text-ink-soft">팩 개선용. 기본은 꺼져 있어.</p>
+                <p className="text-[13.5px] text-ink">{ts.privacy.telemetry}</p>
+                <p className="text-[12px] text-ink-soft">{ts.privacy.telemetryDesc}</p>
               </div>
               <Toggle on={telemetry} onChange={setTelemetry} />
             </div>
@@ -256,14 +254,16 @@ function SettingsPage() {
 
           {/* About */}
           <section className="rounded-xl border border-border bg-card p-6">
-            <h2 className="text-[15px] font-semibold tracking-tight text-ink mb-3">DOTS 정보</h2>
+            <h2 className="text-[15px] font-semibold tracking-tight text-ink mb-3">
+              {ts.about.title}
+            </h2>
             <dl className="grid grid-cols-2 gap-y-2 text-[13px]">
-              <dt className="text-ink-soft">버전</dt>
-              <dd className="font-mono text-ink">0.1.0 · 프로토타입</dd>
-              <dt className="text-ink-soft">베이스 모델</dt>
-              <dd className="font-mono text-ink">설정 가능</dd>
-              <dt className="text-ink-soft">개인 레이어</dt>
-              <dd className="font-mono text-ink">로컬</dd>
+              <dt className="text-ink-soft">{ts.about.version}</dt>
+              <dd className="font-mono text-ink">{ts.about.versionValue}</dd>
+              <dt className="text-ink-soft">{ts.about.baseModel}</dt>
+              <dd className="font-mono text-ink">{ts.about.baseModelValue}</dd>
+              <dt className="text-ink-soft">{ts.about.personalLayer}</dt>
+              <dd className="font-mono text-ink">{ts.about.personalLayerValue}</dd>
             </dl>
           </section>
         </div>
@@ -532,20 +532,18 @@ function PitchSection() {
 // 살려둔다 — 추후 인프라 안정화되면 이 섹션만 복구하면 된다.
 
 function WebLLMSection() {
+  const ts = useT().settings.disabledCards;
   return (
     <section className="rounded-xl border border-border bg-card p-6 opacity-80">
       <div className="flex items-baseline justify-between mb-1">
-        <h2 className="text-[15px] font-semibold tracking-tight text-ink">온디바이스 LLM</h2>
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">{ts.webllmTitle}</h2>
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-          준비 중
+          {ts.webllmStatus}
         </span>
       </div>
-      <p className="text-[12.5px] text-ink-soft leading-relaxed">
-        브라우저 안에서 도는 AI 모드. 외부 호출이 사라지는 대신 응답 정보량이 줄어든다. 지금은
-        안정성 작업 중이라 잠시 비활성화 — 모든 응답은 기본 모드(클라우드)로 흘러간다.
-      </p>
+      <p className="text-[12.5px] text-ink-soft leading-relaxed">{ts.webllmDesc}</p>
       <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-soft">
-        다음 단계 (베타) — 인프라 안정화 후 복구
+        {ts.webllmFooter}
       </p>
     </section>
   );
@@ -675,18 +673,16 @@ function EmbeddingSection() {
 // 카드만 가린다. matcher 측에서도 reranker 단계를 건너뛰므로 V4 임베딩
 // 점수가 그대로 통과 — 모델 호환 문제 해결되면 이 섹션 복구.
 function RerankerSection() {
+  const ts = useT().settings.disabledCards;
   return (
     <section className="rounded-xl border border-border bg-card p-6 opacity-80">
       <div className="flex items-baseline justify-between mb-1">
-        <h2 className="text-[15px] font-semibold tracking-tight text-ink">정확도 향상 (V4.5)</h2>
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">{ts.rerankerTitle}</h2>
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-          다음 단계 (베타)
+          {ts.rerankerStatus}
         </span>
       </div>
-      <p className="text-[12.5px] text-ink-soft leading-relaxed">
-        Cross-encoder 재정렬 — V4 임베딩이 잡은 후보를 한 번 더 정밀 점검. 모델 호환성 작업 중이라
-        잠시 가려둠. V4 시맨틱 매칭은 그대로 작동.
-      </p>
+      <p className="text-[12.5px] text-ink-soft leading-relaxed">{ts.rerankerDesc}</p>
     </section>
   );
 }

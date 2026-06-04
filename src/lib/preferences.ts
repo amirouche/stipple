@@ -148,6 +148,12 @@ export function getUILanguage(): "ko" | "en" {
   return prefs.language;
 }
 
+// Phase 2 i18n 토글 setter. preferences store 갱신 → emit → useSyncExternalStore
+// 구독자 (useT 훅 포함) 모두 자동 리렌더 → 전체 트리 영어/한국어 즉시 전환.
+export function setLanguage(language: "ko" | "en") {
+  setPreferences({ language });
+}
+
 export function setPitchPrefs(patch: Partial<PitchPrefs>) {
   prefs = { ...prefs, pitch: { ...prefs.pitch, ...patch } };
   emit();

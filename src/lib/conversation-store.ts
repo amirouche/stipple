@@ -107,39 +107,14 @@ export type Thread = {
   updatedAt: number;
 };
 
-// Seed a couple of recent threads so the sidebar isn't empty on first load.
-// The previous "pinned themed" set was tied to the old "맥락" sidebar
-// section that conflated chat threads with pack modes — that section is
-// gone, so these are just chats now.
-
-const now = Date.now();
-
-// V2: seed threads carry no lastPackId. Pre-baking a pack here used to
-// leak cooking voice/tone into off-topic queries on cold start ("양자역학"
-// in thread-recent-1 was getting cooking systemPrompt). lastPackId is now
-// only set when the engine actually detects a pack signal in user input.
-const seedThreads: Thread[] = [
-  {
-    id: "thread-recent-1",
-    title: "점심 메뉴 골라줘",
-    theme: "cooking",
-    servedRecipeIds: [],
-    messages: [],
-    updatedAt: now - 1000 * 60 * 60 * 3,
-  },
-  {
-    id: "thread-recent-2",
-    title: "어텐션 다시 설명",
-    theme: "study",
-    servedRecipeIds: [],
-    messages: [],
-    updatedAt: now - 1000 * 60 * 60 * 12,
-  },
-];
+// Phase 2: seed 채팅 (한국어 "점심 메뉴 골라줘" / "어텐션 다시 설명") 제거.
+// 영어 데모는 새 대화로 깨끗하게 시작. routes/index.tsx useEffect 가 threads.
+// length === 0 이면 createThread("open", t.shell.newThreadDefaultTitle) 호출
+// 해 자동으로 빈 새 대화 1개 생성 → 화면 항상 1+ thread 유지.
 
 let state: { threads: Thread[]; activeId: string } = {
-  threads: seedThreads,
-  activeId: seedThreads[0].id,
+  threads: [],
+  activeId: "",
 };
 
 const listeners = new Set<() => void>();

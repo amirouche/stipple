@@ -5,7 +5,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Shell, useShell } from "@/components/Shell";
-import { STORE_CATEGORIES, STORE_PACKS, formatPrice, type StorePack } from "@/lib/store-packs";
+import { STORE_PACKS, formatPrice, type StorePack } from "@/lib/store-packs";
+import { useT, type Messages } from "@/lib/i18n";
 
 export const Route = createFileRoute("/store")({
   head: () => ({
@@ -20,13 +21,37 @@ export const Route = createFileRoute("/store")({
   component: StorePage,
 });
 
+// 카테고리 필터 ID — "all" sentinel + StorePack.category union (한국어 데이터).
+// 데이터 layer 는 한국어 ID 유지. 렌더 시 t.store.categories 로 라벨 매핑.
+type StoreFilter = "all" | StorePack["category"];
+const STORE_FILTERS: readonly StoreFilter[] = [
+  "all",
+  "학습",
+  "요리",
+  "라이프스타일",
+  "업무",
+  "엔터테인먼트",
+];
+const STORE_CATEGORY_KEY: Record<StorePack["category"], keyof Messages["store"]["categories"]> = {
+  학습: "learning",
+  요리: "cooking",
+  라이프스타일: "lifestyle",
+  업무: "work",
+  엔터테인먼트: "entertainment",
+};
+
+function filterLabel(c: StoreFilter, t: Messages): string {
+  if (c === "all") return t.store.categories.all;
+  return t.store.categories[STORE_CATEGORY_KEY[c]];
+}
+
 function StorePage() {
   const [packs, setPacks] = useState<StorePack[]>(STORE_PACKS);
-  const [filter, setFilter] = useState<(typeof STORE_CATEGORIES)[number]>("전체");
+  const [filter, setFilter] = useState<StoreFilter>("all");
   const [query, setQuery] = useState("");
 
   const visible = packs.filter((p) => {
-    if (filter !== "전체" && p.category !== filter) return false;
+    if (filter !== "all" && p.category !== filter) return false;
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     return (
@@ -64,13 +89,14 @@ function StoreBody({
   onToggleInstall,
 }: {
   packs: StorePack[];
-  filter: (typeof STORE_CATEGORIES)[number];
-  setFilter: (c: (typeof STORE_CATEGORIES)[number]) => void;
+  filter: StoreFilter;
+  setFilter: (c: StoreFilter) => void;
   query: string;
   setQuery: (q: string) => void;
   onToggleInstall: (id: string) => void;
 }) {
   const shell = useShell();
+  const t = useT();
 
   return (
     <div className="flex flex-col">
@@ -80,7 +106,7 @@ function StoreBody({
             type="button"
             onClick={() => shell?.openMobile()}
             className="md:hidden shrink-0 h-9 w-9 -ml-1 inline-flex items-center justify-center rounded-md text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors"
-            aria-label="메뉴 열기"
+            aria-label={t.shell.menuOpen}
           >
             <svg
               width="18"
@@ -99,14 +125,12 @@ function StoreBody({
           </button>
           <div className="flex-1 min-w-0">
             <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft">
-              마켓플레이스
+              {t.store.eyebrow}
             </p>
             <h1 className="mt-1 text-[24px] sm:text-[28px] font-semibold tracking-tight text-ink">
-              팩스토어
+              {t.store.title}
             </h1>
-            <p className="mt-1 text-[13px] text-ink-soft max-w-xl">
-              더 많은 콘텐츠와 행동 패턴을 추가하세요. 설치한 팩은 채팅과 매칭에서 곧장 작동해.
-            </p>
+            <p className="mt-1 text-[13px] text-ink-soft max-w-xl">{t.store.subtitle}</p>
           </div>
         </div>
 
@@ -114,11 +138,11 @@ function StoreBody({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="팩, 작가, 주제 검색"
+            placeholder={t.store.searchPlaceholder}
             className="flex-1 h-9 px-3 rounded-md border border-border bg-card text-[13px] text-ink placeholder:text-ink-soft/70 outline-none focus:border-strong transition-colors"
           />
           <div className="flex gap-1 overflow-x-auto no-scrollbar">
-            {STORE_CATEGORIES.map((c) => (
+            {STORE_FILTERS.map((c) => (
               <button
                 key={c}
                 onClick={() => setFilter(c)}
@@ -128,7 +152,7 @@ function StoreBody({
                     : "text-ink-soft hover:text-ink hover:bg-surface-2"
                 }`}
               >
-                {c}
+                {filterLabel(c, t)}
               </button>
             ))}
           </div>
@@ -138,9 +162,9 @@ function StoreBody({
       <div className="px-4 sm:px-8 md:px-12 py-8">
         {packs.length === 0 ? (
           <div className="max-w-xl">
-            <p className="text-[13.5px] text-ink leading-relaxed">지금은 추가 가능한 팩이 없어.</p>
+            <p className="text-[13.5px] text-ink leading-relaxed">{t.store.emptyTitle}</p>
             <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">
-              실제 동작하는 팩만 진열하기로 정리했어. 곧 새 팩이 도착할 거야.
+              {t.store.emptyDescription}
             </p>
           </div>
         ) : (
@@ -152,14 +176,14 @@ function StoreBody({
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                    {p.category}
+                    {t.store.categories[STORE_CATEGORY_KEY[p.category]]}
                   </span>
                   <span
                     className={`font-mono text-[11px] tracking-[0.06em] ${
                       p.priceWon === 0 ? "text-primary" : "text-ink"
                     }`}
                   >
-                    {formatPrice(p.priceWon)}
+                    {formatPrice(p.priceWon, t.store.priceFree)}
                   </span>
                 </div>
                 <h3 className="text-[15.5px] font-semibold tracking-tight text-ink leading-snug">
@@ -184,7 +208,11 @@ function StoreBody({
                       : "bg-ink text-background hover:opacity-90"
                   }`}
                 >
-                  {p.installed ? "설치됨 — 제거" : p.priceWon === 0 ? "무료 설치" : "구매하고 설치"}
+                  {p.installed
+                    ? t.store.buttonInstalledRemove
+                    : p.priceWon === 0
+                      ? t.store.buttonFreeInstall
+                      : t.store.buttonBuyInstall}
                 </button>
               </article>
             ))}

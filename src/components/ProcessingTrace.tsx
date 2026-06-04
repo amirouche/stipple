@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Route } from "@/lib/dots-data";
+import { useT } from "@/lib/i18n";
 
 // Quiet processing UI. No system labels, no handoff language — just a soft
 // pulse and, on longer waits, a brief personal note while DOTS thinks.
@@ -13,10 +14,11 @@ export function ProcessingTrace({
   packName?: string;
 }) {
   const [showContext, setShowContext] = useState(false);
+  const t = useT().chat.processingTrace;
   useEffect(() => {
     if (route !== "deep") return;
-    const t = setTimeout(() => setShowContext(true), 1100);
-    return () => clearTimeout(t);
+    const id = setTimeout(() => setShowContext(true), 1100);
+    return () => clearTimeout(id);
   }, [route]);
 
   if (!reason && route === "local") return null;
@@ -38,9 +40,7 @@ export function ProcessingTrace({
       </div>
       {showContext && (
         <p className="text-[12.5px] text-ink-soft/90 leading-relaxed pl-4 fade-in">
-          {packName
-            ? "일단 안에 있는 걸 먼저 봤는데, 더 찾아보면 정확해질 것 같아."
-            : "지금 가진 걸로는 애매해서 조금 더 확인해볼게."}
+          {packName ? t.deepWithPack : t.deepWithoutPack}
         </p>
       )}
     </div>

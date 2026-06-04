@@ -1,24 +1,34 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ReactNode, createContext, useContext, useState } from "react";
 import { createThread, selectThread, useConversationStore } from "@/lib/conversation-store";
+import { setLanguage, usePreferences } from "@/lib/preferences";
+import { useT, type Messages } from "@/lib/i18n";
 
-const NAV = [
-  { to: "/packs", label: "팩", glyph: "02" },
-  { to: "/store", label: "팩스토어", glyph: "03" },
-  { to: "/memory", label: "기억", glyph: "04" },
-  { to: "/settings", label: "설정", glyph: "05" },
-  { to: "/demo", label: "데모 측정", glyph: "06" },
-] as const;
+// NAV 정의 — label 은 t 사전 키 참조. labelKey 가 Messages["shell"]["nav"] 의
+// key union 이라 typo 시 tsc 잡힘.
+const NAV_ITEMS = [
+  { to: "/packs", labelKey: "packs", glyph: "02" },
+  { to: "/store", labelKey: "store", glyph: "03" },
+  { to: "/memory", labelKey: "memory", glyph: "04" },
+  { to: "/settings", labelKey: "settings", glyph: "05" },
+  { to: "/demo", labelKey: "demo", glyph: "06" },
+] as const satisfies ReadonlyArray<{
+  to: string;
+  labelKey: keyof Messages["shell"]["nav"];
+  glyph: string;
+}>;
 
-function relTime(ts: number): string {
+// relTime — t.shell.relTime 사전 받아 분기. ts 인자 + t 한 번에 받아 함수
+// 외부 hook 의존 없이 순수 함수 유지 (테스트 / SSR 안전).
+function relTime(ts: number, rt: Messages["shell"]["relTime"]): string {
   const diff = Date.now() - ts;
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "방금";
-  if (m < 60) return `${m}분 전`;
+  if (m < 1) return rt.justNow;
+  if (m < 60) return rt.minutesAgo(m);
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}시간 전`;
+  if (h < 24) return rt.hoursAgo(h);
   const d = Math.floor(h / 24);
-  return `${d}일 전`;
+  return rt.daysAgo(d);
 }
 
 // Context so child routes can open the mobile sidebar from their own header.
@@ -33,6 +43,7 @@ export function Shell({ children }: { children?: ReactNode }) {
   const nav = useNavigate();
   const { threads, activeId } = useConversationStore();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const t = useT();
 
   const onChat = loc.pathname === "/";
   // Single time-sorted chat list. The previous "맥락" section conflated
@@ -48,8 +59,8 @@ export function Shell({ children }: { children?: ReactNode }) {
   }
 
   function newThread() {
-    const t = createThread("open", "새 대화");
-    selectThread(t.id);
+    const thread = createThread("open", t.shell.newThreadDefaultTitle);
+    selectThread(thread.id);
     setMobileOpen(false);
     if (!onChat) nav({ to: "/" });
   }
@@ -79,7 +90,8 @@ export function Shell({ children }: { children?: ReactNode }) {
           className="w-full flex items-center justify-between px-3 py-2 rounded-md border border-border bg-card hover:border-strong transition-colors text-[13px] text-ink"
         >
           <span className="flex items-center gap-2">
-            <span className="font-mono text-[11px] text-ink-soft">＋</span>새 대화
+            <span className="font-mono text-[11px] text-ink-soft">＋</span>
+            {t.shell.newThread}
           </span>
           <span className="font-mono text-[10px] text-ink-soft uppercase tracking-[0.14em]">
             new
@@ -91,31 +103,31 @@ export function Shell({ children }: { children?: ReactNode }) {
         <section>
           <div className="px-3 pt-2 pb-2">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/70">
-              채팅
+              {t.shell.sectionChats}
             </p>
           </div>
           {sortedThreads.length === 0 ? (
             <div className="px-3 py-6 text-center">
-              <p className="text-[13px] text-ink-soft leading-relaxed">아직 시작된 대화가 없어.</p>
-              <p className="mt-1 text-[12px] text-ink-soft/70">위의 + 새 대화로 시작해.</p>
+              <p className="text-[13px] text-ink-soft leading-relaxed">{t.shell.emptyTitle}</p>
+              <p className="mt-1 text-[12px] text-ink-soft/70">{t.shell.emptyHint}</p>
             </div>
           ) : (
             <ul className="space-y-0.5">
-              {sortedThreads.map((t) => {
-                const active = onChat && t.id === activeId;
+              {sortedThreads.map((thread) => {
+                const active = onChat && thread.id === activeId;
                 return (
-                  <li key={t.id}>
+                  <li key={thread.id}>
                     <button
-                      onClick={() => openThread(t.id)}
+                      onClick={() => openThread(thread.id)}
                       className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-left transition-colors ${
                         active
                           ? "bg-accent text-ink"
                           : "text-ink-soft hover:text-ink hover:bg-surface-2"
                       }`}
                     >
-                      <span className="text-[13px] truncate flex-1 min-w-0">{t.title}</span>
+                      <span className="text-[13px] truncate flex-1 min-w-0">{thread.title}</span>
                       <span className="font-mono text-[10px] text-ink-soft/60 shrink-0">
-                        {relTime(t.updatedAt)}
+                        {relTime(thread.updatedAt, t.shell.relTime)}
                       </span>
                     </button>
                   </li>
@@ -128,11 +140,11 @@ export function Shell({ children }: { children?: ReactNode }) {
         <section>
           <div className="px-3 pb-2">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft/70">
-              시스템
+              {t.shell.sectionSystem}
             </p>
           </div>
           <ul className="space-y-0.5">
-            {NAV.map((item) => {
+            {NAV_ITEMS.map((item) => {
               const active = loc.pathname.startsWith(item.to);
               return (
                 <li key={item.to}>
@@ -153,7 +165,7 @@ export function Shell({ children }: { children?: ReactNode }) {
                       >
                         {item.glyph}
                       </span>
-                      {item.label}
+                      {t.shell.nav[item.labelKey]}
                     </span>
                     {active && <span className="h-1 w-1 rounded-full bg-primary" />}
                   </Link>
@@ -165,9 +177,10 @@ export function Shell({ children }: { children?: ReactNode }) {
       </div>
 
       <div className="px-5 py-4 border-t border-border">
-        <div className="flex items-center gap-2 text-[11px] text-ink-soft">
+        <LanguageToggle />
+        <div className="mt-3 flex items-center gap-2 text-[11px] text-ink-soft">
           <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-          <span>이 기기 안에서</span>
+          <span>{t.shell.deviceBadge}</span>
         </div>
       </div>
     </>
@@ -194,5 +207,38 @@ export function Shell({ children }: { children?: ReactNode }) {
         <main className="flex-1 min-w-0 flex flex-col">{children}</main>
       </div>
     </ShellContext.Provider>
+  );
+}
+
+// Phase 2 i18n 사이드바 토글. 자기 라벨은 KO/EN 동일값 (UX 관행 — 사용자가
+// 자기 언어 외 선택지를 자기 언어로 보면 헷갈림). preferences.language 갱신
+// → useSyncExternalStore 자동 리렌더 → 전체 트리 즉시 전환.
+function LanguageToggle() {
+  const { language } = usePreferences();
+  return (
+    <div className="flex items-center rounded-md border border-border overflow-hidden text-[11px]">
+      <button
+        type="button"
+        onClick={() => setLanguage("ko")}
+        className={`flex-1 px-3 py-1.5 transition-colors ${
+          language === "ko"
+            ? "bg-ink text-background"
+            : "text-ink-soft hover:text-ink hover:bg-surface-2"
+        }`}
+      >
+        한국어
+      </button>
+      <button
+        type="button"
+        onClick={() => setLanguage("en")}
+        className={`flex-1 px-3 py-1.5 transition-colors ${
+          language === "en"
+            ? "bg-ink text-background"
+            : "text-ink-soft hover:text-ink hover:bg-surface-2"
+        }`}
+      >
+        English
+      </button>
+    </div>
   );
 }

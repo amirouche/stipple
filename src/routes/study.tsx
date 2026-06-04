@@ -22,67 +22,7 @@ import { explainMistake, generateVariant } from "@/lib/packs/study/llm";
 import type { SATMathProblem } from "@/lib/packs/study/types";
 import { useUserSATProblems } from "@/lib/packs/study/user-store";
 import { usePreferences } from "@/lib/preferences";
-
-// Phase EN-4: 라벨 사전. preferences.language 기준.
-const LABELS = {
-  ko: {
-    packFolder: "팩 폴더",
-    packShortSuffix: "답안 검증은 이 기기 안에서. 더 깊은 설명만 클라우드로 넘어가.",
-    backToChat: "← 채팅으로",
-    backToFolder: "← 폴더",
-    problemsSuffix: (n: number) => `SAT 수학 · ${n}문제`,
-    newProblem: "새 문제",
-    retry: "다시 풀기",
-    showHint: "힌트 보기",
-    hint: "힌트",
-    correct: "정답",
-    incorrect: "오답",
-    chosenLabel: "선택",
-    correctLabel: "정답",
-    showSolution: "정답 풀이 보기",
-    matchedLocal: "· 이 기기 안에서 매칭됨",
-    cloudFallback: "자주 틀리는 답 목록엔 안 잡혀. 더 깊게 보려면 클라우드로 넘길게.",
-    moreExplain: "더 자세한 설명 보기",
-    loadingExplain: "설명 가져오는 중…",
-    makeVariant: "변형 문제 만들어줘",
-    loadingVariant: "변형 문제 만드는 중…",
-    moreExplainSection: "추가 설명",
-    variantSection: "변형 문제",
-    cloudFailed: "클라우드 호출 실패",
-    cloudBadge: "클라우드",
-    menuOpen: "메뉴 열기",
-    metaPrefix: "SAT 수학",
-  },
-  en: {
-    packFolder: "Pack folder",
-    packShortSuffix:
-      "Answer checking runs on this device. Cloud only kicks in for deeper explanations.",
-    backToChat: "← Back to chat",
-    backToFolder: "← Folder",
-    problemsSuffix: (n: number) => `SAT Math · ${n} problem${n === 1 ? "" : "s"}`,
-    newProblem: "New",
-    retry: "Try again",
-    showHint: "Show hint",
-    hint: "Hint",
-    correct: "Correct",
-    incorrect: "Incorrect",
-    chosenLabel: "Chosen",
-    correctLabel: "Correct",
-    showSolution: "Show solution",
-    matchedLocal: "· Matched on this device",
-    cloudFallback: "Not in the common-mistakes table. Want a deeper look from the cloud?",
-    moreExplain: "Get a detailed explanation",
-    loadingExplain: "Fetching explanation…",
-    makeVariant: "Make a variant",
-    loadingVariant: "Generating variant…",
-    moreExplainSection: "Detailed explanation",
-    variantSection: "Variant problem",
-    cloudFailed: "Cloud call failed",
-    cloudBadge: "Cloud",
-    menuOpen: "Open menu",
-    metaPrefix: "SAT Math",
-  },
-};
+import { useT, type Messages } from "@/lib/i18n";
 
 export const Route = createFileRoute("/study")({
   head: () => ({
@@ -146,7 +86,8 @@ function FolderView({
 }) {
   const navigate = useNavigate();
   const shell = useShell();
-  const L = LABELS[lang];
+  const t = useT();
+  const L = t.study;
 
   return (
     <div className="flex flex-col">
@@ -156,7 +97,7 @@ function FolderView({
             type="button"
             onClick={() => shell?.openMobile()}
             className="md:hidden shrink-0 h-9 w-9 -ml-1 inline-flex items-center justify-center rounded-md text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors"
-            aria-label={L.menuOpen}
+            aria-label={t.shell.menuOpen}
           >
             <svg
               width="18"
@@ -261,7 +202,7 @@ function ProblemView({
   onBack: () => void;
   lang: "ko" | "en";
 }) {
-  const L = LABELS[lang];
+  const L = useT().study;
   const [result, setResult] = useState<CheckResult | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [llm, setLlm] = useState<LlmState>({ kind: "idle" });
@@ -416,7 +357,7 @@ function ProblemView({
               >
                 {llm.kind === "loading" && llm.for === "variant" ? L.loadingVariant : L.makeVariant}
               </button>
-              <CloudBadge lang={lang} />
+              <CloudBadge />
             </div>
           </ResultBlock>
         )}
@@ -466,7 +407,7 @@ function ProblemView({
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
                 {llm.for === "explain" ? L.moreExplainSection : L.variantSection}
               </span>
-              <CloudBadge lang={lang} />
+              <CloudBadge />
             </div>
             <pre className="text-[13.5px] text-ink leading-relaxed whitespace-pre-wrap font-sans">
               {llm.text}
@@ -511,11 +452,12 @@ function ResultBlock({
   );
 }
 
-function CloudBadge({ lang }: { lang: "ko" | "en" }) {
+function CloudBadge() {
+  const t = useT();
   return (
     <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
       <span className="h-1.5 w-1.5 rounded-full bg-ink-soft/50" />
-      {LABELS[lang].cloudBadge}
+      {t.study.cloudBadge}
     </span>
   );
 }

@@ -27,7 +27,6 @@ import {
   type ThreadMsg,
 } from "@/lib/conversation-store";
 import { usePreferences } from "@/lib/preferences";
-import { buildContinuations, type ContinueCard } from "@/lib/continuations";
 import { composeAnswer } from "@/lib/ai/compose";
 import { dispatchLLMCall, type DispatchTurn } from "@/lib/ai/dispatch";
 import {
@@ -46,6 +45,7 @@ import {
 } from "@/lib/packs/intent";
 import { topicParticle } from "@/lib/text/clean-noun";
 import { detectLanguage } from "@/lib/text/detect-language";
+import { getT, useT } from "@/lib/i18n";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import {
   addAlias,
@@ -203,11 +203,11 @@ function ChatPage() {
   const navigate = useNavigate();
 
   const { threads, activeId } = useConversationStore();
-  const prefs = usePreferences();
 
-  // Always have at least one thread; fall back to seeded one.
+  // Always have at least one thread; fall back to creating a fresh one.
+  // Phase 2: seed 채팅 제거 후 첫 진입 시 자동 새 대화 1개 생성.
   useEffect(() => {
-    if (threads.length === 0) createThread("open", "새 대화");
+    if (threads.length === 0) createThread("open", getT().shell.newThreadDefaultTitle);
   }, [threads.length]);
 
   const thread = threads.find((t) => t.id === activeId) ?? threads[0];
@@ -1562,20 +1562,6 @@ function ChatPage() {
 
   if (!thread) return null;
 
-  // Score-based "Continue from here" — capped at 2.
-  // Honors home priority by giving a small boost to the matching source.
-  const baseContinues = buildContinuations(threads, installed);
-  const orderedContinues =
-    prefs.homePriority === "memory-first"
-      ? [...baseContinues].sort((a, b) =>
-          a.source === "topic" ? -1 : b.source === "topic" ? 1 : 0,
-        )
-      : prefs.homePriority === "packs-first"
-        ? [...baseContinues].sort((a, b) =>
-            a.source === "pack" ? -1 : b.source === "pack" ? 1 : 0,
-          )
-        : baseContinues;
-
   // Quick-entry pack row (top 3) — shown on mobile as shortcuts.
   const quickPacks = installed.slice(0, 3);
   const hasMessages = messages.length > 0;
@@ -1585,7 +1571,6 @@ function ChatPage() {
       <ChatBody
         quickPacks={quickPacks}
         hasMessages={hasMessages}
-        orderedContinues={orderedContinues}
         messages={messages}
         scrollRef={scrollRef}
         input={input}
@@ -1604,7 +1589,6 @@ function ChatPage() {
 function ChatBody({
   quickPacks,
   hasMessages,
-  orderedContinues,
   messages,
   scrollRef,
   input,
@@ -1618,7 +1602,6 @@ function ChatBody({
 }: {
   quickPacks: Pack[];
   hasMessages: boolean;
-  orderedContinues: ContinueCard[];
   messages: ThreadMsg[];
   scrollRef: React.RefObject<HTMLDivElement | null>;
   input: string;
@@ -1632,6 +1615,7 @@ function ChatBody({
   activeSummary?: ConversationSummary;
 }) {
   const shell = useShell();
+  const t = useT();
 
   return (
     <div className="flex flex-col h-screen">
@@ -1643,7 +1627,7 @@ function ChatBody({
             type="button"
             onClick={() => shell?.openMobile()}
             className="md:hidden shrink-0 h-9 w-9 -ml-1 inline-flex items-center justify-center rounded-md text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors"
-            aria-label="메뉴 열기"
+            aria-label={t.shell.menuOpen}
           >
             <svg
               width="18"
@@ -1672,7 +1656,9 @@ function ChatBody({
                 type="button"
                 onClick={() => onOpenFolder(p.folderRoute ?? "/packs")}
                 className="shrink-0 px-3 py-1.5 rounded-full hairline text-[12px] bg-surface-2 text-ink-soft hover:text-ink transition-colors"
-                title={p.folderRoute ? `${p.name} 폴더 열기` : `${p.name} 카드 보기`}
+                title={
+                  p.folderRoute ? t.home.chipTitleFolder(p.name) : t.home.chipTitleCards(p.name)
+                }
               >
                 {p.name}
               </button>
@@ -1683,15 +1669,13 @@ function ChatBody({
             indicator. With activation gone, voice/tone is decided by the
             input itself, so there's nothing fixed to display here. */}
         <div className="px-3 sm:px-8 md:px-12 pb-2 -mt-1 text-[11px] text-ink-soft">
-          DOTS — 한국어 도우미. 입력에 맞춰 자동으로 톤이 바뀌어.
+          {t.home.tagline}
         </div>
       </header>
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 md:px-10 py-6 sm:py-10 space-y-8">
-          {!hasMessages && <WelcomeState continues={orderedContinues} onPick={send} />}
-
           {messages.map((m) => {
             const node =
               m.role === "user" ? (
@@ -1742,7 +1726,7 @@ function ChatBody({
                 send(input);
               }}
               rows={1}
-              placeholder="DOTS에게 말 걸기"
+              placeholder={t.home.composerPlaceholder}
               className="flex-1 resize-none bg-transparent outline-none text-[14.5px] leading-relaxed text-ink placeholder:text-ink-soft/70 max-h-40"
             />
             <button
@@ -1750,7 +1734,7 @@ function ChatBody({
               disabled={!input.trim() || busy}
               className="shrink-0 h-8 px-3 rounded-md bg-ink text-background text-[12.5px] font-medium disabled:opacity-30 transition-opacity"
             >
-              보내기
+              {t.home.send}
             </button>
           </form>
         </div>
@@ -1816,10 +1800,11 @@ function RatingControls({ learnedId }: { learnedId: string }) {
   // 갱신되고 같은 입력의 다음 매칭에 곧장 반영된다 — bad는 매칭에서 제외,
   // good은 priority 정렬 우선.
   const rating = useLearnedRating(learnedId);
+  const t = useT().chat.rating;
   if (rating === "good" || rating === "bad") {
     return (
       <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-        ✓ {rating === "good" ? "좋아함" : "다른 거 표시됨"}
+        {rating === "good" ? t.liked : t.shownDifferent}
       </p>
     );
   }
@@ -1830,7 +1815,7 @@ function RatingControls({ learnedId }: { learnedId: string }) {
         onClick={() => void rateLearned(learnedId, "good")}
         className="text-ink-soft hover:text-ink transition-colors"
       >
-        좋아
+        {t.like}
       </button>
       <span className="text-ink-soft/40">·</span>
       <button
@@ -1838,7 +1823,7 @@ function RatingControls({ learnedId }: { learnedId: string }) {
         onClick={() => void rateLearned(learnedId, "bad")}
         className="text-ink-soft hover:text-ink transition-colors"
       >
-        다른 거
+        {t.different}
       </button>
     </div>
   );
@@ -1862,17 +1847,18 @@ function ProviderBadge({
   // and blue/green less. The user watches their AI go local over time.
   // Hidden when showLLMProvenance is off (no settings UI yet).
   const prefs = usePreferences();
+  const t = useT().chat.provider;
   if (!prefs.showLLMProvenance) return null;
   const dot =
     provider === "webllm" ? "bg-green-500" : provider === "gemini" ? "bg-blue-500" : "bg-red-500";
   const label =
     provider === "webllm"
-      ? "내 기기 (WebLLM) · 외부 호출 0"
+      ? t.webllm
       : provider === "gemini"
         ? cloudMode
-          ? "Cloud (Pack 외부) · Gemini API"
-          : "클라우드 (Gemini) · 외부 API"
-        : "학습됨 · 캐시에서 (외부 호출 0)";
+          ? t.geminiCloud
+          : t.gemini
+        : t.learned;
   return (
     <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft flex items-center gap-1.5">
       <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
@@ -1895,12 +1881,13 @@ function SuggestionBlock({
   // Footer label tracks where the suggestion came from. "local" = installed
   // pack content; "store" = marketplace search hit; "create" = no match
   // anywhere yet, the LLM button would manufacture it.
+  const tc = useT().chat;
   const footer =
     badge === "local"
-      ? `${packName}에서 매칭됨 · 로컬 매칭`
+      ? tc.suggestionFooter.local(packName)
       : badge === "store"
-        ? "팩스토어에서 검색됨 · 로컬 매칭"
-        : "콘텐츠 없음 · 새로 만들 수 있어";
+        ? tc.suggestionFooter.store
+        : tc.suggestionFooter.create;
   // Red dot = on-device match (Stage 1/2). Used uniformly across the
   // three badge variants — the differentiation now lives in the footer
   // text, not the color. "create" stays slightly dim because nothing
@@ -1930,7 +1917,7 @@ function SuggestionBlock({
                   ? "border border-border text-ink-soft hover:text-ink hover:bg-surface-2"
                   : "bg-ink text-background hover:opacity-90"
               }`}
-              title={isLlm ? "이 옵션은 클라우드 호출이 들어가" : "이 기기 안에서 처리"}
+              title={isLlm ? tc.optionTitle.llm : tc.optionTitle.local}
             >
               {o.label}
               {isLlm && (
@@ -1945,34 +1932,6 @@ function SuggestionBlock({
       <div className="mt-2 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
         <span className={`h-1.5 w-1.5 rounded-full ${dotTone}`} />
         {footer}
-      </div>
-    </div>
-  );
-}
-
-function WelcomeState({
-  continues,
-  onPick,
-}: {
-  continues: ContinueCard[];
-  onPick: (s: string) => void;
-}) {
-  // Cap at 2 — the home is intentionally minimal before chat begins.
-  const items = continues.slice(0, 2);
-  if (items.length === 0) return null;
-
-  return (
-    <div className="fade-in pt-4 sm:pt-10">
-      <div className="grid sm:grid-cols-2 gap-2">
-        {items.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => onPick(c.prompt)}
-            className="text-left px-4 py-3 sm:p-4 rounded-xl border border-border bg-card hover:border-strong hover:bg-surface transition-colors"
-          >
-            <p className="text-[13.5px] text-ink leading-snug">{c.label}</p>
-          </button>
-        ))}
       </div>
     </div>
   );

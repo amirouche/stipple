@@ -7,6 +7,7 @@ import {
   type ArchiveGranularity,
   type MemoryRecord,
 } from "@/lib/memory";
+import { useT, type Messages } from "@/lib/i18n";
 
 export const Route = createFileRoute("/memory")({
   head: () => ({
@@ -34,7 +35,6 @@ type Shelf = {
 };
 
 const DAY_MS = 86_400_000;
-const SEASONS = ["겨울", "봄", "여름", "가을"] as const;
 const GRANULARITY_ORDER: Record<ArchiveGranularity, number> = {
   day: 0,
   week: 1,
@@ -43,90 +43,107 @@ const GRANULARITY_ORDER: Record<ArchiveGranularity, number> = {
   year: 4,
 };
 
-function relTime(ts: number, now: number): string {
+// Phase 2 i18n: 모든 시간 라벨은 t.memory.relTime / archiveWindow / seasons
+// 사전을 거침. 컴포넌트 외부 함수라 매개변수 t 로 받음 (테스트 용이).
+function relTime(ts: number, now: number, t: Messages["memory"]["relTime"]): string {
   const diff = now - ts;
-  if (diff < 60_000) return "방금";
+  if (diff < 60_000) return t.justNow;
   const m = Math.floor(diff / 60_000);
-  if (m < 60) return `${m}분 전`;
+  if (m < 60) return t.minutesAgo(m);
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}시간 전`;
+  if (h < 24) return t.hoursAgo(h);
   const d = Math.floor(diff / DAY_MS);
-  if (d < 7) return `${d}일 전`;
+  if (d < 7) return t.daysAgo(d);
   const w = Math.floor(d / 7);
-  if (w < 5) return `${w}주 전`;
+  if (w < 5) return t.weeksAgo(w);
   const date = new Date(ts);
   const nowDate = new Date(now);
   const sameYear = date.getFullYear() === nowDate.getFullYear();
   return sameYear
-    ? `${date.getMonth() + 1}월 ${date.getDate()}일`
-    : `${date.getFullYear()}.${date.getMonth() + 1}.${date.getDate()}`;
+    ? t.monthDay(date.getMonth() + 1, date.getDate())
+    : t.ymd(date.getFullYear(), date.getMonth() + 1, date.getDate());
 }
 
-function formatArchiveWindow(g: ArchiveGranularity, windowStart: number, now: number): string {
+function formatArchiveWindow(
+  g: ArchiveGranularity,
+  windowStart: number,
+  now: number,
+  aw: Messages["memory"]["archiveWindow"],
+  seasons: Messages["memory"]["seasons"],
+): string {
   const ws = new Date(windowStart);
   const n = new Date(now);
 
   if (g === "day") {
     const todayStart = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
-    if (windowStart === todayStart) return "오늘";
-    if (windowStart === todayStart - DAY_MS) return "어제";
+    if (windowStart === todayStart) return aw.today;
+    if (windowStart === todayStart - DAY_MS) return aw.yesterday;
     const daysAgo = Math.floor((todayStart - windowStart) / DAY_MS);
-    if (daysAgo > 0 && daysAgo < 7) return `${daysAgo}일 전`;
+    if (daysAgo > 0 && daysAgo < 7) return aw.daysAgo(daysAgo);
     const sameYear = ws.getUTCFullYear() === n.getUTCFullYear();
     return sameYear
-      ? `${ws.getUTCMonth() + 1}월 ${ws.getUTCDate()}일`
-      : `${ws.getUTCFullYear()}.${ws.getUTCMonth() + 1}.${ws.getUTCDate()}`;
+      ? aw.monthDayWeek(ws.getUTCMonth() + 1, ws.getUTCDate())
+      : aw.ymdWeek(ws.getUTCFullYear(), ws.getUTCMonth() + 1, ws.getUTCDate());
   }
 
   if (g === "week") {
     const dow = (n.getUTCDay() || 7) - 1;
     const thisWeekStart = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() - dow);
-    if (windowStart === thisWeekStart) return "이번 주";
-    if (windowStart === thisWeekStart - 7 * DAY_MS) return "지난주";
+    if (windowStart === thisWeekStart) return aw.thisWeek;
+    if (windowStart === thisWeekStart - 7 * DAY_MS) return aw.lastWeek;
     const weeksAgo = Math.round((thisWeekStart - windowStart) / (7 * DAY_MS));
-    if (weeksAgo > 0 && weeksAgo < 5) return `${weeksAgo}주 전`;
+    if (weeksAgo > 0 && weeksAgo < 5) return aw.weeksAgo(weeksAgo);
     const sameYear = ws.getUTCFullYear() === n.getUTCFullYear();
     return sameYear
-      ? `${ws.getUTCMonth() + 1}월 ${ws.getUTCDate()}일 주`
-      : `${ws.getUTCFullYear()}.${ws.getUTCMonth() + 1}.${ws.getUTCDate()} 주`;
+      ? aw.monthDayWeek(ws.getUTCMonth() + 1, ws.getUTCDate())
+      : aw.ymdWeek(ws.getUTCFullYear(), ws.getUTCMonth() + 1, ws.getUTCDate());
   }
 
   if (g === "month") {
     const thisMonth = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1);
     const lastMonth = Date.UTC(n.getUTCFullYear(), n.getUTCMonth() - 1, 1);
-    if (windowStart === thisMonth) return "이번 달";
-    if (windowStart === lastMonth) return "지난달";
+    if (windowStart === thisMonth) return aw.thisMonth;
+    if (windowStart === lastMonth) return aw.lastMonth;
     const sameYear = ws.getUTCFullYear() === n.getUTCFullYear();
     return sameYear
-      ? `${ws.getUTCMonth() + 1}월`
-      : `${ws.getUTCFullYear()}년 ${ws.getUTCMonth() + 1}월`;
+      ? aw.monthOnly(ws.getUTCMonth() + 1)
+      : aw.yearMonth(ws.getUTCFullYear(), ws.getUTCMonth() + 1);
   }
 
   if (g === "quarter") {
     const thisQStart = Date.UTC(n.getUTCFullYear(), Math.floor(n.getUTCMonth() / 3) * 3, 1);
-    if (windowStart === thisQStart) return "이번 분기";
+    if (windowStart === thisQStart) return aw.thisQuarter;
     const sameYear = ws.getUTCFullYear() === n.getUTCFullYear();
-    const season = SEASONS[Math.floor(ws.getUTCMonth() / 3)];
-    return sameYear ? `올해 ${season}` : `${ws.getUTCFullYear()}년 ${season}`;
+    const seasonArr = [seasons.winter, seasons.spring, seasons.summer, seasons.autumn];
+    const season = seasonArr[Math.floor(ws.getUTCMonth() / 3)];
+    return sameYear ? aw.thisYearSeason(season) : aw.yearSeason(ws.getUTCFullYear(), season);
   }
 
   // year
   const thisY = n.getUTCFullYear();
   const wsY = ws.getUTCFullYear();
-  if (wsY === thisY) return "올해";
-  if (wsY === thisY - 1) return "작년";
-  if (wsY === thisY - 2) return "재작년";
-  return `${wsY}년`;
+  if (wsY === thisY) return aw.thisYear;
+  if (wsY === thisY - 1) return aw.lastYear;
+  if (wsY === thisY - 2) return aw.twoYearsAgo;
+  return aw.yearOnly(wsY);
 }
 
-function temporaryShelf(memories: MemoryRecord[], now: number): ShelfItem[] {
+function temporaryShelf(
+  memories: MemoryRecord[],
+  now: number,
+  rt: Messages["memory"]["relTime"],
+): ShelfItem[] {
   return memories
     .filter((m) => m.state === "temporary")
     .sort((a, b) => b.lastAccessedAt - a.lastAccessedAt)
-    .map((m) => ({ t: m.topic, meta: relTime(m.lastAccessedAt, now) }));
+    .map((m) => ({ t: m.topic, meta: relTime(m.lastAccessedAt, now, rt) }));
 }
 
-function frequentShelf(memories: MemoryRecord[], now: number): ShelfItem[] {
+function frequentShelf(
+  memories: MemoryRecord[],
+  now: number,
+  mem: Messages["memory"],
+): ShelfItem[] {
   return memories
     .filter((m) => m.state === "active")
     .sort((a, b) => {
@@ -134,12 +151,12 @@ function frequentShelf(memories: MemoryRecord[], now: number): ShelfItem[] {
       return b.lastAccessedAt - a.lastAccessedAt;
     })
     .map((m) => ({
-      t: `${m.topic} — ${m.accessCount}번 등장`,
-      meta: relTime(m.lastAccessedAt, now),
+      t: mem.accessCount(m.topic, m.accessCount),
+      meta: relTime(m.lastAccessedAt, now, mem.relTime),
     }));
 }
 
-function archiveShelf(archives: ArchiveEntry[], now: number): ShelfItem[] {
+function archiveShelf(archives: ArchiveEntry[], now: number, mem: Messages["memory"]): ShelfItem[] {
   return [...archives]
     .sort((a, b) => {
       const oa = GRANULARITY_ORDER[a.granularity];
@@ -152,12 +169,18 @@ function archiveShelf(archives: ArchiveEntry[], now: number): ShelfItem[] {
         .slice()
         .sort((a, b) => b.count - a.count)
         .slice(0, 3)
-        .map((t) => t.topic)
+        .map((tp) => tp.topic)
         .join(", ");
-      const label = top || `${e.sourceMemoryIds.length}개 항목`;
+      const label = top || mem.archiveItemCount(e.sourceMemoryIds.length);
       return {
         t: label,
-        meta: formatArchiveWindow(e.granularity, e.windowStart, now),
+        meta: formatArchiveWindow(
+          e.granularity,
+          e.windowStart,
+          now,
+          mem.archiveWindow,
+          mem.seasons,
+        ),
       };
     });
 }
@@ -165,39 +188,40 @@ function archiveShelf(archives: ArchiveEntry[], now: number): ShelfItem[] {
 function MemoryPage() {
   const { memories, archives } = useMemoryStore();
   const now = Date.now();
+  const mem = useT().memory;
 
   const shelves: Shelf[] = [
     {
       key: "temp",
-      name: "임시 기억",
-      desc: "지금 대화 안에서만 살아 있어. 따로 저장하지 않으면 곧 잊어.",
-      badge: "휘발",
-      items: temporaryShelf(memories, now),
-      empty: "지금은 비어 있어. 새 대화에서 잠깐 머무는 정보가 여기 들어와.",
+      name: mem.shelves.temporary.name,
+      desc: mem.shelves.temporary.desc,
+      badge: mem.shelves.temporary.badge,
+      items: temporaryShelf(memories, now, mem.relTime),
+      empty: mem.shelves.temporary.empty,
     },
     {
       key: "frequent",
-      name: "자주 나온 것",
-      desc: "여러 대화에 반복해서 등장한 주제. 가까이에 두고 바로 꺼내.",
-      badge: "근접",
-      items: frequentShelf(memories, now),
-      empty: "아직 자주 등장한 게 없어. 같은 주제가 반복되면 여기로 올라와.",
+      name: mem.shelves.frequent.name,
+      desc: mem.shelves.frequent.desc,
+      badge: mem.shelves.frequent.badge,
+      items: frequentShelf(memories, now, mem),
+      empty: mem.shelves.frequent.empty,
     },
     {
       key: "saved",
-      name: "저장된 것",
-      desc: "내가 직접 보관한 것. 팩이 필요할 때 먼저 여기서 찾아.",
-      badge: "고정",
+      name: mem.shelves.saved.name,
+      desc: mem.shelves.saved.desc,
+      badge: mem.shelves.saved.badge,
       items: SAVED_RECIPES.map((r) => ({ t: r.title, meta: r.mentioned })),
-      empty: "저장된 게 아직 없어.",
+      empty: mem.shelves.saved.empty,
     },
     {
       key: "archive",
-      name: "아카이브",
-      desc: "지난 대화 기록. 추론에는 쓰이지 않고, 필요할 때 들춰볼 수 있어.",
-      badge: "보관만",
-      items: archiveShelf(archives, now),
-      empty: "아카이브가 비어 있어. 오래된 대화가 쌓이면 여기로 모여.",
+      name: mem.shelves.archive.name,
+      desc: mem.shelves.archive.desc,
+      badge: mem.shelves.archive.badge,
+      items: archiveShelf(archives, now, mem),
+      empty: mem.shelves.archive.empty,
     },
   ];
 
@@ -206,12 +230,10 @@ function MemoryPage() {
       <div className="flex flex-col">
         <header className="px-8 md:px-12 pt-10 pb-8 border-b border-border">
           <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft">
-            개인 레이어
+            {mem.eyebrow}
           </p>
-          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-ink">기억</h1>
-          <p className="mt-2 text-[14px] text-ink-soft max-w-xl">
-            한 통이 아니라 네 칸이야. 각자 역할이 달라서, 무엇을 가까이 둘지는 네가 정해.
-          </p>
+          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-ink">{mem.title}</h1>
+          <p className="mt-2 text-[14px] text-ink-soft max-w-xl">{mem.subtitle}</p>
         </header>
 
         <div className="px-8 md:px-12 py-10 max-w-3xl space-y-3">
@@ -250,8 +272,7 @@ function MemoryPage() {
 
           <div className="mt-8 p-4 rounded-lg bg-surface-2 border border-border">
             <p className="text-[12.5px] text-ink-soft leading-relaxed">
-              <span className="text-ink font-medium">기기 밖으로 안 나가.</span> 기억은 이 기기 안에
-              머물러. 아카이브는 언제든 설정에서 내보낼 수 있어.
+              <span className="text-ink font-medium">{mem.footerLine1}</span> {mem.footerLine2}
             </p>
           </div>
         </div>

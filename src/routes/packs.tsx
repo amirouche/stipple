@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Shell } from "@/components/Shell";
 import { PACKS, type Pack } from "@/lib/dots-data";
 import { usePreferences } from "@/lib/preferences";
+import { useT, type Messages } from "@/lib/i18n";
 
 export const Route = createFileRoute("/packs")({
   head: () => ({
@@ -17,28 +18,44 @@ export const Route = createFileRoute("/packs")({
   component: PacksPage,
 });
 
-const CATEGORIES = ["전체", "Game", "Education", "Lifestyle"] as const;
+// 카테고리 ID — Pack.category union 그대로. "all" 가 sentinel (전체) — 다른
+// 값은 Pack.category 일치.
+type CategoryFilter = "all" | Pack["category"];
+const CATEGORY_FILTERS: readonly CategoryFilter[] = ["all", "Game", "Education", "Lifestyle"];
 
-const CATEGORY_KO: Record<Pack["category"], string> = {
-  Game: "게임",
-  Education: "학습",
-  Lifestyle: "라이프",
+// Pack.category ("Game"/"Education"/"Lifestyle") → t.packs.categories key.
+const PACK_CATEGORY_KEY: Record<Pack["category"], keyof Messages["packs"]["categories"]> = {
+  Game: "game",
+  Education: "education",
+  Lifestyle: "lifestyle",
 };
 
-// One-line "what does this change" — stronger than the long behavior copy.
-const BEHAVIOR_LINE: Record<string, string> = {
-  "cooking-essentials": "요리 질문을 재료·순서·시간으로 바로 정리해줘.",
-  "study-companion": "설명 대신 단계로 풀고, 막힌 지점을 먼저 물어봐.",
-  sudoku: "한 판 풀면 직전 결과 보고 다음 판 난이도를 한 단계 조정해.",
-  "morning-routine": "오늘 일정·날씨를 기기 안에서 바로 답해.",
+// pack.id → t.packs.behaviorLines key. 4 작동 팩만 매핑 — 미매핑 pack 은
+// p.behavior fallback.
+const PACK_BEHAVIOR_KEY: Record<string, keyof Messages["packs"]["behaviorLines"]> = {
+  "cooking-essentials": "cookingEssentials",
+  "study-companion": "studyCompanion",
+  sudoku: "sudoku",
+  "morning-routine": "morningRoutine",
 };
+
+function categoryLabel(c: CategoryFilter, t: Messages): string {
+  if (c === "all") return t.packs.categories.all;
+  return t.packs.categories[PACK_CATEGORY_KEY[c]];
+}
+
+function behaviorLineFor(packId: string, t: Messages): string | undefined {
+  const key = PACK_BEHAVIOR_KEY[packId];
+  return key ? t.packs.behaviorLines[key] : undefined;
+}
 
 function PacksPage() {
   const [packs, setPacks] = useState<Pack[]>(PACKS);
-  const [filter, setFilter] = useState<(typeof CATEGORIES)[number]>("전체");
+  const [filter, setFilter] = useState<CategoryFilter>("all");
   // "active" = installed AND user hasn't paused it. Keeps install vs use distinct.
   const [paused, setPaused] = useState<Set<string>>(new Set());
   const prefs = usePreferences();
+  const t = useT();
 
   const ordered = [...packs].sort((a, b) => {
     const ai = prefs.packOrder.indexOf(a.id);
@@ -46,7 +63,7 @@ function PacksPage() {
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
   });
 
-  const visible = filter === "전체" ? ordered : ordered.filter((p) => p.category === filter);
+  const visible = filter === "all" ? ordered : ordered.filter((p) => p.category === filter);
 
   function toggleInstall(id: string) {
     setPacks((ps) => ps.map((p) => (p.id === id ? { ...p, installed: !p.installed } : p)));
@@ -65,15 +82,15 @@ function PacksPage() {
       <div className="flex flex-col">
         <header className="px-8 md:px-12 pt-10 pb-8 border-b border-border">
           <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-soft">
-            팩 라이브러리
+            {t.packs.eyebrow}
           </p>
-          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-ink">팩</h1>
-          <p className="mt-2 text-[14px] text-ink-soft max-w-xl">
-            팩은 작은 실행 단위. DOTS가 같은 질문을 어떻게 해석하고 정리해줄지 한 영역에서 바꿔.
-          </p>
+          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-ink">
+            {t.packs.title}
+          </h1>
+          <p className="mt-2 text-[14px] text-ink-soft max-w-xl">{t.packs.subtitle}</p>
 
           <div className="mt-6 flex gap-1">
-            {CATEGORIES.map((c) => (
+            {CATEGORY_FILTERS.map((c) => (
               <button
                 key={c}
                 onClick={() => setFilter(c)}
@@ -83,7 +100,7 @@ function PacksPage() {
                     : "text-ink-soft hover:text-ink hover:bg-surface-2"
                 }`}
               >
-                {c === "전체" ? c : (CATEGORY_KO[c as Pack["category"]] ?? c)}
+                {categoryLabel(c, t)}
               </button>
             ))}
           </div>
@@ -101,7 +118,7 @@ function PacksPage() {
                 >
                   <div className="flex items-start justify-between mb-3">
                     <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                      {CATEGORY_KO[p.category]} · {p.category}
+                      {t.packs.categories[PACK_CATEGORY_KEY[p.category]]} · {p.category}
                     </span>
                     <StateBadge installed={installed} active={active} />
                   </div>
@@ -114,13 +131,13 @@ function PacksPage() {
                   {/* One-line behavior — the headline change */}
                   <div className="mt-3 px-3 py-2 rounded-md bg-surface border border-border">
                     <p className="text-[12.5px] text-ink leading-snug">
-                      {BEHAVIOR_LINE[p.id] ?? p.behavior}
+                      {behaviorLineFor(p.id, t) ?? p.behavior}
                     </p>
                   </div>
 
                   <details className="mt-3 group">
                     <summary className="cursor-pointer text-[11px] font-mono uppercase tracking-[0.14em] text-ink-soft hover:text-ink list-none">
-                      더 자세히
+                      {t.packs.detailsMore}
                     </summary>
                     <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">{p.behavior}</p>
                   </details>
@@ -134,14 +151,14 @@ function PacksPage() {
                           : "bg-ink text-background hover:opacity-90"
                       }`}
                     >
-                      {installed ? "제거" : "설치"}
+                      {installed ? t.packs.uninstall : t.packs.install}
                     </button>
                     {installed && (
                       <button
                         onClick={() => togglePause(p.id)}
                         className="h-9 px-3 rounded-md border border-border text-[12px] text-ink-soft hover:text-ink hover:bg-surface-2 transition-colors"
                       >
-                        {active ? "일시정지" : "활성화"}
+                        {active ? t.packs.pause : t.packs.activate}
                       </button>
                     )}
                   </div>
@@ -156,10 +173,11 @@ function PacksPage() {
 }
 
 function StateBadge({ installed, active }: { installed: boolean; active: boolean }) {
+  const t = useT();
   if (!installed) {
     return (
       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/60">
-        설치 안 됨
+        {t.packs.state.notInstalled}
       </span>
     );
   }
@@ -167,14 +185,14 @@ function StateBadge({ installed, active }: { installed: boolean; active: boolean
     return (
       <span className="flex items-center gap-1.5 text-[10.5px] font-mono uppercase tracking-[0.14em] text-primary">
         <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-        활성
+        {t.packs.state.active}
       </span>
     );
   }
   return (
     <span className="flex items-center gap-1.5 text-[10.5px] font-mono uppercase tracking-[0.14em] text-ink-soft">
       <span className="h-1.5 w-1.5 rounded-full bg-border-strong" />
-      대기
+      {t.packs.state.idle}
     </span>
   );
 }

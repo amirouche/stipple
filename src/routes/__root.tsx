@@ -15,23 +15,21 @@ import {
   setupLearningDebug,
 } from "@/lib/learning";
 import { hydrateDemoTraces } from "@/lib/demo/trace";
+import { useT } from "@/lib/i18n";
 
 function NotFoundComponent() {
+  const t = useT().notFound;
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-soft">404</p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink">
-          Nothing routed here.
-        </h1>
-        <p className="mt-2 text-sm text-ink-soft">
-          DOTS could not match this path to a local pack or known screen.
-        </p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-soft">{t.code}</p>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink">{t.title}</h1>
+        <p className="mt-2 text-sm text-ink-soft">{t.subtitle}</p>
         <a
           href="/"
           className="mt-6 inline-flex items-center justify-center rounded-md bg-ink px-4 py-2 text-sm font-medium text-background"
         >
-          Back to chat
+          {t.backToChat}
         </a>
       </div>
     </div>

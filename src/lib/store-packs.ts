@@ -144,7 +144,9 @@ export const STORE_CATEGORIES: ("전체" | StoreCategory)[] = [
   "엔터테인먼트",
 ];
 
-export function formatPrice(won: number): string {
-  if (won === 0) return "무료";
-  return `₩${won.toLocaleString("ko-KR")}`;
+// Phase 2 i18n: freeLabel 은 caller (store.tsx) 가 t.store.priceFree 박아 전달.
+// 통화 기호 (₩) 와 그룹 콤마는 한·영 동일 표기라 locale 무관.
+export function formatPrice(won: number, freeLabel: string): string {
+  if (won === 0) return freeLabel;
+  return `₩${won.toLocaleString("en-US")}`;
 }
