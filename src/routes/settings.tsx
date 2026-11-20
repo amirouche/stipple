@@ -55,21 +55,10 @@ export const Route = createFileRoute("/settings")({
 const HOME_PRIORITY_IDS: HomePriority[] = ["memory-first", "packs-first", "balanced"];
 const DEFAULT_MODE_IDS: DefaultMode[] = ["calm", "fast", "deep"];
 
-const WAKE_KIND_LABEL: Record<WakeKind, string> = {
-  morning: "아침 인사",
-  lunch: "점심 멘트",
-  evening: "저녁 회상",
-  bedtime: "자기 전",
-  homecoming: "귀가",
-};
+// Phase EN-fix D: WAKE_KIND_LABEL / WAKE_TONE_LABEL 정적 객체 삭제 — 사전
+// (t.settings.wakeKind / wakeTone) 로 이동. WakeRow 안 useT() 박혀 lang 분기.
 
 const HOMECOMING_HOUR_OPTIONS = [1, 2, 3, 4, 5, 6];
-
-const WAKE_TONE_LABEL: Record<WakeTone, string> = {
-  warm: "편안하게",
-  brief: "짧게",
-  calm: "차분하게",
-};
 
 const WAKE_TONES: WakeTone[] = ["warm", "brief", "calm"];
 
@@ -164,16 +153,16 @@ function SettingsPage() {
           {/* Wake / proactive greetings */}
           <section className="rounded-xl border border-border bg-card p-6">
             <div className="flex items-baseline justify-between mb-1">
-              <h2 className="text-[15px] font-semibold tracking-tight text-ink">능동 인사</h2>
+              <h2 className="text-[15px] font-semibold tracking-tight text-ink">
+                {ts.proactiveHello.title}
+              </h2>
               {!speechOK && (
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-                  미지원 브라우저
+                  {ts.proactiveHello.unsupportedBadge}
                 </span>
               )}
             </div>
-            <p className="text-[12.5px] text-ink-soft mb-4">
-              시간 되면 음성으로 먼저 말 걸어줄게. 대화 내용은 말하지 않아 — 시간대와 흐름만.
-            </p>
+            <p className="text-[12.5px] text-ink-soft mb-4">{ts.proactiveHello.intro}</p>
             <ul className="divide-y divide-border border border-border rounded-lg overflow-hidden">
               {wakeAlarms.map((a) => (
                 <WakeRow key={a.id} alarm={a} />
@@ -181,7 +170,7 @@ function SettingsPage() {
             </ul>
             {!speechOK && (
               <p className="mt-3 text-[11.5px] text-ink-soft/80 leading-relaxed">
-                이 브라우저는 Web Speech API를 지원하지 않아. Chrome / Safari 에서 다시 열어봐.
+                {ts.proactiveHello.browserNotice}
               </p>
             )}
           </section>
@@ -305,6 +294,7 @@ function PickOption({
 
 function WakeRow({ alarm }: { alarm: WakeAlarm }) {
   const speechOK = isSpeechSupported();
+  const ts = useT().settings;
 
   function preview() {
     const top = getMemorySnapshot()
@@ -317,7 +307,7 @@ function WakeRow({ alarm }: { alarm: WakeAlarm }) {
 
   return (
     <li className="px-3 py-3 flex items-center gap-2 bg-card flex-wrap">
-      <span className="text-[13px] text-ink w-24 shrink-0">{WAKE_KIND_LABEL[alarm.kind]}</span>
+      <span className="text-[13px] text-ink w-24 shrink-0">{ts.wakeKind[alarm.kind]}</span>
 
       {isHomecoming ? (
         <>
@@ -328,7 +318,7 @@ function WakeRow({ alarm }: { alarm: WakeAlarm }) {
               disabled={!alarm.enabled}
               onChange={(e) => updateAlarm(alarm.id, { activeWindowStart: e.target.value })}
               className="h-8 px-2 rounded-md border border-border bg-card text-[12.5px] text-ink font-mono disabled:opacity-40 focus:outline-none focus:border-strong"
-              aria-label="활성 시간대 시작"
+              aria-label={ts.wakeRow.activeWindowStart}
             />
             <span className="text-[11px] text-ink-soft">~</span>
             <input
@@ -337,7 +327,7 @@ function WakeRow({ alarm }: { alarm: WakeAlarm }) {
               disabled={!alarm.enabled}
               onChange={(e) => updateAlarm(alarm.id, { activeWindowEnd: e.target.value })}
               className="h-8 px-2 rounded-md border border-border bg-card text-[12.5px] text-ink font-mono disabled:opacity-40 focus:outline-none focus:border-strong"
-              aria-label="활성 시간대 끝"
+              aria-label={ts.wakeRow.activeWindowEnd}
             />
           </span>
           <select
@@ -345,11 +335,11 @@ function WakeRow({ alarm }: { alarm: WakeAlarm }) {
             disabled={!alarm.enabled}
             onChange={(e) => updateAlarm(alarm.id, { minBackgroundHours: Number(e.target.value) })}
             className="h-8 px-2 rounded-md border border-border bg-card text-[12.5px] text-ink disabled:opacity-40 focus:outline-none focus:border-strong"
-            aria-label="최소 외출 시간"
+            aria-label={ts.wakeRow.minBackgroundHours}
           >
             {HOMECOMING_HOUR_OPTIONS.map((h) => (
               <option key={h} value={h}>
-                {h}시간↑
+                {ts.wakeRow.hoursPlus(h)}
               </option>
             ))}
           </select>
@@ -370,9 +360,9 @@ function WakeRow({ alarm }: { alarm: WakeAlarm }) {
         onChange={(e) => updateAlarm(alarm.id, { tone: e.target.value as WakeTone })}
         className="h-8 px-2 rounded-md border border-border bg-card text-[12.5px] text-ink disabled:opacity-40 focus:outline-none focus:border-strong"
       >
-        {WAKE_TONES.map((t) => (
-          <option key={t} value={t}>
-            {WAKE_TONE_LABEL[t]}
+        {WAKE_TONES.map((tone) => (
+          <option key={tone} value={tone}>
+            {ts.wakeTone[tone]}
           </option>
         ))}
       </select>
@@ -383,7 +373,7 @@ function WakeRow({ alarm }: { alarm: WakeAlarm }) {
         disabled={!speechOK || !alarm.enabled}
         className="h-8 px-2.5 rounded-md border border-border text-[11.5px] text-ink-soft hover:text-ink hover:bg-surface-2 disabled:opacity-30 transition-colors"
       >
-        들어보기
+        {ts.wakeRow.preview}
       </button>
 
       <span className="ml-auto">
@@ -400,6 +390,7 @@ function PitchSection() {
   const selected = new Set<PitchCategory>(prefs.pitch.categories);
   const cacheCount = getPitchCount();
   const pitches = getPitches();
+  const m = useT().settings.microAds;
 
   function toggleCategory(cat: PitchCategory) {
     const next = new Set(selected);
@@ -422,34 +413,30 @@ function PitchSection() {
   const totalTaps = rows.reduce((sum, r) => sum + r.taps, 0);
 
   function handleReset() {
-    if (!window.confirm("이 디바이스의 광고 노출 통계를 모두 지워. 계속할까?")) return;
+    if (!window.confirm(m.confirmReset)) return;
     void resetPitchStats();
   }
 
   return (
     <section className="rounded-xl border border-border bg-card p-6">
       <div className="flex items-baseline justify-between mb-1">
-        <h2 className="text-[15px] font-semibold tracking-tight text-ink">마이크로 광고</h2>
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">{m.title}</h2>
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
-          기기 안
+          {m.deviceBadge}
         </span>
       </div>
-      <p className="text-[12.5px] text-ink-soft mb-4 leading-relaxed">
-        DOTS의 광고는 디바이스 안에 머물러. 광고주는 네 데이터를 안 받아 — 매칭은 로컬에서만.
-      </p>
+      <p className="text-[12.5px] text-ink-soft mb-4 leading-relaxed">{m.intro}</p>
 
       <div className="flex items-center justify-between py-2">
         <div>
-          <p className="text-[13.5px] text-ink">광고 표시</p>
-          <p className="text-[11.5px] text-ink-soft mt-0.5">
-            대화 흐름과 맞을 때만, 답변 옆에 한 장.
-          </p>
+          <p className="text-[13.5px] text-ink">{m.showAds}</p>
+          <p className="text-[11.5px] text-ink-soft mt-0.5">{m.showAdsDesc}</p>
         </div>
         <Toggle on={enabled} onChange={(v) => setPitchPrefs({ enabled: v })} />
       </div>
 
       <div className="mt-4 pt-4 border-t border-border">
-        <p className="text-[12.5px] text-ink mb-2">카테고리</p>
+        <p className="text-[12.5px] text-ink mb-2">{m.categoriesLabel}</p>
         <div className="flex flex-wrap gap-1.5">
           {PITCH_CATEGORIES.map((cat) => {
             const on = selected.has(cat.id);
@@ -471,33 +458,31 @@ function PitchSection() {
           })}
         </div>
         <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-          광고 {cacheCount}개 캐시됨 · 로컬
+          {m.cacheCount(cacheCount)}
         </p>
       </div>
 
       {/* On-device view stats */}
       <div className="mt-5 pt-5 border-t border-border">
         <div className="flex items-baseline justify-between mb-1">
-          <p className="text-[13px] text-ink">내 노출 통계</p>
+          <p className="text-[13px] text-ink">{m.statsTitle}</p>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
-            노출 {totalViews} · 클릭 {totalTaps}
+            {m.statsLine(totalViews, totalTaps)}
           </span>
         </div>
-        <p className="text-[11.5px] text-ink-soft mb-3 leading-relaxed">
-          이 통계는 디바이스 안에만 머물러. 광고주는 받지 못해.
-        </p>
+        <p className="text-[11.5px] text-ink-soft mb-3 leading-relaxed">{m.statsNote}</p>
         <ul className="divide-y divide-border border border-border rounded-lg overflow-hidden">
           {rows.map(({ pitch, views, taps }) => (
             <li key={pitch.id} className="px-3 py-2 flex items-center gap-2 bg-card text-[12px]">
               <span className="flex-1 min-w-0 truncate text-ink">{pitch.brand}</span>
               <span className="font-mono text-[10.5px] text-ink-soft uppercase tracking-[0.12em]">
-                {pitch.displayPeriod === "weekly" ? "주간" : "월간"}
+                {pitch.displayPeriod === "weekly" ? m.weekly : m.monthly}
               </span>
               <span className="font-mono text-[11px] text-ink tabular-nums w-16 text-right">
-                {views} 노출
+                {m.viewsSuffix(views)}
               </span>
               <span className="font-mono text-[11px] text-ink-soft tabular-nums w-14 text-right">
-                {taps} 클릭
+                {m.tapsSuffix(taps)}
               </span>
             </li>
           ))}
@@ -508,18 +493,17 @@ function PitchSection() {
           disabled={totalViews === 0 && totalTaps === 0}
           className="mt-3 h-8 px-3 rounded-md border border-border text-[11.5px] text-ink-soft hover:text-ink hover:bg-surface-2 disabled:opacity-30 transition-colors"
         >
-          통계 초기화
+          {m.resetStats}
         </button>
       </div>
 
       {/* How this works — concept block for the demo */}
       <div className="mt-5 pt-5 border-t border-border">
-        <p className="text-[12.5px] text-ink mb-2">DOTS의 광고는 다르게 작동해</p>
+        <p className="text-[12.5px] text-ink mb-2">{m.footerTitle}</p>
         <ul className="space-y-1.5 text-[12px] text-ink-soft leading-relaxed list-disc pl-5">
-          <li>광고주는 카테고리와 기간을 구매해 (정액제)</li>
-          <li>네 데이터는 외부로 안 나가</li>
-          <li>노출 통계는 네 디바이스 안에만 머물러</li>
-          <li>카운트는 광고 효과를 네가 직접 볼 수 있게 한 거야</li>
+          {m.footerBullets.map((b) => (
+            <li key={b}>{b}</li>
+          ))}
         </ul>
       </div>
     </section>
@@ -562,6 +546,7 @@ function EmbeddingSection() {
   const progressStatus = status.progress?.status ?? "";
 
   const recommended = AVAILABLE_EMBEDDING_MODELS.find((m) => m.recommended);
+  const sm = useT().settings.semanticMatching;
 
   function handleDownload(modelId: EmbeddingModelId) {
     downloadAndInitEmbedding(modelId).catch((err) => {
@@ -576,14 +561,13 @@ function EmbeddingSection() {
   return (
     <section className="rounded-xl border border-border bg-card p-6">
       <div className="flex items-baseline justify-between mb-1">
-        <h2 className="text-[15px] font-semibold tracking-tight text-ink">시맨틱 매칭 (V4)</h2>
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">{sm.title}</h2>
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
-          기기 안
+          {sm.deviceBadge}
         </span>
       </div>
       <p className="text-[12.5px] text-ink-soft mb-4 leading-relaxed">
-        의미 기반 매칭 — "양자역학" / "양자역학에 대해" / "양자역학이 뭐야"가 같은 응답으로 묶인다.
-        모델이 다운로드된 뒤부터 작동. 안 켜도 V3 정확-일치 매칭은 그대로.
+        {sm.desc1} {sm.desc2}
       </p>
 
       <div className="space-y-2.5">
@@ -600,7 +584,7 @@ function EmbeddingSection() {
                     <h3 className="text-[14px] font-semibold tracking-tight text-ink">{m.name}</h3>
                     {m.recommended && (
                       <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-primary">
-                        추천
+                        {sm.recommendedBadge}
                       </span>
                     )}
                   </div>
@@ -617,7 +601,7 @@ function EmbeddingSection() {
                     onClick={handleDisable}
                     className="px-3 h-8 rounded-md border border-border text-[12px] text-ink-soft hover:text-ink hover:bg-card shrink-0"
                   >
-                    비활성화
+                    {sm.disable}
                   </button>
                 ) : (
                   <button
@@ -626,7 +610,7 @@ function EmbeddingSection() {
                     disabled={isLoading}
                     className="px-3 h-8 rounded-md bg-ink text-background text-[12px] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                   >
-                    {thisLoading ? "다운로드 중…" : "다운로드"}
+                    {thisLoading ? sm.downloading : sm.download}
                   </button>
                 )}
               </div>
@@ -646,12 +630,12 @@ function EmbeddingSection() {
               )}
               {thisReady && (
                 <p className="mt-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-primary">
-                  ✓ 준비 완료 — 시맨틱 매칭 작동 중
+                  {sm.ready}
                 </p>
               )}
               {thisError && (
                 <p className="mt-2 text-[12px] text-ink leading-relaxed">
-                  실패: {status.error ?? "알 수 없는 오류"}
+                  {sm.failed(status.error ?? sm.unknownError)}
                 </p>
               )}
             </article>
@@ -660,8 +644,8 @@ function EmbeddingSection() {
       </div>
 
       <p className="mt-3 text-[11.5px] text-ink-soft leading-relaxed">
-        다운로드는 1회만. IndexedDB에 저장되어 다음부터 즉시 작동.
-        {recommended && ` 추천: ${recommended.name} (${recommended.size}).`}
+        {sm.footer1}
+        {recommended && sm.footerRecommended(recommended.name, recommended.size)}
       </p>
     </section>
   );

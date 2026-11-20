@@ -3,6 +3,7 @@
 // only behind import.meta.env.DEV in __root.tsx, so it never ships to
 // production users.
 
+import type { ProviderId } from "@/lib/ai/providers/types";
 import { clearLearned, getLearnedSnapshot, rateLearned } from "./store";
 import { extractTopic } from "./topic";
 import type { LearnedResponse } from "./types";
@@ -28,7 +29,7 @@ type LearnedSnapshotRow = {
   id: string;
   userInput: string;
   response: string;
-  provider: "webllm" | "gemini";
+  provider: "webllm" | ProviderId;
   pack?: string;
   usedCount: number;
   rating?: "good" | "bad";

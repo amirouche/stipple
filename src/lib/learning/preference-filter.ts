@@ -25,7 +25,40 @@ import { listByType } from "./preferences-store";
 export interface DislikeFilterResult {
   filtered: ContentMatch[];
   removed: ContentMatch[];
-  dislikes: string[]; // 적용된 dislike subjects (모든 저장된 dislike, hit 여부 무관)
+  dislikes: string[]; // 저장된 dislike subjects 전체 (hit 여부 무관, 기존 호환)
+  // Phase EN-fix A: 실제 매칭 hit 한 원본 subject 만 — 누적 garbage 차단.
+  // 응답 텍스트 ("X 싫어한다고 했어서...") 에 이쪽을 사용 — dislikes 전체
+  // 박히던 회귀 차단 + 영어/한국어 응답 깔끔.
+  appliedDislikes: string[];
+}
+
+// Phase EN-fix B: 영어↔한국어 식문화 vocab. 한 row = 동의어 그룹. 사용자
+// dislike subject 가 row 내 어느 토큰과 substring 매칭이면 그룹 전체를
+// 매칭용으로 확장. 표시는 원본 subject 만 사용 (영어 응답엔 "meat", 한국어
+// 응답엔 "고기" — 사용자 입력 언어 보존).
+//
+// Seed 보수적 — meat / fish 두 row 만. 짧은 영어 (egg/ham 등) 는 비음식
+// 단어 substring 충돌 (eggplant/hamburger) 위험으로 제외. 모든 영어 토큰
+// 4+ 자, 한국어 토큰은 식문화 specific. 새 row 추가는 한 줄 — 안전한 토큰
+// 기준으로 확장.
+const FOOD_VOCAB: ReadonlyArray<ReadonlyArray<string>> = [
+  ["meat", "beef", "pork", "chicken", "고기", "돼지고기", "소고기", "닭고기"],
+  ["fish", "tuna", "salmon", "생선", "참치", "연어"],
+];
+
+function expandDislike(subject: string): string[] {
+  const lower = subject.toLowerCase().trim();
+  const tokens = new Set<string>([lower]); // 원본 always 포함
+  for (const group of FOOD_VOCAB) {
+    const hit = group.some((t) => {
+      const tl = t.toLowerCase();
+      return lower.includes(tl) || tl.includes(lower);
+    });
+    if (hit) {
+      for (const t of group) tokens.add(t.toLowerCase());
+    }
+  }
+  return Array.from(tokens);
 }
 
 // 검사 텍스트 = ingredients item 측면만 (lowercase). how_to/definition 측면
@@ -58,21 +91,45 @@ export function collectPackMatches(pack: Pack): ContentMatch[] {
 }
 
 export function filterMatchesByDislikes(matches: ContentMatch[]): DislikeFilterResult {
+  // listByType("dislike") 만 봄 — like 와 분리 (preferences-store 측면 type
+  // 필드 박혀 갈림). "I like spicy" 류 입력은 like store 측면 박혀 본 매처
+  // 측면 안 들어옴.
   const dislikes = listByType("dislike")
     .map((d) => d.subject.trim())
     .filter(Boolean);
   if (dislikes.length === 0) {
-    return { filtered: matches, removed: [], dislikes: [] };
+    return { filtered: matches, removed: [], dislikes: [], appliedDislikes: [] };
   }
-  const dislikesLower = dislikes.map((d) => d.toLowerCase());
+  // Phase EN-fix B: 사용자 입력 subject + 매칭용 확장 토큰 페어. 영어 "meat"
+  // → tokens 측면 "meat,beef,pork,chicken,고기,돼지고기,..." 박혀 한국어
+  // ingredient "돼지고기" 매칭. 표시 측면 subject 만 박혀 사용자가 본 입력
+  // 그대로 (영어 → "meat", 한국어 → "고기").
+  const expansions = dislikes.map((d) => ({ subject: d, tokens: expandDislike(d) }));
   const filtered: ContentMatch[] = [];
   const removed: ContentMatch[] = [];
+  // Phase EN-fix A: 실제 hit 한 원본 subject 만 set 측면 박음 — 응답 라벨에
+  // 누적 garbage (모든 저장된 dislike) 박히던 회귀 차단.
+  const appliedSet = new Set<string>();
   for (const m of matches) {
     const text = matchIngredients(m);
-    // text 빈 (sat-math 또는 cooking 측면 ingredients X) → 자동 kept.
-    const hasDislike = text.length > 0 && dislikesLower.some((d) => text.includes(d));
-    if (hasDislike) removed.push(m);
+    if (text.length === 0) {
+      filtered.push(m);
+      continue;
+    }
+    let hit = false;
+    for (const { subject, tokens } of expansions) {
+      if (tokens.some((t) => text.includes(t))) {
+        hit = true;
+        appliedSet.add(subject); // 원본 사용자 입력 — 확장 토큰 안 박음
+      }
+    }
+    if (hit) removed.push(m);
     else filtered.push(m);
   }
-  return { filtered, removed, dislikes };
+  return {
+    filtered,
+    removed,
+    dislikes,
+    appliedDislikes: Array.from(appliedSet),
+  };
 }

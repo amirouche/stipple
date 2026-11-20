@@ -57,7 +57,6 @@ function StudyPage() {
       ) : (
         <FolderView
           packName={studyPack?.name ?? "Study"}
-          packShort={studyPack?.short ?? ""}
           problems={problems}
           onOpen={(id) => setOpenProblemId(id)}
           lang={lang}
@@ -73,13 +72,11 @@ function StudyPage() {
 
 function FolderView({
   packName,
-  packShort,
   problems,
   onOpen,
   lang,
 }: {
   packName: string;
-  packShort: string;
   problems: SATMathProblem[];
   onOpen: (id: string) => void;
   lang: "ko" | "en";
@@ -122,7 +119,7 @@ function FolderView({
               {packName}
             </h1>
             <p className="mt-1 text-[13px] text-ink-soft max-w-xl">
-              {packShort} {L.packShortSuffix}
+              {L.packShortBody} {L.packShortSuffix}
             </p>
           </div>
           <button
@@ -161,7 +158,9 @@ function FolderView({
                     </span>
                   )}
                 </div>
-                <p className="text-[13.5px] text-ink leading-snug line-clamp-3">{p.question}</p>
+                <p className="text-[13.5px] text-ink leading-snug line-clamp-3">
+                  {lang === "en" ? (p.questionEn ?? p.question) : p.question}
+                </p>
                 <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/70">
                   {p.id}
                 </p>
@@ -206,10 +205,15 @@ function ProblemView({
   const [result, setResult] = useState<CheckResult | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [llm, setLlm] = useState<LlmState>({ kind: "idle" });
+  // Phase EN-fix E: 영어 모드 카드 본문 — EN 필드 fallback to KO.
+  const en = lang === "en";
+  const questionText = en ? (problem.questionEn ?? problem.question) : problem.question;
+  const hintText = en ? (problem.hintEn ?? problem.hint) : problem.hint;
+  const solutionText = en ? (problem.solutionEn ?? problem.solution) : problem.solution;
 
   function pick(choice: string) {
     if (result) return; // already answered — second pick is a no-op
-    const r = checkAnswer(problem.id, choice);
+    const r = checkAnswer(problem.id, choice, lang);
     if (r) setResult(r);
   }
 
@@ -223,13 +227,13 @@ function ProblemView({
     if (!result || result.kind !== "incorrect") return;
     setLlm({ kind: "loading", for: "explain" });
     try {
-      const text = await explainMistake(problem, result.selected);
+      const text = await explainMistake(problem, result.selected, lang);
       setLlm({ kind: "result", for: "explain", text });
     } catch (err) {
       setLlm({
         kind: "error",
         for: "explain",
-        message: err instanceof Error ? err.message : "설명 가져오기 실패",
+        message: err instanceof Error ? err.message : L.errorExplainFetch,
       });
     }
   }
@@ -237,13 +241,13 @@ function ProblemView({
   async function askVariant() {
     setLlm({ kind: "loading", for: "variant" });
     try {
-      const text = await generateVariant(problem);
+      const text = await generateVariant(problem, lang);
       setLlm({ kind: "result", for: "variant", text });
     } catch (err) {
       setLlm({
         kind: "error",
         for: "variant",
-        message: err instanceof Error ? err.message : "변형 문제 생성 실패",
+        message: err instanceof Error ? err.message : L.errorVariantFetch,
       });
     }
   }
@@ -282,7 +286,7 @@ function ProblemView({
       </header>
 
       <div className="px-4 sm:px-8 md:px-12 py-8 max-w-3xl">
-        <h2 className="text-[18px] sm:text-[20px] text-ink leading-snug">{problem.question}</h2>
+        <h2 className="text-[18px] sm:text-[20px] text-ink leading-snug">{questionText}</h2>
 
         <div className="mt-6 space-y-2">
           {problem.choices.map((c) => {
@@ -338,7 +342,7 @@ function ProblemView({
                 <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft/70 block mb-1">
                   {L.hint}
                 </span>
-                {problem.hint}
+                {hintText}
               </div>
             )}
           </div>
@@ -347,7 +351,7 @@ function ProblemView({
         {result?.kind === "correct" && (
           <ResultBlock tone="correct" title={L.correct}>
             <pre className="text-[13.5px] text-ink leading-relaxed whitespace-pre-wrap font-sans">
-              {problem.solution}
+              {solutionText}
             </pre>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
@@ -395,7 +399,7 @@ function ProblemView({
                 {L.showSolution}
               </summary>
               <pre className="mt-3 text-[13.5px] text-ink leading-relaxed whitespace-pre-wrap font-sans">
-                {problem.solution}
+                {solutionText}
               </pre>
             </details>
           </ResultBlock>

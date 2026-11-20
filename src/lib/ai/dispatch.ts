@@ -26,7 +26,8 @@ import type { Intent } from "@/lib/packs/intent";
 import { generateWithWebLLM, getWebLLMStatus, type WebLLMStatus } from "@/lib/webllm";
 // Phase M0-5: Memory Activation — cloud 호출 시 사용자 선호 컨텍스트 inject.
 import { getLastSudokuPlay, listPreferences } from "@/lib/learning";
-import { askGemini, type GeminiHistoryTurn } from "./gemini";
+import { askLLM } from "./llm";
+import type { LLMHistoryTurn, ProviderId } from "./providers/types";
 // V5.0 Phase P-2: 통일 system prompt 빌더. compose + dispatch 2-layer 통합.
 import { buildSystemPrompt } from "./system-prompt";
 
@@ -74,7 +75,9 @@ export type DispatchInput = {
 
 export type DispatchResult = {
   text: string;
-  provider: "webllm" | "gemini";
+  // "webllm" kept for the dormant on-device branch; cloud answers carry the
+  // actual ProviderId chosen by LLM_PROVIDER (gemini | openai | claude | grok).
+  provider: "webllm" | ProviderId;
 };
 
 // V5.0 Phase P-2: 헌법·디시플린 / RECOMMENDATION_HINTS / hasRecommendationIntent
@@ -90,19 +93,19 @@ function isWebLLMReady(status: WebLLMStatus): boolean {
   return status.state === "ready" || status.state === "generating";
 }
 
-async function callGemini(
+async function callLLM(
   input: DispatchInput,
   systemPrompt: string | undefined,
   history: DispatchTurn[],
 ): Promise<DispatchResult> {
-  const { text } = await askGemini({
+  const { text, provider } = await askLLM({
     data: {
       userMessage: input.userMessage,
       systemPrompt,
-      history: history as GeminiHistoryTurn[],
+      history: history as LLMHistoryTurn[],
     },
   });
-  return { text, provider: "gemini" };
+  return { text, provider };
 }
 
 async function callWebLLM(
@@ -167,14 +170,15 @@ export async function dispatchLLMCall(
   const history = trimHistory(input.history);
 
   // 안정성 정정 (2026-04-30): WebLLM 분기 제거. @mlc-ai/web-llm ES module
-  // 호환 문제로 런타임 깨짐 → 모든 응답을 Gemini로. WebLLM 인프라 안정화
-  // 후 분기 복구.
+  // 호환 문제로 런타임 깨짐 → 모든 응답을 cloud LLM 으로. WebLLM 인프라
+  // 안정화 후 분기 복구. 실제 provider 는 서버의 LLM_PROVIDER 가 결정 —
+  // dispatch 는 askLLM 서버펀 경계만 넘고 어느 provider 인지는 result 로 받음.
   if (import.meta.env.DEV) {
     const tStart = performance.now();
     try {
-      const result = await callGemini(input, systemPrompt, history);
+      const result = await callLLM(input, systemPrompt, history);
       console.log("[llm-call]", {
-        provider: "gemini",
+        provider: result.provider,
         success: true,
         ms: (performance.now() - tStart).toFixed(0),
         textLen: result.text.length,
@@ -182,7 +186,7 @@ export async function dispatchLLMCall(
       return result;
     } catch (err) {
       console.warn("[llm-call]", {
-        provider: "gemini",
+        provider: "cloud",
         success: false,
         ms: (performance.now() - tStart).toFixed(0),
         error: err instanceof Error ? err.message : String(err),
@@ -190,5 +194,5 @@ export async function dispatchLLMCall(
       throw err;
     }
   }
-  return callGemini(input, systemPrompt, history);
+  return callLLM(input, systemPrompt, history);
 }

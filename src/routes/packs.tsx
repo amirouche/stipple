@@ -56,6 +56,7 @@ function PacksPage() {
   const [paused, setPaused] = useState<Set<string>>(new Set());
   const prefs = usePreferences();
   const t = useT();
+  const lang = prefs.language;
 
   const ordered = [...packs].sort((a, b) => {
     const ai = prefs.packOrder.indexOf(a.id);
@@ -124,9 +125,14 @@ function PacksPage() {
                   </div>
                   <h3 className="text-[16px] font-semibold tracking-tight text-ink">{p.name}</h3>
                   <p className="mt-1 text-[12px] text-ink-soft">
-                    <span className="text-ink">{p.voice}</span> · {p.tone}
+                    <span className="text-ink">
+                      {lang === "en" ? (p.voiceEn ?? p.voice) : p.voice}
+                    </span>{" "}
+                    · {lang === "en" ? (p.toneEn ?? p.tone) : p.tone}
                   </p>
-                  <p className="mt-2 text-[13px] text-ink-soft leading-relaxed">{p.short}</p>
+                  <p className="mt-2 text-[13px] text-ink-soft leading-relaxed">
+                    {lang === "en" ? (p.shortEn ?? p.short) : p.short}
+                  </p>
 
                   {/* One-line behavior — the headline change */}
                   <div className="mt-3 px-3 py-2 rounded-md bg-surface border border-border">
@@ -139,7 +145,9 @@ function PacksPage() {
                     <summary className="cursor-pointer text-[11px] font-mono uppercase tracking-[0.14em] text-ink-soft hover:text-ink list-none">
                       {t.packs.detailsMore}
                     </summary>
-                    <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">{p.behavior}</p>
+                    <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">
+                      {lang === "en" ? (p.behaviorEn ?? p.behavior) : p.behavior}
+                    </p>
                   </details>
 
                   <div className="mt-5 flex items-center gap-2">

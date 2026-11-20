@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Shell, useShell } from "@/components/Shell";
 import { STORE_PACKS, formatPrice, type StorePack } from "@/lib/store-packs";
 import { useT, type Messages } from "@/lib/i18n";
+import { usePreferences } from "@/lib/preferences";
 
 export const Route = createFileRoute("/store")({
   head: () => ({
@@ -49,16 +50,23 @@ function StorePage() {
   const [packs, setPacks] = useState<StorePack[]>(STORE_PACKS);
   const [filter, setFilter] = useState<StoreFilter>("all");
   const [query, setQuery] = useState("");
+  const lang = usePreferences().language;
 
   const visible = packs.filter((p) => {
     if (filter !== "all" && p.category !== filter) return false;
     if (!query.trim()) return true;
     const q = query.toLowerCase();
+    // Phase EN-fix F: 검색 대상에 EN 필드 포함 — EN 사용자가 "SAT" 쳐도
+    // "SAT English" hit. KO 필드도 그대로 — 이중 언어 검색 (EN 사용자도
+    // 한국어 alias 박힌 케이스 잡힘).
     return (
       p.name.toLowerCase().includes(q) ||
       p.short.toLowerCase().includes(q) ||
       p.author.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q)
+      p.category.toLowerCase().includes(q) ||
+      (p.nameEn?.toLowerCase().includes(q) ?? false) ||
+      (p.shortEn?.toLowerCase().includes(q) ?? false) ||
+      (p.authorEn?.toLowerCase().includes(q) ?? false)
     );
   });
 
@@ -97,6 +105,7 @@ function StoreBody({
 }) {
   const shell = useShell();
   const t = useT();
+  const lang = usePreferences().language;
 
   return (
     <div className="flex flex-col">
@@ -187,17 +196,24 @@ function StoreBody({
                   </span>
                 </div>
                 <h3 className="text-[15.5px] font-semibold tracking-tight text-ink leading-snug">
-                  {p.name}
+                  {lang === "en" ? (p.nameEn ?? p.name) : p.name}
                 </h3>
                 <p className="mt-1 text-[12px] text-ink-soft leading-snug">
-                  <span className="text-ink">{p.voice}</span> · {p.tone}
+                  <span className="text-ink">
+                    {lang === "en" ? (p.voiceEn ?? p.voice) : p.voice}
+                  </span>{" "}
+                  · {lang === "en" ? (p.toneEn ?? p.tone) : p.tone}
                 </p>
-                <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">{p.short}</p>
+                <p className="mt-2 text-[12.5px] text-ink-soft leading-relaxed">
+                  {lang === "en" ? (p.shortEn ?? p.short) : p.short}
+                </p>
 
                 <div className="mt-3 flex items-center gap-2 text-[11px] text-ink-soft">
-                  <span className="font-mono">{p.contentCount}</span>
+                  <span className="font-mono">
+                    {lang === "en" ? (p.contentCountEn ?? p.contentCount) : p.contentCount}
+                  </span>
                   <span className="text-ink-soft/40">·</span>
-                  <span>{p.author}</span>
+                  <span>{lang === "en" ? (p.authorEn ?? p.author) : p.author}</span>
                 </div>
 
                 <button

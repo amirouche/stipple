@@ -973,6 +973,48 @@ export function hasDefinitionIntent(text: string): boolean {
   return DEFINITION_PATTERNS.some((p) => q.includes(p));
 }
 
+// Phase EN-fix: specificTarget (Pack trigger 단어) 잡혔지만 matchPackContent
+// 가 score 0 으로 null 반환한 케이스용 fallback. 영어 "I want doenjang stew"
+// 처럼 trigger ("stew") 가 박혀 있는데 COOKING_RECIPE_KEYWORDS / DOMAIN 에
+// 매칭 안 되는 입력을 한국어와 같은 packLevel 흐름으로 끌어들임.
+//
+// 그 팩의 모든 contents 를 packLevel matched 로 합성 — dislike filter / 대체
+// 추천 / cloud 옵션 후속 단계 진입. send() 측면 craving 신호 (사용자 desire)
+// 와 같이 게이트 박혀 — 단순 trigger 단어 우연 매칭 (예 "I had stew yesterday")
+// 은 craving 게이트에서 차단.
+export function synthesizePackLevelFallback(
+  pack: Pack,
+  query: string,
+  lang: Lang,
+): PackMatchResult | null {
+  if (!pack.contents || pack.contents.length === 0) return null;
+  const matches: ContentMatch[] = [];
+  for (const ref of pack.contents) {
+    if (ref.kind === "cooking-recipe") {
+      const r = COOKING_RECIPES.find((x) => x.id === ref.recipeId);
+      if (r) matches.push({ kind: "cooking-recipe", recipe: r, score: 0 });
+    } else if (ref.kind === "sat-math") {
+      const p = getSATMathProblem(ref.problemId);
+      if (p) matches.push({ kind: "sat-math", problem: p, score: 0 });
+    }
+  }
+  if (matches.length === 0) return null;
+  // requestedNoun — 입력에서 가장 긴 명사 (lang 기준 추출). 응답 텍스트
+  // ("..에 ${noun} 정확히 없어..." / "you said you don't like X — how about Y?")
+  // 와 cloud 옵션 prompt 에 노출.
+  const nouns = lang === "en" ? extractNounsEn(query) : extractNouns(query);
+  const requestedNoun = nouns.sort((a, b) => b.length - a.length)[0];
+  return {
+    pack,
+    isActivePack: false,
+    packLevel: true,
+    matches,
+    confidence: "fuzzy",
+    lang,
+    requestedNoun,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Suggestion text + button options
 // ---------------------------------------------------------------------------
@@ -1216,7 +1258,8 @@ function buildCookingSuggestion(
       .slice(0, 4)
       .map<SuggestionOption>((m) => ({
         kind: "show-recipe",
-        label: m.recipe.title,
+        // Phase EN-fix C: EN 모드 chooser 라벨도 EN 제목 — titleEn fallback to title.
+        label: lang === "en" ? (m.recipe.titleEn ?? m.recipe.title) : m.recipe.title,
         recipeId: m.recipe.id,
         action_area: "만들기",
       }));
@@ -1235,14 +1278,16 @@ function buildCookingSuggestion(
       text = `${pack.name} matches the domain, but ${label} isn't here exactly. Search in cloud?`;
     } else if (confidence === "fuzzy") {
       const label = requestedNoun ?? "that";
-      text = `${pack.name} doesn't have ${label} exactly. Closest is ${head.recipe.title}. Try cloud for something else?`;
+      const headTitle = head.recipe.titleEn ?? head.recipe.title;
+      text = `${pack.name} doesn't have ${label} exactly. Closest is ${headTitle}. Try cloud for something else?`;
     } else if (facet) {
       // facet 텍스트는 entry 의 한국어 데이터. 영어 모드에선 노출 X — packLevel 톤.
       text = `${pack.name} has ${matches.length} recipe${matches.length === 1 ? "" : "s"}. Want to see?`;
     } else if (packLevel) {
       text = `${pack.name} has ${matches.length} recipe${matches.length === 1 ? "" : "s"}. Want to see?`;
     } else if (matches.length === 1) {
-      text = `${pack.name} has ${head.recipe.title}. Want to see? Or something else?`;
+      const headTitle = head.recipe.titleEn ?? head.recipe.title;
+      text = `${pack.name} has ${headTitle}. Want to see? Or something else?`;
     } else {
       text = `${pack.name} has ${matches.length} similar recipes. Which one?`;
     }
@@ -1273,7 +1318,15 @@ function buildCookingSuggestion(
     .slice(0, 2)
     .map((m) => ({
       kind: "show-recipe",
-      label: matches.length === 1 ? (lang === "en" ? "Show me" : "보여줘") : m.recipe.title,
+      // Phase EN-fix C: chooser 라벨 (matches > 1) 도 EN 모드에선 titleEn fallback.
+      label:
+        matches.length === 1
+          ? lang === "en"
+            ? "Show me"
+            : "보여줘"
+          : lang === "en"
+            ? (m.recipe.titleEn ?? m.recipe.title)
+            : m.recipe.title,
       recipeId: m.recipe.id,
       action_area: "만들기",
     }));

@@ -9,9 +9,12 @@
 // 구독 + 메트릭 계산을 담당.
 
 import { useSyncExternalStore } from "react";
+import type { ProviderId } from "@/lib/ai/providers/types";
 
 export type DemoRoute = "pack" | "store" | "learned" | "cloud" | "local";
-export type DemoProvider = "pack" | "learned" | "gemini" | "webllm" | "none";
+// ProviderId covers the cloud providers (gemini | openai | claude | grok);
+// pack/learned/webllm/none are the non-cloud trace origins.
+export type DemoProvider = "pack" | "learned" | "webllm" | "none" | ProviderId;
 
 export type DemoTrace = {
   id: string;

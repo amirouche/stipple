@@ -135,6 +135,73 @@ export const MESSAGES_EN: Messages = {
       deepWithPack: "Checked here first — a wider look should sharpen it.",
       deepWithoutPack: "What I have is fuzzy — let me check a bit more.",
     },
+    command: {
+      packName: "Command",
+      learnAck: (alias: string, canonical: string) =>
+        `Got it — I'll remember '${alias}' as '${canonical}'.`,
+      unlearnOk: (alias: string) => `Forgot '${alias}'.`,
+      unlearnMiss: (alias: string) => `'${alias}' was never learned.`,
+      listEmpty:
+        "No aliases learned yet. Teach me with something like `@learn ddujon = Dubai chewy cookie`.",
+      listHeader: (n: number) => `${n} learned aliases:`,
+    },
+    calculator: {
+      packName: "Learned · Calculator Pack",
+    },
+    preference: {
+      packName: "Learned · Preferences",
+    },
+    preferenceRecall: {
+      packName: "Learned · Recall",
+    },
+    packStore: {
+      packName: "Pack Store",
+    },
+    summaryMarker: {
+      ariaLabel: "Previous conversation summary marker",
+      summarized: (n: number) => `Previous conversation summarized (${n} messages)`,
+    },
+    pitchCard: {
+      sponsoredPrefix: (brand: string) => `Sponsored · ${brand}`,
+      closeAria: "Close ad",
+      learnMore: "Learn more →",
+    },
+    suggestionAction: {
+      cloudSendReason: "Sending to cloud…",
+      satTutorName: "SAT Math Tutor",
+      satSavedFromLLM: "Generated a new SAT math problem and saved it to the Study pack.",
+      satSavedDummy:
+        "(Used a sample problem instead.) Saved to the Study pack. Want to open the folder?",
+      openFolder: "Open folder",
+      callFailed: (msg: string) => `(Cloud call failed: ${msg})`,
+      fallbackResponse: "Couldn't fetch a response right now.",
+    },
+    // 한국 음식 레시피 제목은 한국어 그대로 노출 — "참치김치찌개" 처럼.
+    // 영어 응답 안 한국어 음식명 의도된 (한국 음식은 한국어 이름이 진짜).
+    dislikeFilter: {
+      single: (dislikes: string, title: string) =>
+        `You said you don't like ${dislikes} — how about ${title}?`,
+      multi: (dislikes: string, titles: string) =>
+        `You said you don't like ${dislikes} — ${titles}, which one?`,
+      expandedSingle: (dislikes: string, title: string) =>
+        `You said you don't like ${dislikes} — closest match is ${title}.`,
+      expandedMulti: (dislikes: string, titles: string) =>
+        `You said you don't like ${dislikes} — closest matches: ${titles}.`,
+    },
+    filterOptions: {
+      cook: "Cook it",
+      cookSingle: "Cook it",
+      orderIn: "Order in",
+      orderInPrompt: (headTitle: string) =>
+        `Suggest 3 nearby Korean restaurants or delivery apps that do ${headTitle} well. Keep it short.`,
+      similar: "Similar dishes",
+      similarPrompt: (headTitle: string) =>
+        `Recommend 1-2 Korean dishes similar to ${headTitle} but slightly different.`,
+      cloud: "Search in cloud",
+      cloudPromptWithNoun: (noun: string) => `Tell me about ${noun}. Keep it short and clear.`,
+      cloudPromptDefault: (headTitle: string) =>
+        `Recommend something different but similar to ${headTitle}. Keep it short and clear.`,
+    },
   },
 
   memory: {
@@ -253,6 +320,73 @@ export const MESSAGES_EN: Messages = {
       personalLayer: "Personal layer",
       personalLayerValue: "Local",
     },
+    wakeKind: {
+      morning: "Morning hello",
+      lunch: "Lunch nudge",
+      evening: "Evening recap",
+      bedtime: "Before bed",
+      homecoming: "Homecoming",
+    },
+    wakeTone: {
+      warm: "Warm",
+      brief: "Brief",
+      calm: "Calm",
+    },
+    wakeRow: {
+      activeWindowStart: "Active window start",
+      activeWindowEnd: "Active window end",
+      minBackgroundHours: "Minimum away time",
+      hoursPlus: (h: number) => `${h}h+`,
+      preview: "Preview",
+    },
+    proactiveHello: {
+      title: "Proactive hello",
+      unsupportedBadge: "Unsupported browser",
+      intro:
+        "I'll speak up first when the time fits. I don't read your chats — only the time of day and flow.",
+      browserNotice: "This browser doesn't support the Web Speech API. Open in Chrome / Safari.",
+    },
+    microAds: {
+      title: "Micro ads",
+      deviceBadge: "On device",
+      intro: "DOTS ads stay on the device. Advertisers don't get your data — matching is local.",
+      showAds: "Show ads",
+      showAdsDesc: "Only when it fits the chat flow — one card next to a reply.",
+      categoriesLabel: "Categories",
+      cacheCount: (n: number) => `${n} ads cached · local`,
+      statsTitle: "Your impression stats",
+      statsLine: (views: number, taps: number) => `${views} views · ${taps} taps`,
+      statsNote: "These stats stay on the device. Advertisers can't access them.",
+      weekly: "Weekly",
+      monthly: "Monthly",
+      viewsSuffix: (n: number) => `${n} views`,
+      tapsSuffix: (n: number) => `${n} taps`,
+      resetStats: "Reset stats",
+      confirmReset: "Clear all ad impression stats on this device. Continue?",
+      footerTitle: "DOTS ads work differently",
+      footerBullets: [
+        "Advertisers buy a category and a period (flat rate)",
+        "Your data doesn't leave this device",
+        "Impression stats stay on your device",
+        "Counts let you see ad performance yourself",
+      ],
+    },
+    semanticMatching: {
+      title: "Semantic matching (V4)",
+      deviceBadge: "On device",
+      desc1:
+        'Meaning-based matching — "quantum mechanics" / "about quantum mechanics" / "what is quantum mechanics" all route to the same answer.',
+      desc2: "Works once the model downloads. V3 exact-match keeps working without it.",
+      recommendedBadge: "Recommended",
+      disable: "Disable",
+      downloading: "Downloading…",
+      download: "Download",
+      ready: "✓ Ready — semantic matching active",
+      failed: (err: string) => `Failed: ${err}`,
+      unknownError: "Unknown error",
+      footer1: "One-time download. Stored in IndexedDB — instant from next time.",
+      footerRecommended: (name: string, size: string) => ` Recommended: ${name} (${size}).`,
+    },
     disabledCards: {
       webllmTitle: "On-device LLM",
       webllmStatus: "In progress",
@@ -275,6 +409,7 @@ export const MESSAGES_EN: Messages = {
 
   study: {
     packFolder: "Pack folder",
+    packShortBody: "Walks through it step by step and asks where you got stuck first.",
     packShortSuffix:
       "Answer checking runs on this device. Cloud only kicks in for deeper explanations.",
     backToChat: "← Back to chat",
@@ -300,5 +435,53 @@ export const MESSAGES_EN: Messages = {
     cloudFailed: "Cloud call failed",
     cloudBadge: "Cloud",
     metaPrefix: "SAT Math",
+    errorExplainFetch: "Failed to fetch explanation",
+    errorVariantFetch: "Failed to generate variant",
+  },
+
+  demo: {
+    eyebrow: "Verification",
+    title: "Demo metrics",
+    description:
+      'Where DOTS routed each query — verified with 30 fixed inputs + cumulative distribution. Not "a smarter router" but "proof of what the current router decided."',
+    status: {
+      running: "Running…",
+      pass: "✓ Pass",
+      mismatch: "✗ Mismatch",
+      idle: "Idle",
+      expectedActual: (expected: string, actual: string) => `Expected ${expected} / got ${actual}`,
+    },
+    automation: {
+      title: "Automated verification",
+      progress: (completed: number, total: number, passed: number, failed: number) =>
+        `${completed}/${total} · ${passed} passed · ${failed} mismatched`,
+      desc: "Headless evaluation — the matcher actually runs but the cloud LLM is not called. 30 inputs × 50ms avg ≈ 1.5s.",
+      runAll: "Run All",
+      runHint: 'Each row\'s "Run" button runs a single case.',
+    },
+    testCases: {
+      title: (total: number) => `Test cases (${total})`,
+      hint: "Marked cases need the same input processed once in chat through cloud so the learned cache hits. Fresh state falls through to cloud.",
+      needsPrior: "Needs prior chat",
+    },
+    panel: {
+      confirmClear: "Clear all traces? They're stored on this device only.",
+      title: "Demo metrics (V0)",
+      deviceBadge: "This device",
+      description:
+        'How DOTS routes — the edge over Big Tech. Where each input went / how many external calls were avoided lands here. The point isn\'t "a smarter router" but "proof of what the router decided."',
+      empty: "No traces yet. Type something in chat or run /demo's verifier.",
+      totals: "Total requests",
+      local: "Local",
+      cloud: "Cloud",
+      byBranch: "By branch",
+      edge: {
+        title: "Edge over Big Tech",
+        avoided: "External calls avoided",
+        rate: "Avoid rate",
+        latency: "Avg latency",
+      },
+      byPack: "By pack",
+    },
   },
 };

@@ -233,10 +233,19 @@ const CRAVING_TOKENS = ["먹고싶", "먹고 싶", "당기", "먹으러"];
 // 식욕 외 일상 발화 ("I'm hungry for knowledge") 충돌. 매칭 시 substring 검사.
 const CRAVING_TOKENS_EN = ["want to eat", "craving", "hungry for"];
 
+// Phase EN-fix: "I want X" 패턴 — 단, "I want to <verb>" (학습/제작 등 비식욕
+// 의도) 는 negative lookahead 로 제외. classifyCraving 의 게이트는 send() 의
+// (c) packLevel fallback 트리거에 쓰이는데, 사용자 desire 신호 검출이 본질.
+// X 가 음식인지 사전 검증은 안 함 — (c) fallback 은 specificTarget (cooking
+// pack trigger) 동시 게이트 박힌 케이스만 cooking 으로 끌어들이므로, 비음식
+// "I want a job" 같은 입력은 trigger 없어 fallback X.
+const CRAVING_WANT_EN = /\bi\s+want\s+(?!to\s)/i;
+
 export function classifyCraving(text: string): boolean {
   const q = text.toLowerCase();
   if (CRAVING_TOKENS.some((t) => q.includes(t.toLowerCase()))) return true;
-  return CRAVING_TOKENS_EN.some((t) => q.includes(t));
+  if (CRAVING_TOKENS_EN.some((t) => q.includes(t))) return true;
+  return CRAVING_WANT_EN.test(text);
 }
 
 // V4.1 종합 의도 (memo summary). 사용자가 "지금까지 양자역학으로 모은

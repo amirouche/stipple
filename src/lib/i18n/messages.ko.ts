@@ -150,6 +150,89 @@ export const MESSAGES_KO = {
       deepWithPack: "일단 안에 있는 걸 먼저 봤는데, 더 찾아보면 정확해질 것 같아.",
       deepWithoutPack: "지금 가진 걸로는 애매해서 조금 더 확인해볼게.",
     },
+    // Stage 0 명령어 (@learn / @unlearn / @list) 응답 본문 + packName 라벨.
+    // lang 분기로 KO/EN 양쪽 노출.
+    command: {
+      packName: "명령어",
+      learnAck: (alias: string, canonical: string) =>
+        `알겠어. '${alias}'를 '${canonical}'로 기억할게.`,
+      unlearnOk: (alias: string) => `'${alias}' 잊을게.`,
+      unlearnMiss: (alias: string) => `'${alias}'는 학습된 적 없어.`,
+      listEmpty:
+        "학습된 alias 가 아직 없어. `@learn 두쫀쿠 = 두바이 쫀득쿠키` 같은 형식으로 가르쳐줘.",
+      listHeader: (n: number) => `학습된 alias ${n}개:`,
+    },
+    // Stage 0.4 계산기 응답 packName ("학습됨 · Calculator Pack").
+    calculator: {
+      packName: "학습됨 · Calculator Pack",
+    },
+    // Stage 0.5 선호 저장 ("X 좋아해" / "X 싫어해") packName.
+    preference: {
+      packName: "학습됨 · 선호 저장",
+    },
+    // Stage 0.6 선호 회상 ("내가 뭘 좋아해?") packName.
+    preferenceRecall: {
+      packName: "학습됨 · 선호 회상",
+    },
+    // 팩스토어 매칭 (미설치 팩 제안) packName.
+    packStore: {
+      packName: "팩스토어",
+    },
+    // SummaryMarker — 이전 대화 요약 마커.
+    summaryMarker: {
+      ariaLabel: "이전 대화 요약 지점",
+      summarized: (n: number) => `이전 대화 요약됨 (${n} 메시지)`,
+    },
+    // PitchCard — 마이크로 광고 카드.
+    pitchCard: {
+      sponsoredPrefix: (brand: string) => `협찬 · ${brand}`,
+      closeAria: "광고 닫기",
+      learnMore: "자세히 →",
+    },
+    // onSuggestionAction handler — llm-call 옵션 클릭 시 노출되는 라벨/메시지.
+    // sourceLang (옵션이 생성된 메시지의 m.lang) 기준 KO/EN 분기. detectLanguage
+    // 로 prompt 추정하던 옛 흐름 제거 — prompt 본문에 한국 음식 이름 박혀도
+    // 응답 언어 오판정 X.
+    suggestionAction: {
+      cloudSendReason: "클라우드로 보낼게.",
+      satTutorName: "SAT 수학 튜터",
+      satSavedFromLLM: "새 SAT 수학 문제를 만들어서 Study 팩에 저장했어.",
+      satSavedDummy: "(샘플 문제로 대체) Study 팩에 저장됐어. 폴더에서 풀어볼래?",
+      openFolder: "폴더 열기",
+      callFailed: (msg: string) => `(클라우드 호출 실패: ${msg})`,
+      fallbackResponse: "지금은 응답을 가져오지 못했어.",
+    },
+    // dislike filter 응답 — matched.matches 측면 dislike 박힌 entry 제거 후
+    // 사용자에게 정직 응답. 레시피 제목 (한국 음식) 은 KO/EN 모두 한국어 그대로
+    // (요리 데이터는 한국어 유지 — 한국 음식은 한국어 이름이 진짜).
+    dislikeFilter: {
+      // Normal branch — matched.matches 측면 일부만 dislike hit, 나머지 살아남음.
+      single: (dislikes: string, title: string) => `${dislikes} 싫어한다고 했어서 — ${title} 어때?`,
+      multi: (dislikes: string, titles: string) =>
+        `${dislikes} 싫어한다고 했어서 — ${titles} 중에 어떤 거?`,
+      // Expanded branch — matched.matches 전부 dislike 떨굼 후 collectPackMatches
+      // 측면 pack 전체 entry 측면 다시 박아 살아남는 대안 노출.
+      expandedSingle: (dislikes: string, title: string) =>
+        `${dislikes} 싫어한다고 했어서 — 비슷한 건 ${title} 어때?`,
+      expandedMulti: (dislikes: string, titles: string) =>
+        `${dislikes} 싫어한다고 했어서 — 비슷한 건 ${titles} 중에 어떤 거?`,
+    },
+    // dislike filter 옵션 라벨 + cloud prompts. buildFilteredOptions 측면 사용.
+    // headTitle 은 head 레시피의 한국어 제목 그대로 노출 (KO/EN 모두).
+    filterOptions: {
+      cook: "만들기",
+      cookSingle: "만들기",
+      orderIn: "시켜먹기",
+      orderInPrompt: (headTitle: string) =>
+        `근처 한식당이나 배달앱에서 ${headTitle} 잘하는 곳 후보 3곳만 추천해줘. 한국어로 짧게.`,
+      similar: "비슷한 메뉴",
+      similarPrompt: (headTitle: string) =>
+        `${headTitle}랑 비슷한 결인데 살짝 다른 한식 추천해줘. 1-2개만.`,
+      cloud: "cloud로 찾기",
+      cloudPromptWithNoun: (noun: string) => `${noun}에 대해 알려줘. 한국어로 짧고 정확하게.`,
+      cloudPromptDefault: (headTitle: string) =>
+        `${headTitle}랑 비슷한 다른 음식 추천해줘. 한국어로 짧고 정확하게.`,
+    },
   },
 
   // 기억 (routes/memory.tsx) — 4 선반 + relTime + archive window + header/footer.
@@ -271,6 +354,79 @@ export const MESSAGES_KO = {
       personalLayer: "개인 레이어",
       personalLayerValue: "로컬",
     },
+    // Wake 라벨 — Phase EN-fix D: 정적 객체 (WAKE_KIND_LABEL / WAKE_TONE_LABEL)
+    // 톱-레벨 박혀 lang 받을 자리 X. 사전 이동.
+    wakeKind: {
+      morning: "아침 인사",
+      lunch: "점심 멘트",
+      evening: "저녁 회상",
+      bedtime: "자기 전",
+      homecoming: "귀가",
+    },
+    wakeTone: {
+      warm: "편안하게",
+      brief: "짧게",
+      calm: "차분하게",
+    },
+    wakeRow: {
+      activeWindowStart: "활성 시간대 시작",
+      activeWindowEnd: "활성 시간대 끝",
+      minBackgroundHours: "최소 외출 시간",
+      hoursPlus: (h: number) => `${h}시간↑`,
+      preview: "들어보기",
+    },
+    // 능동 인사 (proactive hello) 섹션.
+    proactiveHello: {
+      title: "능동 인사",
+      unsupportedBadge: "미지원 브라우저",
+      intro: "시간 되면 음성으로 먼저 말 걸어줄게. 대화 내용은 말하지 않아 — 시간대와 흐름만.",
+      browserNotice:
+        "이 브라우저는 Web Speech API를 지원하지 않아. Chrome / Safari 에서 다시 열어봐.",
+    },
+    // 마이크로 광고 섹션.
+    microAds: {
+      title: "마이크로 광고",
+      deviceBadge: "기기 안",
+      intro:
+        "DOTS의 광고는 디바이스 안에 머물러. 광고주는 네 데이터를 안 받아 — 매칭은 로컬에서만.",
+      showAds: "광고 표시",
+      showAdsDesc: "대화 흐름과 맞을 때만, 답변 옆에 한 장.",
+      categoriesLabel: "카테고리",
+      cacheCount: (n: number) => `광고 ${n}개 캐시됨 · 로컬`,
+      statsTitle: "내 노출 통계",
+      statsLine: (views: number, taps: number) => `노출 ${views} · 클릭 ${taps}`,
+      statsNote: "이 통계는 디바이스 안에만 머물러. 광고주는 받지 못해.",
+      weekly: "주간",
+      monthly: "월간",
+      viewsSuffix: (n: number) => `${n} 노출`,
+      tapsSuffix: (n: number) => `${n} 클릭`,
+      resetStats: "통계 초기화",
+      confirmReset: "이 디바이스의 광고 노출 통계를 모두 지워. 계속할까?",
+      footerTitle: "DOTS의 광고는 다르게 작동해",
+      footerBullets: [
+        "광고주는 카테고리와 기간을 구매해 (정액제)",
+        "네 데이터는 외부로 안 나가",
+        "노출 통계는 네 디바이스 안에만 머물러",
+        "카운트는 광고 효과를 네가 직접 볼 수 있게 한 거야",
+      ],
+    },
+    // 시맨틱 매칭 (V4) 섹션.
+    semanticMatching: {
+      title: "시맨틱 매칭 (V4)",
+      deviceBadge: "기기 안",
+      desc1:
+        '의미 기반 매칭 — "양자역학" / "양자역학에 대해" / "양자역학이 뭐야"가 같은 응답으로 묶인다.',
+      desc2: "모델이 다운로드된 뒤부터 작동. 안 켜도 V3 정확-일치 매칭은 그대로.",
+      recommendedBadge: "추천",
+      disable: "비활성화",
+      downloading: "다운로드 중…",
+      download: "다운로드",
+      ready: "✓ 준비 완료 — 시맨틱 매칭 작동 중",
+      failed: (err: string) => `실패: ${err}`,
+      unknownError: "알 수 없는 오류",
+      footer1: "다운로드는 1회만. IndexedDB에 저장되어 다음부터 즉시 작동.",
+      footerRecommended: (name: string, size: string) => ` 추천: ${name} (${size}).`,
+    },
     // 비활성 카드 (WebLLM/Reranker) — 데모용 컨셉 carrier.
     disabledCards: {
       webllmTitle: "온디바이스 LLM",
@@ -296,6 +452,10 @@ export const MESSAGES_KO = {
   // SAT / Study (routes/study.tsx). Phase 1 의 LABELS 객체에서 흡수.
   study: {
     packFolder: "팩 폴더",
+    // Phase EN-fix E: Study 헤더 본문 — `dots-data.Pack.short` 한국어 raw 가
+    // packs 카탈로그 자기 i18n 매핑은 거치지만 Study 라우트에선 raw 직박 →
+    // 한·영 섞임. Study 헤더는 i18n 키 직접 read.
+    packShortBody: "설명 대신 단계로 풀고, 막힌 지점을 먼저 물어봐.",
     packShortSuffix: "답안 검증은 이 기기 안에서. 더 깊은 설명만 클라우드로 넘어가.",
     backToChat: "← 채팅으로",
     backToFolder: "← 폴더",
@@ -320,6 +480,55 @@ export const MESSAGES_KO = {
     cloudFailed: "클라우드 호출 실패",
     cloudBadge: "클라우드",
     metaPrefix: "SAT 수학",
+    errorExplainFetch: "설명 가져오기 실패",
+    errorVariantFetch: "변형 문제 생성 실패",
+  },
+
+  // 데모 측정 (routes/demo.tsx + DemoMetricsPanel). 시연 영상 핵심 화면.
+  demo: {
+    eyebrow: "검증",
+    title: "데모 측정",
+    description:
+      '라우팅 결정이 어디로 흘러갔는지 — 30개 고정 입력으로 검증 + 누적 분포 시각화. "더 똑똑한 라우터"가 아니라 "현재 라우터가 어떤 결정을 했는지 증명"하는 장치.',
+    status: {
+      running: "실행 중…",
+      pass: "✓ 통과",
+      mismatch: "✗ 불일치",
+      idle: "대기",
+      expectedActual: (expected: string, actual: string) => `예상 ${expected} / 실제 ${actual}`,
+    },
+    automation: {
+      title: "자동 검증",
+      progress: (completed: number, total: number, passed: number, failed: number) =>
+        `${completed}/${total} · ${passed} 통과 · ${failed} 불일치`,
+      desc: "헤드리스 평가 — 매처는 실제로 돌지만 클라우드 LLM은 호출 안 함. 30개 입력 × 평균 50ms = 약 1.5초.",
+      runAll: "Run All",
+      runHint: '각 행의 "Run" 버튼으로 단일 실행도 가능.',
+    },
+    testCases: {
+      title: (total: number) => `테스트 케이스 (${total}개)`,
+      hint: "표시된 케이스는 같은 입력을 채팅에서 한 번 cloud로 처리해야 학습 캐시에 hit. 신선한 상태에서는 cloud로 떨어진다.",
+      needsPrior: "선행 채팅 필요",
+    },
+    panel: {
+      confirmClear: "모든 trace를 지울까? 이 디바이스에만 저장돼 있어.",
+      title: "데모 측정 (V0)",
+      deviceBadge: "이 디바이스",
+      description:
+        'DOTS의 라우팅 결정 — 빅테크 대비 차별점. 각 입력이 어디로 흘러갔는지 / 외부 호출을 몇 번이나 피했는지가 여기에 박힌다. 본질은 "더 똑똑한 라우터"가 아니라 "현재 라우터가 어떤 결정을 했는지 증명".',
+      empty: "아직 trace가 없어. 채팅에서 한 번 입력하거나 /demo 의 검증 도구를 돌려.",
+      totals: "총 요청",
+      local: "로컬",
+      cloud: "클라우드",
+      byBranch: "분기 별",
+      edge: {
+        title: "빅테크 대비 차별점",
+        avoided: "회피한 외부 호출",
+        rate: "회피율",
+        latency: "평균 지연",
+      },
+      byPack: "팩 별",
+    },
   },
 };
 

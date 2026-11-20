@@ -3,10 +3,12 @@
 // 표시. 메시지 사이에 가로선 + 라벨 + 작은 메타 (요약된 메시지 수).
 
 import type { ConversationSummary } from "@/lib/memory/types";
+import { useT } from "@/lib/i18n";
 
 export function SummaryMarker({ summary }: { summary: ConversationSummary }) {
+  const sm = useT().chat.summaryMarker;
   return (
-    <div className="flex items-center gap-3 py-2 fade-in" aria-label="이전 대화 요약 지점">
+    <div className="flex items-center gap-3 py-2 fade-in" aria-label={sm.ariaLabel}>
       <div className="flex-1 h-px bg-border" />
       <div className="flex items-center gap-1.5 text-[11.5px] text-ink-soft">
         <svg
@@ -25,7 +27,7 @@ export function SummaryMarker({ summary }: { summary: ConversationSummary }) {
           <line x1="9" y1="13" x2="15" y2="13" />
           <line x1="9" y1="17" x2="13" y2="17" />
         </svg>
-        <span>이전 대화 요약됨 ({summary.sourceMessagesCount} 메시지)</span>
+        <span>{sm.summarized(summary.sourceMessagesCount)}</span>
       </div>
       <div className="flex-1 h-px bg-border" />
     </div>

@@ -6,8 +6,10 @@
 import { useEffect, useState } from "react";
 import { dismissPitch, recordTap, recordView } from "@/lib/pitch";
 import type { Pitch } from "@/lib/pitch/types";
+import { useT } from "@/lib/i18n";
 
 export function PitchCard({ pitch }: { pitch: Pitch }) {
+  const pc = useT().chat.pitchCard;
   const [hidden, setHidden] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
 
@@ -46,13 +48,13 @@ export function PitchCard({ pitch }: { pitch: Pitch }) {
       className="relative block w-full max-w-md rounded-xl border border-border bg-card hover:border-strong transition-colors overflow-hidden group"
     >
       <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-full bg-background/80 backdrop-blur px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink-soft">
-        협찬 · {pitch.brand}
+        {pc.sponsoredPrefix(pitch.brand)}
       </span>
 
       <button
         type="button"
         onClick={close}
-        aria-label="광고 닫기"
+        aria-label={pc.closeAria}
         className="absolute top-2 right-2 z-10 h-6 w-6 inline-flex items-center justify-center rounded-full bg-background/80 backdrop-blur text-ink-soft hover:text-ink transition-colors"
       >
         <svg
@@ -95,7 +97,7 @@ export function PitchCard({ pitch }: { pitch: Pitch }) {
           <p className="text-[12.5px] text-ink leading-snug line-clamp-2">{pitch.tagline}</p>
           {pitch.ctaUrl && (
             <p className="mt-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink-soft">
-              자세히 →
+              {pc.learnMore}
             </p>
           )}
         </div>

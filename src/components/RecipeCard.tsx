@@ -23,20 +23,27 @@ export const KIMCHI_STEW: Recipe = {
   tip: "설탕 한 꼬집이 신맛을 잡아줘.",
 };
 
-// Phase EN-4: lang prop. 라벨 (재료/순서/팁/분)만 영어 분기 — 레시피 데이터
-// 본문 (한국 요리 제목 / 재료 / 단계) 은 Korean 그대로. 한국 요리 컨텍스트라
-// 영어 번역하면 어색 ("묵은지" → "aged kimchi" 등).
+// Phase EN-fix C: lang === "en" 시 EN 데이터 필드 (titleEn / ingredientsEn /
+// stepsEn / tipEn / servesEn / totalEn) 우선, 미박힘 시 KO fallback. 한국어
+// 모드는 KO 필드 그대로 — 회귀 0. 음식 이름 (titleEn) 은 로마자 + 영어 병기로
+// 한국 요리 정체성 유지 ("Baek-style Kimchi-jjigae (Pork Kimchi Stew)").
 export function RecipeCard({ recipe, lang = "ko" }: { recipe: Recipe; lang?: "ko" | "en" }) {
-  const L =
-    lang === "en"
-      ? { ingredients: "Ingredients", steps: "Steps", tips: "Tips", minSuffix: " min" }
-      : { ingredients: "재료", steps: "순서", tips: "팁", minSuffix: "분" };
+  const en = lang === "en";
+  const L = en
+    ? { ingredients: "Ingredients", steps: "Steps", tips: "Tips", minSuffix: " min" }
+    : { ingredients: "재료", steps: "순서", tips: "팁", minSuffix: "분" };
+  const title = en ? (recipe.titleEn ?? recipe.title) : recipe.title;
+  const serves = en ? (recipe.servesEn ?? recipe.serves) : recipe.serves;
+  const total = en ? (recipe.totalEn ?? recipe.total) : recipe.total;
+  const ingredients = en ? (recipe.ingredientsEn ?? recipe.ingredients) : recipe.ingredients;
+  const steps = en ? (recipe.stepsEn ?? recipe.steps) : recipe.steps;
+  const tip = en ? (recipe.tipEn ?? recipe.tip) : recipe.tip;
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden max-w-2xl">
       <div className="px-5 py-4 border-b border-border">
-        <h3 className="text-[16px] font-semibold tracking-tight text-ink">{recipe.title}</h3>
+        <h3 className="text-[16px] font-semibold tracking-tight text-ink">{title}</h3>
         <p className="text-[12px] text-ink-soft mt-0.5">
-          {recipe.serves} · {recipe.total}
+          {serves} · {total}
         </p>
       </div>
 
@@ -46,7 +53,7 @@ export function RecipeCard({ recipe, lang = "ko" }: { recipe: Recipe; lang?: "ko
             {L.ingredients}
           </h4>
           <ul className="space-y-2">
-            {recipe.ingredients.map((i) => (
+            {ingredients.map((i) => (
               <li key={i.item} className="text-[13px] leading-snug">
                 <div className="text-ink">{i.item}</div>
                 <div className="text-ink-soft text-[12px]">{i.amount}</div>
@@ -60,7 +67,7 @@ export function RecipeCard({ recipe, lang = "ko" }: { recipe: Recipe; lang?: "ko
             {L.steps}
           </h4>
           <ol className="space-y-3">
-            {recipe.steps.map((s, idx) => (
+            {steps.map((s, idx) => (
               <li key={idx} className="flex gap-3">
                 <span className="font-mono text-[11px] text-ink-soft pt-[3px] w-5 shrink-0">
                   {String(idx + 1).padStart(2, "0")}
@@ -83,7 +90,7 @@ export function RecipeCard({ recipe, lang = "ko" }: { recipe: Recipe; lang?: "ko
               {L.tips}
             </h4>
             <p className="text-[12.5px] text-ink-soft leading-relaxed pl-3 border-l border-border">
-              {recipe.tip}
+              {tip}
             </p>
           </div>
         </section>

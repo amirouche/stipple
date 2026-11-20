@@ -18,6 +18,7 @@ import type { Intent } from "@/lib/packs/intent";
 import { matchPitch } from "@/lib/pitch";
 import { getPreferences } from "@/lib/preferences";
 import { dispatchLLMCall, type DispatchTurn } from "./dispatch";
+import type { ProviderId } from "./providers/types";
 // V5.0 Phase P-2: 통일된 prompt 빌더가 dispatch 안에서 호출되며, compose는
 // memory + payload kind 만 dispatch에 전달. compose의 BASE_PERSONA / pack /
 // memory section 빌더 모두 system-prompt.ts 로 이전.
@@ -56,7 +57,7 @@ export type ComposeResult = {
   payload: AnswerPayload;
   // Which provider answered, if an LLM call ran. Absent on the fallback
   // path (network failure → canned reply has no LLM origin).
-  provider?: "webllm" | "gemini";
+  provider?: "webllm" | ProviderId;
   // V5.0 Phase M-1: summary 활용 여부. trace 라벨 + UI 마커 박을 때 사용.
   //   summaryUsed     — 이번 호출 시점에 thread에 summary가 존재해 활용됨.
   //   summaryGenerated — 이번 호출에서 임계점 도달 → 새로 생성됨 (또는 supersede).

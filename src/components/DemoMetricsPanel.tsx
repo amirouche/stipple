@@ -7,6 +7,7 @@
 
 import { useDemoTraceStore, getDemoMetrics, clearDemoTraces } from "@/lib/demo/trace";
 import { PACKS } from "@/lib/dots-data";
+import { useT } from "@/lib/i18n";
 
 function pct(n: number): string {
   if (!Number.isFinite(n)) return "0.0%";
@@ -19,6 +20,7 @@ function pctOfTotal(count: number, total: number): string {
 }
 
 export function DemoMetricsPanel() {
+  const p = useT().demo.panel;
   // useDemoTraceStore의 반환값을 직접 쓰기보다 — getDemoMetrics가 모든
   // 집계를 한 자리에서 계산. traces 배열 변화가 hook 구독을 트리거하므로
   // 결과적으로 실시간 업데이트.
@@ -35,7 +37,7 @@ export function DemoMetricsPanel() {
   })).sort((a, b) => b.count - a.count);
 
   function handleClear() {
-    if (!window.confirm("모든 trace를 지울까? 이 디바이스에만 저장돼 있어.")) return;
+    if (!window.confirm(p.confirmClear)) return;
     clearDemoTraces();
   }
 
@@ -52,36 +54,30 @@ export function DemoMetricsPanel() {
   return (
     <section className="rounded-xl border border-border bg-card p-6">
       <div className="flex items-baseline justify-between mb-1">
-        <h2 className="text-[15px] font-semibold tracking-tight text-ink">데모 측정 (V0)</h2>
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink">{p.title}</h2>
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
-          이 디바이스
+          {p.deviceBadge}
         </span>
       </div>
-      <p className="text-[12.5px] text-ink-soft mb-5 leading-relaxed">
-        DOTS의 라우팅 결정 — 빅테크 대비 차별점. 각 입력이 어디로 흘러갔는지 / 외부 호출을 몇 번이나
-        피했는지가 여기에 박힌다. 본질은 "더 똑똑한 라우터"가 아니라 "현재 라우터가 어떤 결정을
-        했는지 증명".
-      </p>
+      <p className="text-[12.5px] text-ink-soft mb-5 leading-relaxed">{p.description}</p>
 
       {metrics.total === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-surface p-6 text-center">
-          <p className="text-[12.5px] text-ink-soft">
-            아직 trace가 없어. 채팅에서 한 번 입력하거나 /demo 의 검증 도구를 돌려.
-          </p>
+          <p className="text-[12.5px] text-ink-soft">{p.empty}</p>
         </div>
       ) : (
         <>
           {/* Top-line: total + local/cloud split */}
           <div className="mb-5">
             <div className="flex items-baseline justify-between mb-2">
-              <span className="text-[12.5px] text-ink-soft">총 요청</span>
+              <span className="text-[12.5px] text-ink-soft">{p.totals}</span>
               <span className="font-mono text-[18px] tabular-nums text-ink">{metrics.total}</span>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg border border-border bg-surface p-3">
                 <div className="flex items-center gap-1.5 text-[11px] text-ink-soft">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  로컬
+                  {p.local}
                 </div>
                 <p className="mt-1 font-mono text-[16px] text-ink tabular-nums">
                   {localTotal}{" "}
@@ -93,7 +89,7 @@ export function DemoMetricsPanel() {
               <div className="rounded-lg border border-border bg-surface p-3">
                 <div className="flex items-center gap-1.5 text-[11px] text-ink-soft">
                   <span className="h-1.5 w-1.5 rounded-full bg-ink-soft" />
-                  클라우드
+                  {p.cloud}
                 </div>
                 <p className="mt-1 font-mono text-[16px] text-ink tabular-nums">
                   {metrics.cloudCount}{" "}
@@ -107,7 +103,7 @@ export function DemoMetricsPanel() {
 
           {/* Route breakdown */}
           <div className="mb-5">
-            <p className="text-[12.5px] text-ink mb-2">분기 별</p>
+            <p className="text-[12.5px] text-ink mb-2">{p.byBranch}</p>
             <ul className="divide-y divide-border border border-border rounded-lg overflow-hidden">
               <BreakdownRow label="Pack" count={metrics.packCount} total={metrics.total} />
               <BreakdownRow label="Learned" count={metrics.learnedCount} total={metrics.total} />
@@ -124,34 +120,34 @@ export function DemoMetricsPanel() {
           {/* The headline number */}
           <div className="mb-5 rounded-lg border border-border bg-surface p-4">
             <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-soft">
-              빅테크 대비 차별점
+              {p.edge.title}
             </p>
             <div className="mt-2 grid grid-cols-3 gap-3 text-center">
               <div>
                 <p className="font-mono text-[20px] tabular-nums text-ink">
                   {metrics.avoidedCalls}
                 </p>
-                <p className="mt-0.5 text-[11px] text-ink-soft">회피한 외부 호출</p>
+                <p className="mt-0.5 text-[11px] text-ink-soft">{p.edge.avoided}</p>
               </div>
               <div>
                 <p className="font-mono text-[20px] tabular-nums text-primary">
                   {pct(metrics.avoidanceRate)}
                 </p>
-                <p className="mt-0.5 text-[11px] text-ink-soft">회피율</p>
+                <p className="mt-0.5 text-[11px] text-ink-soft">{p.edge.rate}</p>
               </div>
               <div>
                 <p className="font-mono text-[20px] tabular-nums text-ink">
                   {metrics.avgLatencyMs.toFixed(0)}
                   <span className="text-[12px] text-ink-soft">ms</span>
                 </p>
-                <p className="mt-0.5 text-[11px] text-ink-soft">평균 지연</p>
+                <p className="mt-0.5 text-[11px] text-ink-soft">{p.edge.latency}</p>
               </div>
             </div>
           </div>
 
           {/* Pack breakdown */}
           <div className="mb-5">
-            <p className="text-[12.5px] text-ink mb-2">팩 별</p>
+            <p className="text-[12.5px] text-ink mb-2">{p.byPack}</p>
             <ul className="divide-y divide-border border border-border rounded-lg overflow-hidden">
               {packRows.map((row) => (
                 <li key={row.id} className="px-3 py-2 flex items-center gap-2 bg-card text-[12px]">

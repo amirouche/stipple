@@ -3,6 +3,8 @@
 // the LLM call. V2 헌법 2번 (자동 학습) + 3번 (점진적 온디바이스 진화)의
 // 데이터 단위.
 
+import type { ProviderId } from "@/lib/ai/providers/types";
+
 export type LearnedResponse = {
   id: string; // crypto.randomUUID()
   // What the user typed, verbatim. Phase A matching is exact (after lower
@@ -10,10 +12,10 @@ export type LearnedResponse = {
   userInput: string;
   // The LLM's full text response, post-streaming.
   response: string;
-  // Which provider produced it. Useful for "this was Gemini, that was
+  // Which provider produced it. Useful for "this was the cloud LLM, that was
   // WebLLM" debugging and for the future evolution narrative ("over
-  // time, fewer Gemini calls because cache hits").
-  provider: "webllm" | "gemini";
+  // time, fewer cloud calls because cache hits").
+  provider: "webllm" | ProviderId;
   // Pack inferred at generation time (composePack at that turn). Stored
   // as id+name so we can render the badge later without a Pack lookup
   // even if the pack got uninstalled.

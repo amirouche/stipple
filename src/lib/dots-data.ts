@@ -37,6 +37,12 @@ export type Pack = {
   // 가 lang==="en" 이면 이걸 우선 사용. 미박힘이면 한국어 systemPrompt로
   // fallback (방어 — 현재 4 작동 팩은 모두 채워짐).
   systemPromptEn?: string;
+  // Phase EN-fix F: /packs 카드 렌더용 평행 EN 필드. 미박힘 시 KO fallback.
+  // voice/tone/short 은 카드 상단, behavior 는 "More details" 펼침 본문.
+  shortEn?: string;
+  voiceEn?: string;
+  toneEn?: string;
+  behaviorEn?: string;
   // Content the pack ships as a folder. Empty/undefined = mode-only pack
   // (no folder view).
   contents?: PackContentRef[];
@@ -77,7 +83,12 @@ export const PACKS: Pack[] = [
       "레시피",
     ],
     voice: "요리 전문가",
+    voiceEn: "Cooking expert",
     tone: "짧고 실용적 — 재료·조리법·타이밍·팁 위주",
+    toneEn: "Short and practical — ingredients, steps, timing, tips",
+    shortEn: "Reorganizes food questions into ingredients, steps, and timing.",
+    behaviorEn:
+      "Reframes food questions into ingredients, recipe, timing, and tips cards. Remembers preferences like spice level and serving size for next suggestions.",
     systemPrompt: [
       "지금 당신은 요리 전문가 모드입니다.",
       "- 답변은 짧고 실용적으로. 재료, 조리법, 타이밍, 팁 위주로.",
@@ -110,7 +121,12 @@ export const PACKS: Pack[] = [
       "어려운 주제를 비유 → 예시 → 핵심 정리 3단계로 쪼개고, 강의 대신 작은 퀴즈로 이해도를 확인해.",
     triggers: ["explain", "what is", "study", "homework", "설명", "공부", "뭐야"],
     voice: "학습 코치",
+    voiceEn: "Study coach",
     tone: "단계적이고 차분 — 비유 → 예시 → 핵심 정리 3단계",
+    toneEn: "Step-by-step and calm — analogy → example → key takeaway",
+    shortEn: "Walks through it step by step and asks where you got stuck first.",
+    behaviorEn:
+      "Breaks hard topics into analogy → example → key takeaway, then checks understanding with small quizzes instead of lectures.",
     systemPrompt: [
       "지금 당신은 학습 코치 모드입니다.",
       "- 답변은 단계적이고 차분하게. 톤은 침착함을 유지하세요.",
@@ -147,7 +163,12 @@ export const PACKS: Pack[] = [
       "전용 화면에서 9×9 보드를 풀고, 직전 판의 오답/시간을 기억해 다음 판 난이도를 한 단계씩 올리거나 내려.",
     triggers: ["sudoku", "스도쿠", "퍼즐"],
     voice: "퍼즐 코치",
+    voiceEn: "Puzzle coach",
     tone: "짧고 담백 — 결과만 한 줄로",
+    toneEn: "Short and plain — one line for the result or feel",
+    shortEn: "On-device Sudoku — difficulty auto-adjusts to your skill.",
+    behaviorEn:
+      "Solve a 9×9 board in a dedicated screen. Tracks last round's mistakes and time to nudge the next round's difficulty one step up or down.",
     systemPrompt: [
       "지금 당신은 퍼즐 코치 모드입니다.",
       "- 답변은 짧고 담백하게. 결과/감만 한 줄로.",
@@ -172,7 +193,12 @@ export const PACKS: Pack[] = [
       "아침 흐름에 맞춰 날씨·일정·리마인더를 1~2 문장으로 짚어줘. cloud 호출 없이 온디바이스 메모리만 사용.",
     triggers: ["weather", "schedule", "today", "remind", "날씨", "오늘", "일정"],
     voice: "아침 루틴 동반자",
+    voiceEn: "Morning companion",
     tone: "짧고 부드러움 — 1~2 문장, 에너지는 끌어올리되 과하지 않게",
+    toneEn: "Short and gentle — 1-2 sentences, energizing but not over the top",
+    shortEn: "Answers today's schedule, weather, and energy briefly on-device.",
+    behaviorEn:
+      "Points out weather, schedule, and reminders in 1-2 sentences matching the morning flow. Uses only on-device memory — no cloud.",
     systemPrompt: [
       "지금 당신은 아침 루틴 동반자 모드입니다.",
       "- 답변은 짧고 부드럽게. 에너지를 끌어올리는 톤이지만 과하지 않게.",
@@ -241,6 +267,16 @@ export type PackRecipe = {
   ingredients: { item: string; amount: string }[];
   steps: { t: string; minutes?: number }[];
   tip: string;
+  // Phase EN-fix C: 영어 모드 카드 렌더용 평행 필드. 미박힘 → 한국어 fallback.
+  // 매처 / dislike-filter / answerFor 등 데이터 read 호출자는 KO 필드만 사용
+  // (한국어 텍스트 검색이라 영어 필드 보면 회귀). 카드 렌더 (RecipeCard) 만
+  // lang 분기로 EN 우선. 한국 음식 이름은 로마자 + 영어 병기 (정체성 유지).
+  titleEn?: string;
+  servesEn?: string;
+  totalEn?: string;
+  ingredientsEn?: { item: string; amount: string }[];
+  stepsEn?: { t: string; minutes?: number }[];
+  tipEn?: string;
   // V5.0 lite Phase A facet 스키마. matchPackContent가 intent별 응답 텍스트를
   // entry 자체에서 뽑게 하기 위해 추가. 모두 optional — 미마이그레이션 entry는
   // 기존 ingredients/steps/tip 구조로 그대로 렌더링 (backward compat 보장).
@@ -287,6 +323,26 @@ export const COOKING_RECIPES: PackRecipe[] = [
       { t: "두부와 대파를 넣고 한 번 더 끓인다.", minutes: 5 },
     ],
     tip: "설탕 한 꼬집이 김치의 신맛을 잡아줘. 너무 많이 넣으면 안 돼.",
+    titleEn: "Baek-style Kimchi-jjigae (Pork Kimchi Stew)",
+    servesEn: "Serves 2",
+    totalEn: "~30 min",
+    ingredientsEn: [
+      { item: "Aged kimchi (mukeunji)", amount: "1/4 head, roughly torn" },
+      { item: "Pork shoulder", amount: "200g, thinly sliced" },
+      { item: "Tofu", amount: "1/2 block" },
+      { item: "Green onion", amount: "1 large stalk" },
+      { item: "Onion", amount: "1/2" },
+      { item: "Sugar", amount: "1/2 tsp" },
+      { item: "Gochugaru (Korean red pepper flakes)", amount: "1 tbsp" },
+      { item: "Water", amount: "3 cups" },
+    ],
+    stepsEn: [
+      { t: "Sear the pork in the pot first to render fat.", minutes: 4 },
+      { t: "Add the aged kimchi and onion; stir-fry together.", minutes: 5 },
+      { t: "Pour in water, add sugar and gochugaru, bring to a boil.", minutes: 15 },
+      { t: "Add tofu and green onion; simmer once more.", minutes: 5 },
+    ],
+    tipEn: "A pinch of sugar tames the kimchi's sharpness — don't overdo it.",
     // V5.0 lite Phase A facet — baek-kimchi-jjigae를 김치찌개의 canonical
     // entry로 채움. tuna-kimchi-jjigae는 동률 score일 때 baek가 head로 잡혀
     // 이 facet이 노출됨 (정확 entry 매칭은 Phase B에서).
@@ -394,6 +450,25 @@ export const COOKING_RECIPES: PackRecipe[] = [
       { t: "대파를 올려 마무리.", minutes: 1 },
     ],
     tip: "참치 기름을 빼야 국물이 깔끔해. 두부는 마지막에 넣어야 안 부서져.",
+    titleEn: "Chamchi Kimchi-jjigae (Tuna Kimchi Stew)",
+    servesEn: "Serves 2",
+    totalEn: "~20 min",
+    ingredientsEn: [
+      { item: "Aged kimchi (mukeunji)", amount: "2 cups" },
+      { item: "Canned tuna", amount: "1 can (oil drained)" },
+      { item: "Tofu", amount: "1/2 block" },
+      { item: "Green onion", amount: "1 large stalk" },
+      { item: "Garlic, minced", amount: "1 tbsp" },
+      { item: "Gochugaru (Korean red pepper flakes)", amount: "1 tbsp" },
+      { item: "Water or anchovy broth", amount: "2.5 cups" },
+    ],
+    stepsEn: [
+      { t: "Stir-fry the kimchi, garlic, and gochugaru in the pot briefly.", minutes: 3 },
+      { t: "Pour in the broth; once boiling, reduce to medium.", minutes: 10 },
+      { t: "Add the drained tuna and tofu; simmer further.", minutes: 5 },
+      { t: "Top with green onion to finish.", minutes: 1 },
+    ],
+    tipEn: "Drain the tuna oil for a clean broth. Add tofu last so it doesn't break apart.",
     // V5.0 lite Phase A.5 facet — Cooking pack #2 entry. pack_context는 baek와
     // 동일 텍스트 — pack scope 정보는 entry-invariant. definition / how_to는
     // tuna 변형 고유 (통조림 활용 + 조리 시간 단축)에 맞춰 별도 작성.

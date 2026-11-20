@@ -4,6 +4,7 @@
 // Cooking Essentials pack instead of routing externally.
 
 import { useSyncExternalStore } from "react";
+import type { ProviderId } from "@/lib/ai/providers/types";
 import type { ConversationState } from "@/lib/conversation-engine";
 import type { PackRecipe, Route as RouteType, SuggestionOption } from "@/lib/dots-data";
 import type { Pitch } from "@/lib/pitch/types";
@@ -42,11 +43,11 @@ export type ThreadMsg =
       pending?: boolean;
       suggestion?: ThreadSuggestion;
       // Where the answer came from. Drives the small footer badge:
-      //   webllm  → 초록 (내 기기, V2 헌법: 외부 호출 0)
-      //   gemini  → 파란 (외부 클라우드)
-      //   learned → 빨강 (학습 캐시 — V2 Phase 2)
+      //   webllm               → 초록 (내 기기, V2 헌법: 외부 호출 0)
+      //   gemini/openai/claude/grok → 파란 (외부 클라우드, active provider)
+      //   learned              → 빨강 (학습 캐시 — V2 Phase 2)
       // Absent for canned/local replies that never went through dispatch.
-      provider?: "webllm" | "gemini" | "learned";
+      provider?: "webllm" | ProviderId | "learned";
       // Phase B: 이 메시지가 가리키는 LearnedResponse id. 사용자가 "좋아"·
       // "다른 거"를 누를 때 어떤 학습 엔트리를 평가할지 알아내는 핸들.
       // 채팅이 reload되어도 학습 store는 살아 있으므로 다음 같은 입력에

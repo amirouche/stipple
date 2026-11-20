@@ -18,7 +18,7 @@
 // MVP — accumulating summary chain (summary-of-summary) 는 미구현.
 
 import type { DispatchTurn } from "@/lib/ai/dispatch";
-import { askGemini } from "@/lib/ai/gemini";
+import { askLLM } from "@/lib/ai/llm";
 import { getSummaryForThread, putSummary } from "./store";
 import type { ConversationSummary } from "./types";
 
@@ -106,11 +106,11 @@ export async function maybeGenerateSummary(args: {
   }
 
   try {
-    // V5.0 Phase M-1: 요약은 별도 Gemini 호출. 비용 인지 — 정상 turn이
-    // 끝난 직후 한 번 추가 호출. 응답 latency ~1-2s 더 발생.
+    // V5.0 Phase M-1: 요약은 별도 cloud LLM 호출 (active provider = LLM_PROVIDER).
+    // 비용 인지 — 정상 turn이 끝난 직후 한 번 추가 호출. 응답 latency ~1-2s 더 발생.
     const plain = historyToPlain(history);
     const tokensUsed = plain.length;
-    const { text } = await askGemini({
+    const { text } = await askLLM({
       data: {
         userMessage: plain,
         systemPrompt: SUMMARY_SYSTEM_PROMPT,

@@ -16,29 +16,42 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
     topic: "algebra",
     difficulty: "easy",
     question: "2x + 3 = 11일 때, x의 값은?",
+    questionEn: "Solve 2x + 3 = 11 for x.",
     choices: ["3", "4", "5", "5.5"],
     correctAnswer: "4",
     hint: "양변에서 3을 먼저 빼고, 그다음 2로 나눠.",
+    hintEn: "Subtract 3 from both sides first, then divide by 2.",
     solution: [
       "1) 양변에서 3을 뺀다: 2x = 11 − 3 = 8",
       "2) 양변을 2로 나눈다: x = 8 ÷ 2 = 4",
       "검산: 2(4) + 3 = 8 + 3 = 11 ✓",
+    ].join("\n"),
+    solutionEn: [
+      "1) Subtract 3 from both sides: 2x = 11 − 3 = 8",
+      "2) Divide both sides by 2: x = 8 ÷ 2 = 4",
+      "Check: 2(4) + 3 = 8 + 3 = 11 ✓",
     ].join("\n"),
     commonMistakes: [
       {
         wrongAnswer: "5.5",
         explanation:
           "11을 먼저 2로 나눠서 5.5가 나온 거야. +3을 양변에서 처리하지 않고 11을 통째로 나눠버리면 이렇게 돼. 등호 양변을 동시에 같은 연산으로 줄여나가야 해.",
+        explanationEn:
+          "You divided 11 by 2 first and got 5.5. The +3 has to clear from both sides before you divide — every operation applies to the whole side, not just one term.",
       },
       {
         wrongAnswer: "5",
         explanation:
           "11/2를 5로 반올림한 결과야. 같은 실수 — +3을 빼는 단계를 건너뛰면 안 돼. 먼저 −3, 그다음 ÷2.",
+        explanationEn:
+          "That's 11/2 rounded to 5. Same root cause — you can't skip the −3 step. Subtract 3 first, then divide by 2.",
       },
       {
         wrongAnswer: "3",
         explanation:
           "11에서 3을 빼는 건 맞는데, 그 다음 2로 나누는 단계를 빼먹은 듯. 8을 그대로 두지 말고 ÷2까지 가야 해.",
+        explanationEn:
+          "You did 11 − 3 = 8 correctly but stopped there. Don't leave 8 sitting — you still have to divide by 2 to isolate x.",
       },
     ],
     // V5.0 lite Phase A.5 facet — sat-m-001을 "대수" topic의 canonical entry로
@@ -127,28 +140,41 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
     topic: "algebra",
     difficulty: "medium",
     question: "이차함수 y = x² − 4x + 3의 꼭짓점 좌표는?",
+    questionEn: "Find the vertex of the quadratic y = x² − 4x + 3.",
     choices: ["(1, 0)", "(2, −1)", "(−2, 15)", "(3, 0)"],
     correctAnswer: "(2, −1)",
     hint: "꼭짓점의 x좌표는 −b/(2a). 거기에 대입해서 y를 구해.",
+    hintEn: "The vertex x-coordinate is −b/(2a). Plug it back in to get y.",
     solution: [
       "1) 꼭짓점 x = −b / (2a) = −(−4) / (2·1) = 4/2 = 2",
       "2) y = (2)² − 4(2) + 3 = 4 − 8 + 3 = −1",
       "3) 따라서 꼭짓점은 (2, −1).",
+    ].join("\n"),
+    solutionEn: [
+      "1) Vertex x = −b / (2a) = −(−4) / (2·1) = 4/2 = 2",
+      "2) y = (2)² − 4(2) + 3 = 4 − 8 + 3 = −1",
+      "3) So the vertex is (2, −1).",
     ].join("\n"),
     commonMistakes: [
       {
         wrongAnswer: "(−2, 15)",
         explanation:
           "−b/(2a)에서 부호를 한 번 더 뒤집어서 −2로 본 거 같아. b = −4니까 −b는 +4, 2a로 나누면 +2야. 부호 두 번 뒤집힘 주의.",
+        explanationEn:
+          "You flipped the sign one extra time in −b/(2a). Since b = −4, −b = +4, and dividing by 2a gives +2 — not −2. Watch the double-negative when b is already negative.",
       },
       {
         wrongAnswer: "(1, 0)",
         explanation: "y = 0이 되는 x를 푼 거 — 그건 x절편이야 (x=1 또는 x=3). 꼭짓점이 아니라.",
+        explanationEn:
+          "Those are x-intercepts (where y = 0), not the vertex. Factoring x² − 4x + 3 gives x = 1 or x = 3 — both satisfy y = 0.",
       },
       {
         wrongAnswer: "(3, 0)",
         explanation:
           "또 다른 x절편. 꼭짓점은 두 x절편의 가운데지 절편 자체가 아니야. (1+3)/2 = 2를 다시 떠올려봐.",
+        explanationEn:
+          "The other x-intercept. The vertex sits midway between the roots, not on a root itself: (1 + 3)/2 = 2, which is the vertex's x-coordinate.",
       },
     ],
   },
@@ -159,26 +185,39 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
     topic: "geometry",
     difficulty: "easy",
     question: "직각삼각형의 두 직각변이 각각 6, 4일 때 넓이는?",
+    questionEn: "A right triangle has legs of length 6 and 4. Find its area.",
     choices: ["10", "12", "24", "20"],
     correctAnswer: "12",
     hint: "삼각형 넓이 공식 — ½ × 밑변 × 높이.",
+    hintEn:
+      "Triangle area = ½ × base × height. For a right triangle, the two legs serve as base and height.",
     solution: [
       "1) 직각삼각형은 두 직각변을 밑변·높이로 잡을 수 있어.",
       "2) 넓이 = ½ × 6 × 4 = ½ × 24 = 12",
+    ].join("\n"),
+    solutionEn: [
+      "1) In a right triangle, the two legs are perpendicular, so they act as base and height.",
+      "2) Area = ½ × 6 × 4 = ½ × 24 = 12",
     ].join("\n"),
     commonMistakes: [
       {
         wrongAnswer: "24",
         explanation: "½을 빼먹은 답. 6 × 4 = 24까지만 한 거야. 삼각형 공식엔 항상 ½이 붙어.",
+        explanationEn:
+          "You skipped the ½. 6 × 4 = 24 is the rectangle's area; a triangle is always half of that. The ½ in ½ × base × height is non-negotiable.",
       },
       {
         wrongAnswer: "10",
         explanation: "6 + 4 = 10. 변끼리 더한 거 — 그건 둘레의 일부지 넓이가 아니야.",
+        explanationEn:
+          "That's 6 + 4 — you added the legs. Adding sides gives part of the perimeter, not the area. Area multiplies dimensions, it doesn't add them.",
       },
       {
         wrongAnswer: "20",
         explanation:
           "어디서 나온 숫자인지 보면, 6 × 4 = 24에서 비스듬히 깎아본 듯. 정공법: ½ × 밑변 × 높이 = ½ × 6 × 4.",
+        explanationEn:
+          "Doesn't fit any clean step from this problem. Stay on the direct path: ½ × base × height = ½ × 6 × 4 = 12.",
       },
     ],
   },
@@ -189,29 +228,43 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
     topic: "statistics",
     difficulty: "medium",
     question: "공정한 6면 주사위 두 개를 던질 때, 두 눈의 합이 7이 될 확률은?",
+    questionEn: "Two fair six-sided dice are rolled. What is the probability that the sum is 7?",
     choices: ["1/6", "1/12", "5/36", "7/36"],
     correctAnswer: "1/6",
     hint: "전체 경우의 수는 6×6. 합이 7이 되는 (a, b) 쌍을 모두 세어봐 — 순서 다른 것도 따로.",
+    hintEn:
+      "Total outcomes: 6 × 6. Count every ordered pair (a, b) summing to 7 — the dice are distinguishable, so order matters.",
     solution: [
       "1) 전체 경우: 6 × 6 = 36",
       "2) 합이 7이 되는 쌍: (1,6), (2,5), (3,4), (4,3), (5,2), (6,1) — 6가지",
       "3) 확률 = 6/36 = 1/6",
+    ].join("\n"),
+    solutionEn: [
+      "1) Total outcomes: 6 × 6 = 36",
+      "2) Pairs summing to 7: (1,6), (2,5), (3,4), (4,3), (5,2), (6,1) — 6 ways",
+      "3) Probability = 6/36 = 1/6",
     ].join("\n"),
     commonMistakes: [
       {
         wrongAnswer: "1/12",
         explanation:
           "(1,6) (2,5) (3,4) 3가지만 세고 순서를 바꾼 (6,1) (5,2) (4,3)을 빼먹은 답. 두 주사위는 구별되니까 순서 다른 것도 따로 세야 해.",
+        explanationEn:
+          "You counted (1,6), (2,5), (3,4) but missed the reversed pairs (6,1), (5,2), (4,3). The two dice are distinguishable, so order matters — every ordered pair counts.",
       },
       {
         wrongAnswer: "5/36",
         explanation:
           "합이 6 또는 8이 될 확률이야. 둘 다 5가지 경우. 7만 정확히 6가지인 게 핵심 — 가운데 합이라.",
+        explanationEn:
+          "That's the probability of summing to 6 or 8 — both have 5 ways. Only 7 has exactly 6, because it sits in the middle of the range where the most ordered pairs land.",
       },
       {
         wrongAnswer: "7/36",
         explanation:
           "분자에 7을 그대로 쓴 답이지만, 합이 7이 되는 쌍은 6가지야. '합 = 분자' 매칭은 우연히 맞을 때도 있어도 일반적으로 틀려.",
+        explanationEn:
+          'You put the target sum 7 in the numerator directly, but the count of pairs is 6, not 7. "Target value = numerator" can coincide once in a while, but it isn\'t the rule.',
       },
     ],
   },
@@ -222,30 +275,45 @@ export const SAT_MATH_PROBLEMS: SATMathProblem[] = [
     topic: "trigonometry",
     difficulty: "hard",
     question: "sin θ = 3/5이고 θ가 1사분면에 있을 때, cos θ의 값은?",
+    questionEn: "Given sin θ = 3/5 with θ in the first quadrant, find cos θ.",
     choices: ["3/4", "4/5", "5/4", "−4/5"],
     correctAnswer: "4/5",
     hint: "sin² θ + cos² θ = 1. 1사분면이니까 cos는 양수.",
+    hintEn:
+      "Use the Pythagorean identity sin² θ + cos² θ = 1. In the first quadrant, cos θ is positive.",
     solution: [
       "1) sin² θ = (3/5)² = 9/25",
       "2) cos² θ = 1 − 9/25 = 16/25",
       "3) cos θ = ±4/5. θ가 1사분면이므로 cos θ > 0.",
       "4) 따라서 cos θ = 4/5.",
     ].join("\n"),
+    solutionEn: [
+      "1) sin² θ = (3/5)² = 9/25",
+      "2) cos² θ = 1 − 9/25 = 16/25",
+      "3) cos θ = ±4/5. Since θ is in the first quadrant, cos θ > 0.",
+      "4) Therefore cos θ = 4/5.",
+    ].join("\n"),
     commonMistakes: [
       {
         wrongAnswer: "3/4",
         explanation:
           "sin/cos = tan = 3/4를 cos로 잘못 적은 답이야. tan θ = 3/4지 cos θ가 아니야. 헷갈리면 항등식 sin² + cos² = 1로 돌아가.",
+        explanationEn:
+          "You wrote tan θ instead of cos θ — here sin/cos = tan = 3/4, but the question asks for cos itself. When sine, cosine, and tangent start to blur, fall back to the Pythagorean identity sin² θ + cos² θ = 1; it recovers cos directly without going through the ratios.",
       },
       {
         wrongAnswer: "−4/5",
         explanation:
           "값 자체는 맞게 구했는데 부호를 놓쳤어. 1사분면(0 < θ < 90°)에서는 sin·cos·tan 모두 양수야.",
+        explanationEn:
+          "You found the magnitude |cos θ| = 4/5 correctly, but missed the sign. In the first quadrant (0 < θ < 90°), all three of sine, cosine, and tangent are positive. The Pythagorean identity gives the magnitude — the quadrant decides the sign. Always finish with the quadrant check.",
       },
       {
         wrongAnswer: "5/4",
         explanation:
           "분자/분모가 뒤집힌 답 — 1/cos = sec θ를 cos로 본 거 같아. cos는 1보다 클 수 없어 (|cos θ| ≤ 1).",
+        explanationEn:
+          "You inverted the ratio — that's sec θ = 1/cos θ, not cos θ itself. Quick sanity check: |cos θ| ≤ 1 always, so any candidate greater than 1 can't be cosine. The reciprocal trio (sec, csc, cot) is easy to slip into when the numerator and denominator feel interchangeable.",
       },
     ],
   },
@@ -282,18 +350,27 @@ export type CheckResult =
       mistakeExplanation: string | null;
     };
 
-export function checkAnswer(problemId: string, selected: string): CheckResult | null {
+export function checkAnswer(
+  problemId: string,
+  selected: string,
+  lang: "ko" | "en" = "ko",
+): CheckResult | null {
   const problem = getSATMathProblem(problemId);
   if (!problem) return null;
   if (selected === problem.correctAnswer) {
     return { kind: "correct", problem };
   }
   const mistake = problem.commonMistakes.find((m) => m.wrongAnswer === selected);
+  // Phase EN-fix E: 영어 모드 진단 본문 fallback. explanationEn 미박힘 시 KO.
+  const explanation =
+    lang === "en"
+      ? (mistake?.explanationEn ?? mistake?.explanation ?? null)
+      : (mistake?.explanation ?? null);
   return {
     kind: "incorrect",
     problem,
     selected,
-    mistakeExplanation: mistake?.explanation ?? null,
+    mistakeExplanation: explanation,
   };
 }
 

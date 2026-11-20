@@ -29,15 +29,18 @@ import {
 import { usePreferences } from "@/lib/preferences";
 import { composeAnswer } from "@/lib/ai/compose";
 import { dispatchLLMCall, type DispatchTurn } from "@/lib/ai/dispatch";
+import type { ProviderId } from "@/lib/ai/providers/types";
 import {
   matchPackContent,
   buildPackSuggestion,
   inferDomainPack,
   hasDefinitionIntent,
   findSpecificPackTarget,
+  synthesizePackLevelFallback,
 } from "@/lib/packs/match";
 import {
   classifyActionNegation,
+  classifyCraving,
   classifyIntent,
   classifyNegationOrTrend,
   classifyRejection,
@@ -46,6 +49,8 @@ import {
 import { topicParticle } from "@/lib/text/clean-noun";
 import { detectLanguage } from "@/lib/text/detect-language";
 import { getT, useT } from "@/lib/i18n";
+import { MESSAGES_KO } from "@/lib/i18n/messages.ko";
+import { MESSAGES_EN } from "@/lib/i18n/messages.en";
 import { buildStoreSuggestion, searchStoreForQuery } from "@/lib/packs/store-search";
 import {
   addAlias,
@@ -138,38 +143,63 @@ function findMarkerMessageId(messages: ThreadMsg[], dispatchTurnCount: number): 
 // 단일 filtered: show-recipe 1 + cloud 3 = 4 버튼.
 // 다중 filtered: per-entry show-recipe (chooser) + cloud 3.
 type CookingMatch = { kind: "cooking-recipe"; recipe: PackRecipe; score: number };
+// Phase EN-fix A: dislike 라벨에 누적 garbage 박힘 회귀 차단. appliedDislikes
+// (실제 매칭 hit) 측면 박혀 있어도 사용자 입력 언어 외 글자 (예: 영어 응답인데
+// 한국어 dislike 가 hit) 가 박힌 경우 그쪽 언어만 노출. 그 언어로 hit 한 게
+// 없으면 (예: EN 모드인데 KO dislike 만 hit) appliedDislikes 전체로 fallback —
+// 빈 라벨 보내지 않음.
+function pickLangDislikes(applied: string[], lang: "ko" | "en"): string {
+  const isKoreanSubject = (d: string) => /[가-힣]/.test(d);
+  const filtered =
+    lang === "en" ? applied.filter((d) => !isKoreanSubject(d)) : applied.filter(isKoreanSubject);
+  const final = filtered.length > 0 ? filtered : applied;
+  return final.join(", ");
+}
+
+// Phase EN-fix: lang 받아 옵션 라벨 + cloud prompt 영어 분기. matched.lang
+// 그대로 thread — 한국어 입력은 KO 라벨, 영어 입력은 EN 라벨 + 한국 음식
+// 제목 (headTitle) 은 한국어 그대로 노출 (KO/EN 공통).
 function buildFilteredOptions(
   cookingFiltered: CookingMatch[],
-  requestedNoun?: string,
+  requestedNoun: string | undefined,
+  lang: "ko" | "en",
 ): SuggestionOption[] {
   if (cookingFiltered.length === 0) return [];
   const head = cookingFiltered[0];
-  const headTitle = head.recipe.title;
+  // Phase EN-fix C: EN 모드 headTitle / chooser 라벨도 EN 제목 — titleEn fallback.
+  // headTitle 은 cloud prompt 본문에 박혀 Gemini 응답이 영어 이름으로 일관.
+  const headTitle = lang === "en" ? (head.recipe.titleEn ?? head.recipe.title) : head.recipe.title;
+  const fo = (lang === "en" ? MESSAGES_EN : MESSAGES_KO).chat.filterOptions;
   const entryOpts: SuggestionOption[] = cookingFiltered.slice(0, 4).map((m) => ({
     kind: "show-recipe",
-    label: cookingFiltered.length === 1 ? "만들기" : m.recipe.title,
+    label:
+      cookingFiltered.length === 1
+        ? fo.cookSingle
+        : lang === "en"
+          ? (m.recipe.titleEn ?? m.recipe.title)
+          : m.recipe.title,
     recipeId: m.recipe.id,
     action_area: "만들기",
   }));
   const cloudOpts: SuggestionOption[] = [
     {
       kind: "llm-call",
-      label: "시켜먹기",
-      prompt: `근처 한식당이나 배달앱에서 ${headTitle} 잘하는 곳 후보 3곳만 추천해줘. 한국어로 짧게.`,
+      label: fo.orderIn,
+      prompt: fo.orderInPrompt(headTitle),
       action_area: "시켜먹기",
     },
     {
       kind: "llm-call",
-      label: "비슷한 메뉴",
-      prompt: `${headTitle}랑 비슷한 결인데 살짝 다른 한식 추천해줘. 1-2개만.`,
+      label: fo.similar,
+      prompt: fo.similarPrompt(headTitle),
       action_area: "찾기",
     },
     {
       kind: "llm-call",
-      label: "cloud로 찾기",
+      label: fo.cloud,
       prompt: requestedNoun
-        ? `${requestedNoun}에 대해 알려줘. 한국어로 짧고 정확하게.`
-        : `${headTitle}랑 비슷한 다른 음식 추천해줘. 한국어로 짧고 정확하게.`,
+        ? fo.cloudPromptWithNoun(requestedNoun)
+        : fo.cloudPromptDefault(headTitle),
       action_area: "찾기",
     },
   ];
@@ -254,6 +284,10 @@ function ChatPage() {
     // 반환 → 기존 흐름 그대로.
     const cmd = parseCommand(text);
     if (cmd) {
+      // Phase EN-fix C: @learn 명령은 detectLanguage 가 박히기 전 단계에 진입 —
+      // 여기서 local 박음. body / packName 모두 lang 분기.
+      const cmdLang = detectLanguage(text);
+      const cmdT = (cmdLang === "en" ? MESSAGES_EN : MESSAGES_KO).chat.command;
       const userId = crypto.randomUUID();
       const asstId = crypto.randomUUID();
       appendMessage(thread.id, { id: userId, role: "user", text });
@@ -261,18 +295,17 @@ function ChatPage() {
       let body = "";
       if (cmd.command === "learn") {
         await addAlias(cmd.alias, cmd.canonical);
-        body = `알겠어. '${cmd.alias}'를 '${cmd.canonical}'로 기억할게.`;
+        body = cmdT.learnAck(cmd.alias, cmd.canonical);
       } else if (cmd.command === "unlearn") {
         const removed = await removeAlias(cmd.alias);
-        body = removed ? `'${cmd.alias}' 잊을게.` : `'${cmd.alias}'는 학습된 적 없어.`;
+        body = removed ? cmdT.unlearnOk(cmd.alias) : cmdT.unlearnMiss(cmd.alias);
       } else {
         const aliases = listAliases();
         if (aliases.length === 0) {
-          body =
-            "학습된 alias 가 아직 없어. `@learn 두쫀쿠 = 두바이 쫀득쿠키` 같은 형식으로 가르쳐줘.";
+          body = cmdT.listEmpty;
         } else {
           const lines = aliases.map((a) => `• ${a.alias} → ${a.canonical}`);
-          body = `학습된 alias ${aliases.length}개:\n${lines.join("\n")}`;
+          body = `${cmdT.listHeader(aliases.length)}\n${lines.join("\n")}`;
         }
       }
       appendMessage(thread.id, {
@@ -281,10 +314,11 @@ function ChatPage() {
         route: "local",
         state: "found_local",
         reason: "",
-        packName: "명령어",
+        packName: cmdT.packName,
         pending: false,
         text: body,
         provider: "learned",
+        lang: cmdLang,
       });
       addDemoTrace({
         input: text,
@@ -327,10 +361,11 @@ function ChatPage() {
         route: "local",
         state: "found_local",
         reason: "",
-        packName: "학습됨 · Calculator Pack",
+        packName: (lang === "en" ? MESSAGES_EN : MESSAGES_KO).chat.calculator.packName,
         pending: false,
         text: body,
         provider: "learned",
+        lang,
       });
       addDemoTrace({
         input: text,
@@ -376,10 +411,11 @@ function ChatPage() {
         route: "local",
         state: "found_local",
         reason: "",
-        packName: "학습됨 · 선호 저장",
+        packName: (lang === "en" ? MESSAGES_EN : MESSAGES_KO).chat.preference.packName,
         pending: false,
         text: body,
         provider: "learned",
+        lang,
       });
       addDemoTrace({
         input: text,
@@ -465,10 +501,11 @@ function ChatPage() {
         route: "local",
         state: "found_local",
         reason: "",
-        packName: "학습됨 · 선호 회상",
+        packName: (lang === "en" ? MESSAGES_EN : MESSAGES_KO).chat.preferenceRecall.packName,
         pending: false,
         text: body,
         provider: "learned",
+        lang,
       });
       const totalCount = listPreferences().length;
       addDemoTrace({
@@ -693,9 +730,22 @@ function ChatPage() {
     }
     const skipMatchStep = skipReason !== null;
 
-    const matched = skipMatchStep
+    let matched = skipMatchStep
       ? null
       : await matchPackContent(text, eligibleInstalled, undefined, intent);
+
+    // ---- Phase EN-fix (c): specificTarget(trigger 단어) 잡혔지만 matchPack
+    // Content score 0 으로 null 반환된 케이스 — 영어 "I want doenjang stew"
+    // 처럼 trigger ("stew") 박혔지만 RECIPE_KEYWORDS/DOMAIN 매칭 X. craving
+    // 신호 동반 시 그 팩의 모든 entry 를 packLevel matched 로 합성해 dislike
+    // filter / 대체 추천 / cloud 옵션 흐름 진입. 회귀 차단 게이트 두 단계:
+    //   1) specificTarget 박힘 (trigger 단어가 입력에 있음 — 그 팩 영역 신호)
+    //   2) classifyCraving (사용자 desire 표현 — "had/yesterday" 같은 단순
+    //      언급 차단). 한국어는 이미 점수 90으로 matched 반환됨 — 이 분기
+    //      안 들어옴 (회귀 0).
+    if (!matched && specificTarget && classifyCraving(text)) {
+      matched = synthesizePackLevelFallback(specificTarget.pack, text, lang);
+    }
 
     // ---- Phase M0-4: dislike memory filter. matched.matches 측면 사용자
     // dislike subject 박힌 entry 떨굼. removed + filtered 둘 다 비비어 있으면
@@ -708,19 +758,26 @@ function ChatPage() {
       if (filterApplied) {
         const userId = crypto.randomUUID();
         const asstId = crypto.randomUUID();
-        const dislikeLabel = filterResult.dislikes.join(", ");
+        // Phase EN-fix A: appliedDislikes (hit 한 것만) + 입력 언어 기준 필터링.
+        // 누적 garbage / 영·한 혼재 dislike 가 라벨에 박히던 회귀 차단.
+        const dislikeLabel = pickLangDislikes(filterResult.appliedDislikes, matched.lang);
         const cookingFiltered = filterResult.filtered.filter(
           (m): m is typeof m & { kind: "cooking-recipe" } => m.kind === "cooking-recipe",
         );
-        const titles = cookingFiltered.map((m) => m.recipe.title);
+        // Phase EN-fix C: EN 모드 응답 본문 안 레시피 제목도 EN — titleEn fallback.
+        const titles = cookingFiltered.map((m) =>
+          matched.lang === "en" ? (m.recipe.titleEn ?? m.recipe.title) : m.recipe.title,
+        );
+        const dl = (matched.lang === "en" ? MESSAGES_EN : MESSAGES_KO).chat.dislikeFilter;
+        const joiner = matched.lang === "en" ? ", " : " 또는 ";
         const body =
           titles.length === 1
-            ? `${dislikeLabel} 싫어한다고 했어서 — ${titles[0]} 어때?`
-            : `${dislikeLabel} 싫어한다고 했어서 — ${titles.join(" 또는 ")} 중에 어떤 거?`;
+            ? dl.single(dislikeLabel, titles[0])
+            : dl.multi(dislikeLabel, titles.join(joiner));
         // 옵션 풍부화: baek-style 4-button set (만들기 + 시켜먹기 + 비슷한 메뉴 +
         // cloud로 찾기). cloud 옵션 클릭 시 dispatchLLMCall → M0-5 USER_CONTEXT
         // 자동 inject → dislike 측면 cloud 응답 자동 반영.
-        const options = buildFilteredOptions(cookingFiltered, matched.requestedNoun);
+        const options = buildFilteredOptions(cookingFiltered, matched.requestedNoun, matched.lang);
         appendMessage(thread.id, { id: userId, role: "user", text });
         renameThreadIfDefault(thread.id, text);
         appendMessage(thread.id, {
@@ -738,6 +795,8 @@ function ChatPage() {
             options,
             badge: "local",
           },
+          // Phase EN-fix A: 옵션 click 시 m.lang 으로 sourceLang 결정.
+          lang: matched.lang,
         });
         if (import.meta.env.DEV) {
           console.log("[setThreadPack]", {
@@ -791,17 +850,27 @@ function ChatPage() {
         if (expandedCooking.length > 0) {
           const userId = crypto.randomUUID();
           const asstId = crypto.randomUUID();
-          const dislikeLabel = expanded.dislikes.join(", ");
-          const titles = expandedCooking.map((m) => m.recipe.title);
+          // Phase EN-fix A: appliedDislikes 측면 입력 언어 필터.
+          const dislikeLabel = pickLangDislikes(expanded.appliedDislikes, matched.lang);
+          // Phase EN-fix C: EN 모드 응답 본문 안 레시피 제목도 EN.
+          const titles = expandedCooking.map((m) =>
+            matched.lang === "en" ? (m.recipe.titleEn ?? m.recipe.title) : m.recipe.title,
+          );
+          const dl = (matched.lang === "en" ? MESSAGES_EN : MESSAGES_KO).chat.dislikeFilter;
+          const joiner = matched.lang === "en" ? ", " : " 또는 ";
           const body =
             titles.length === 1
-              ? `${dislikeLabel} 싫어한다고 했어서 — 비슷한 건 ${titles[0]} 어때?`
-              : `${dislikeLabel} 싫어한다고 했어서 — 비슷한 건 ${titles.join(" 또는 ")} 중에 어떤 거?`;
+              ? dl.expandedSingle(dislikeLabel, titles[0])
+              : dl.expandedMulti(dislikeLabel, titles.join(joiner));
           // 옵션 풍부화 (M0-4 fix branch): baek-style 4-button set. cloud 옵션
           // 측면 dispatchLLMCall → M0-5 USER_CONTEXT 측면 dislike 측면 자동
           // 반영. requestedNoun (사용자 원본 의도 — 예 "된장찌개") 박혀 박혀
           // 박힌 경우 "cloud로 찾기" prompt 측면 활용.
-          const options = buildFilteredOptions(expandedCooking, matched.requestedNoun);
+          const options = buildFilteredOptions(
+            expandedCooking,
+            matched.requestedNoun,
+            matched.lang,
+          );
           appendMessage(thread.id, { id: userId, role: "user", text });
           renameThreadIfDefault(thread.id, text);
           appendMessage(thread.id, {
@@ -819,6 +888,8 @@ function ChatPage() {
               options,
               badge: "local",
             },
+            // Phase EN-fix A: 옵션 click 시 m.lang 으로 sourceLang 결정.
+            lang: matched.lang,
           });
           setThreadPack(thread.id, matched.pack.id);
           setThreadLastEntry(thread.id, undefined);
@@ -1006,10 +1077,11 @@ function ChatPage() {
           route: "local",
           state: "found_local",
           reason: "",
-          packName: "팩스토어",
+          packName: (lang === "en" ? MESSAGES_EN : MESSAGES_KO).chat.packStore.packName,
           pending: false,
           text: sugText,
           suggestion: sugData,
+          lang,
         });
         addDemoTrace({
           input: text,
@@ -1171,7 +1243,7 @@ function ChatPage() {
     // setBusy(true)/setInput("") are now done at the top of send() before
     // classifyIntent — by the time we get to Stage 3 they're already set.
 
-    const renderPayload = (payload: AnswerPayload, provider?: "webllm" | "gemini") => {
+    const renderPayload = (payload: AnswerPayload, provider?: "webllm" | ProviderId) => {
       let body = "";
       let recipes: PackRecipe[] | undefined;
       let suggestion:
@@ -1339,8 +1411,18 @@ function ChatPage() {
   // for cloud calls outside Stage 3 of send(). Blocking it while another
   // call is in flight closes the door on accidental double-fires from
   // double-clicks or any unexpected re-invocation of the click handler.
-  function onSuggestionAction(option: SuggestionOption, matchedPackId?: string) {
+  // Phase EN-fix A: sourceLang = 옵션이 생성된 메시지의 m.lang. AssistantBubble
+  // 측면 `m.lang ?? "ko"` 박혀 호출. 옛 흐름 (`detectLanguage(option.prompt/label)`)
+  // 은 prompt 본문에 박힌 한국 음식 이름 (예: "참치김치찌개") 때문에 영어 prompt
+  // 도 "ko" 로 오판정 → 한국어 Gemini 응답 회귀. 메시지 lang 이 옵션의 진짜
+  // 출처라 단일 진실. default "ko" — 옛 ThreadMsg (lang 미박힘) 호환.
+  function onSuggestionAction(
+    option: SuggestionOption,
+    matchedPackId?: string,
+    sourceLang: "ko" | "en" = "ko",
+  ) {
     if (!thread || busy) return;
+    const sa = (sourceLang === "en" ? MESSAGES_EN : MESSAGES_KO).chat.suggestionAction;
     // The matched pack is the one the suggestion came from. It used to be
     // looked up via thread.lastPackId (the old "active mode"), but with
     // activation removed, the suggestion itself carries the pack id —
@@ -1354,9 +1436,10 @@ function ChatPage() {
       const r = getCookingRecipe(option.recipeId);
       if (!r) return;
       const id = crypto.randomUUID();
-      // Phase EN-4: show-recipe 호출은 사용자가 SuggestionBlock 버튼을 누른 결과.
-      // option.label 의 언어로 카드 라벨 결정 (영어 빌더가 박은 영어 옵션이면 EN).
-      const optLang = detectLanguage(option.label);
+      // Phase EN-fix A: 옵션이 생성된 메시지 lang 그대로 — option.label 추정 제거.
+      // 다중 chooser 의 라벨이 한국어 레시피 제목 (참치김치찌개) 이어도 영어 모드
+      // 박혀 있으면 EN 으로 카드 렌더.
+      const optLang = sourceLang;
       appendMessage(thread.id, {
         id,
         role: "assistant",
@@ -1385,9 +1468,10 @@ function ChatPage() {
         role: "assistant",
         route: "deep",
         state: "checking_external",
-        reason: "클라우드로 보낼게.",
-        packName: option.systemPrompt ? "SAT 수학 튜터" : matchedPack?.name,
+        reason: sa.cloudSendReason,
+        packName: option.systemPrompt ? sa.satTutorName : matchedPack?.name,
         pending: true,
+        lang: sourceLang,
       });
       setBusy(true);
 
@@ -1409,17 +1493,14 @@ function ChatPage() {
       // pending bubble with a folder-open suggestion. The raw LLM text
       // never goes to chat —헌법: LLM 응답을 일회용으로 흘려보내지 않는다.
       const onSavedProblem = (source: "llm" | "dummy") => {
-        const noteText =
-          source === "llm"
-            ? "새 SAT 수학 문제를 만들어서 Study 팩에 저장했어."
-            : "(샘플 문제로 대체) Study 팩에 저장됐어. 폴더에서 풀어볼래?";
+        const noteText = source === "llm" ? sa.satSavedFromLLM : sa.satSavedDummy;
         patchMessage(thread.id, id, {
           pending: false,
           text: noteText,
           packName: "Study Companion",
           suggestion: {
             matchedPackName: "Study Companion",
-            options: [{ kind: "open-folder", label: "폴더 열기", target: "/study" }],
+            options: [{ kind: "open-folder", label: sa.openFolder, target: "/study" }],
           },
         });
         setBusy(false);
@@ -1437,7 +1518,7 @@ function ChatPage() {
           return;
         }
         const msg = err instanceof Error ? err.message : String(err);
-        onDoneText(`(클라우드 호출 실패: ${msg})`);
+        onDoneText(sa.callFailed(msg));
       };
 
       // Streaming token sink — same shape as Stage 3. Skip while a
@@ -1452,7 +1533,7 @@ function ChatPage() {
               scrollDown();
             };
 
-      const onDoneTextWithProvider = (text: string, provider?: "webllm" | "gemini") => {
+      const onDoneTextWithProvider = (text: string, provider?: "webllm" | ProviderId) => {
         patchMessage(thread.id, id, { pending: false, text, provider });
         setBusy(false);
         scrollDown();
@@ -1472,8 +1553,10 @@ function ChatPage() {
             userMessage: option.prompt,
             systemPrompt: option.systemPrompt,
             history: threadHistory(thread.messages),
-            // Phase EN-1: option.prompt 언어로 응답 언어 결정.
-            lang: detectLanguage(option.prompt),
+            // Phase EN-fix A: sourceLang (옵션을 생성한 메시지의 m.lang) 그대로.
+            // detectLanguage(option.prompt) 는 prompt 본문에 박힌 한국 음식 이름
+            // (예: 참치김치찌개) 때문에 영어 prompt 도 "ko" 로 오판정 → 회귀.
+            lang: sourceLang,
           },
           streamToken,
         )
@@ -1503,16 +1586,17 @@ function ChatPage() {
         composeAnswer({
           query: option.prompt,
           pack: matchedPack,
-          fallback: { kind: "text", text: "지금은 응답을 가져오지 못했어." },
+          fallback: { kind: "text", text: sa.fallbackResponse },
           history: threadHistory(thread.messages),
           onToken: streamToken,
           // V5.0 Phase M-1: 일반 suggestion → thread context 유지 → summary 활성.
           // 위 분기 (option.systemPrompt — 예: SAT 출제) 는 ad-hoc 페르소나라
           // summary 비활성 (의도된 omit).
           threadId: thread.id,
-          // Phase EN-1: option.prompt 언어로 응답 언어 결정. action_options
-          // 영어 미러가 박히면 (Step 4) 자동으로 영어 응답으로 따라감.
-          lang: detectLanguage(option.prompt),
+          // Phase EN-fix A: sourceLang (옵션을 생성한 메시지의 m.lang) 그대로.
+          // detectLanguage(option.prompt) 추정 제거 — 한국 음식 이름이 박힌 영어
+          // prompt 도 "ko" 오판정 → KO charter → 한국어 응답 회귀 차단.
+          lang: sourceLang,
         })
           .then(({ payload, provider, summaryUsed, summaryGenerated }) => {
             onDoneTextWithProvider(payload.kind === "text" ? payload.text : "", provider);
@@ -1608,7 +1692,11 @@ function ChatBody({
   setInput: (v: string) => void;
   busy: boolean;
   send: (text: string) => void;
-  onSuggestionAction: (option: SuggestionOption, matchedPackId?: string) => void;
+  onSuggestionAction: (
+    option: SuggestionOption,
+    matchedPackId?: string,
+    sourceLang?: "ko" | "en",
+  ) => void;
   onOpenFolder: (route: string) => void;
   // V5.0 Phase M-1: summary 마커 위치 + summary 본체.
   summaryMarkerAfterId?: string;
@@ -1748,7 +1836,11 @@ function AssistantBubble({
   onSuggestionAction,
 }: {
   m: Extract<ThreadMsg, { role: "assistant" }>;
-  onSuggestionAction: (option: SuggestionOption, matchedPackId?: string) => void;
+  onSuggestionAction: (
+    option: SuggestionOption,
+    matchedPackId?: string,
+    sourceLang?: "ko" | "en",
+  ) => void;
 }) {
   // Streaming state: while pending, partial text from onToken trickles
   // in. Show the trace until the first delta lands, then swap to the
@@ -1782,7 +1874,9 @@ function AssistantBubble({
               packName={m.suggestion.matchedPackName}
               options={m.suggestion.options}
               badge={m.suggestion.badge ?? "local"}
-              onAction={(opt) => onSuggestionAction(opt, m.suggestion?.matchedPackId)}
+              onAction={(opt) =>
+                onSuggestionAction(opt, m.suggestion?.matchedPackId, m.lang ?? "ko")
+              }
             />
           )}
           {!m.pending &&
@@ -1833,32 +1927,41 @@ function ProviderBadge({
   provider,
   cloudMode,
 }: {
-  provider: "webllm" | "gemini" | "learned";
+  provider: "webllm" | ProviderId | "learned";
   // V5.0 Phase I-5: Stage 3 cloud-direct 응답 (matchPackContent miss). 박혀
-  // 있으면 gemini 라벨이 "Cloud (Pack 외부) · 외부 API" 형태로 강화 — pack
+  // 있으면 cloud 라벨이 "Cloud (Pack 외부) · 외부 API" 형태로 강화 — pack
   // identity 응답 (suggestion onClick 등) 과 시각 분리.
   cloudMode?: boolean;
 }) {
   // Three-tone visual contract across the chat:
   //   red   — local match or learned cache (no LLM call this turn)
   //   green — WebLLM (private, on-device, zero external calls)
-  //   blue  — Gemini  (cloud API)
+  //   blue  — cloud API (active provider: gemini | openai | claude | grok)
   // V2 narrative: as the learning cache grows, red appears more often
   // and blue/green less. The user watches their AI go local over time.
   // Hidden when showLLMProvenance is off (no settings UI yet).
   const prefs = usePreferences();
   const t = useT().chat.provider;
   if (!prefs.showLLMProvenance) return null;
+  // Any external provider shares one "cloud" tone (blue); the swap between
+  // them is a server-side config detail, not a user-facing distinction.
+  const CLOUD_LABELS: Record<Exclude<ProviderId, "gemini">, string> = {
+    openai: "OpenAI",
+    claude: "Claude",
+    grok: "Grok",
+  };
   const dot =
-    provider === "webllm" ? "bg-green-500" : provider === "gemini" ? "bg-blue-500" : "bg-red-500";
+    provider === "webllm" ? "bg-green-500" : provider === "learned" ? "bg-red-500" : "bg-blue-500";
   const label =
     provider === "webllm"
       ? t.webllm
-      : provider === "gemini"
-        ? cloudMode
-          ? t.geminiCloud
-          : t.gemini
-        : t.learned;
+      : provider === "learned"
+        ? t.learned
+        : provider === "gemini"
+          ? cloudMode
+            ? t.geminiCloud
+            : t.gemini
+          : CLOUD_LABELS[provider];
   return (
     <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft flex items-center gap-1.5">
       <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
